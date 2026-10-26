@@ -102,6 +102,8 @@ export interface OrderRecord {
   status: OrderStatus;
   notes: string;
   total: number;
+  tableNumber: number | null;
+  waiter: string;
   created_at: string;
   items: OrderItemRecord[];
 }
@@ -112,7 +114,34 @@ export interface CreateOrderInput {
   phone?: string;
   address?: string;
   notes?: string;
+  tableNumber?: number;
+  waiter?: string;
   items: { productId: string; quantity: number; notes?: string }[];
+}
+
+export interface RestaurantTableRecord {
+  id: string;
+  number: number;
+  zone: string;
+  capacity: number;
+  status: 'active' | 'inactive';
+  openOrders: number;
+  openTotal: number;
+  waiter: string;
+  since: string | null;
+}
+
+export interface CreateTableInput {
+  number: number;
+  zone?: string;
+  capacity?: number;
+}
+
+export interface UpdateTableInput {
+  number?: number;
+  zone?: string;
+  capacity?: number;
+  status?: 'active' | 'inactive';
 }
 
 export interface AuditLogRecord {
@@ -145,6 +174,7 @@ interface LocalDatabase {
   sales: SaleRecord[];
   recipes: RecipeRecord[];
   orders: OrderRecord[];
+  tables: RestaurantTableRecord[];
   movements: InventoryMovementRecord[];
   cashSession: CashSessionRecord | null;
 }
@@ -390,13 +420,13 @@ function makeLocalDatabase(): LocalDatabase {
     if (saved) {
       const parsed = JSON.parse(saved) as LocalDatabase;
       if (parsed.version === 1 && Array.isArray(parsed.products) && Array.isArray(parsed.sales)) {
-        const safe = { ...parsed, suppliers: Array.isArray(parsed.suppliers) ? parsed.suppliers : [], recipes: Array.isArray(parsed.recipes) ? parsed.recipes : [], orders: Array.isArray(parsed.orders) ? parsed.orders : [], movements: Array.isArray(parsed.movements) ? parsed.movements : [], cashSession: parsed.cashSession ?? null };
+        const safe = { ...parsed, suppliers: Array.isArray(parsed.suppliers) ? parsed.suppliers : [], recipes: Array.isArray(parsed.recipes) ? parsed.recipes : [], orders: Array.isArray(parsed.orders) ? parsed.orders : [], tables: Array.isArray(parsed.tables) ? parsed.tables : [], movements: Array.isArray(parsed.movements) ? parsed.movements : [], cashSession: parsed.cashSession ?? null };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(safe));
         return safe;
       }
     }
   } catch { /* A corrupted local cache will be rebuilt from safe demo data. */ }
-  const initial: LocalDatabase = { version: 1, products: INITIAL_PRODUCTS, suppliers: [], sales: [], recipes: [], orders: [], movements: [], cashSession: null };
+  const initial: LocalDatabase = { version: 1, products: INITIAL_PRODUCTS, suppliers: [], sales: [], recipes: [], orders: [], tables: [], movements: [], cashSession: null };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
   return initial;
 }
@@ -410,6 +440,17 @@ function hasAuthenticatedSession(): boolean { return Boolean(localStorage.getIte
 function canFallbackToLocal(error: unknown): boolean { return networkError(error) && !hasAuthenticatedSession(); }
 function uniqueId(prefix: string) { return `${prefix}-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`; }
 function money(value: number) { return Math.round((value + Number.EPSILON) * 100) / 100; }
+
+// Normaliza tanto la respuesta del backend (snake_case) como los registros locales.
+function normalizeOrder(row: any): OrderRecord {
+  return {
+    id: row.id, channel: row.channel, customer: row.customer, phone: row.phone, address: row.address,
+    status: row.status, notes: row.notes, total: row.total, created_at: row.created_at,
+    tableNumber: row.table_number ?? row.tableNumber ?? null,
+    waiter: row.waiter || '',
+    items: (row.items || []).map((item: any) => ({ productId: item.product_id ?? item.productId, productName: item.product_name ?? item.productName, quantity: item.quantity, unitPrice: item.unit_price ?? item.unitPrice, notes: item.notes })),
+  };
+}
 
 export const dataService = {
   currency: CURRENCY,
@@ -742,7 +783,7 @@ export const dataService = {
   async getOrders(): Promise<OrderRecord[]> {
     try {
       const data = await api<any[]>('/orders');
-      const normalized = data.map(row => ({ id: row.id, channel: row.channel, customer: row.customer, phone: row.phone, address: row.address, status: row.status, notes: row.notes, total: row.total, created_at: row.created_at, items: (row.items || []).map((item: any) => ({ productId: item.product_id, productName: item.product_name, quantity: item.quantity, unitPrice: item.unit_price, notes: item.notes })) })) as OrderRecord[];
+      const normalized = data.map(normalizeOrder);
       const db = readLocal(); db.orders = normalized; writeLocal(db); return normalized;
     } catch (error) {
       if (!canFallbackToLocal(error)) throw error;
@@ -762,7 +803,7 @@ export const dataService = {
         const product = db.products.find(p => p.id === item.productId);
         return { productId: item.productId, productName: product?.name || item.productId, quantity: item.quantity, unitPrice: product?.price || 0, notes: item.notes };
       });
-      const normalized: OrderRecord = { id: serverCreated.id, channel: input.channel, customer: input.customer || 'Cliente general', phone: input.phone || '', address: input.address || '', status: serverCreated.status, notes: input.notes || '', total: serverCreated.total, created_at: serverCreated.createdAt, items };
+      const normalized: OrderRecord = { id: serverCreated.id, channel: input.tableNumber ? 'table' : input.channel, customer: input.customer || 'Cliente general', phone: input.phone || '', address: input.address || '', status: serverCreated.status, notes: input.notes || '', total: serverCreated.total, tableNumber: input.tableNumber ?? null, waiter: input.waiter || '', created_at: serverCreated.createdAt, items };
       db.orders = [normalized, ...db.orders.filter(o => o.id !== normalized.id)]; writeLocal(db);
       return normalized;
     }
@@ -774,13 +815,134 @@ export const dataService = {
       if (!recipe && product.stock < item.quantity) throw new Error(`Stock insuficiente para ${product.name}.`);
       return { productId: product.id, productName: product.name, quantity: item.quantity, unitPrice: product.price, notes: item.notes };
     });
-    const created: OrderRecord = { id: uniqueId('PED'), channel: input.channel, customer: input.customer || 'Cliente general', phone: input.phone || '', address: input.address || '', status: 'received', notes: input.notes || '', total: money(items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0)), created_at: new Date().toISOString(), items };
+    const created: OrderRecord = { id: uniqueId('PED'), channel: input.tableNumber ? 'table' : input.channel, customer: input.customer || 'Cliente general', phone: input.phone || '', address: input.address || '', status: 'received', notes: input.notes || '', total: money(items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0)), tableNumber: input.tableNumber ?? null, waiter: input.waiter || '', created_at: new Date().toISOString(), items };
     db.orders.unshift(created); writeLocal(db); return created;
   },
   async updateOrderStatus(id: string, status: OrderRecord['status']): Promise<void> {
     try { await api(`/orders/${encodeURIComponent(id)}/status?status=${encodeURIComponent(status)}`, { method: 'PATCH' }); }
     catch (error) { if (!canFallbackToLocal(error)) throw error; }
     const db = readLocal(); const order = db.orders.find(o => o.id === id); if (order) order.status = status; writeLocal(db);
+  },
+  async getOrder(id: string): Promise<OrderRecord> {
+    try {
+      const row = await api<any>(`/orders/${encodeURIComponent(id)}`);
+      const normalized = normalizeOrder(row);
+      const db = readLocal(); db.orders = [normalized, ...db.orders.filter(o => o.id !== normalized.id)]; writeLocal(db);
+      return normalized;
+    } catch (error) {
+      if (!canFallbackToLocal(error)) throw error;
+      const local = readLocal().orders.find(o => o.id === id);
+      if (!local) throw new Error('Pedido no encontrado.');
+      return local;
+    }
+  },
+  async getOpenOrders(): Promise<OrderRecord[]> {
+    try {
+      const data = await api<any[]>('/orders?open=1');
+      const normalized = data.map(normalizeOrder);
+      const db = readLocal();
+      const ids = new Set(normalized.map(o => o.id));
+      db.orders = [...normalized, ...db.orders.filter(o => !ids.has(o.id))]; writeLocal(db);
+      return normalized;
+    } catch (error) {
+      if (!canFallbackToLocal(error)) throw error;
+      return readLocal().orders
+        .filter(o => o.status !== 'delivered' && o.status !== 'cancelled')
+        .sort((a, b) => b.created_at.localeCompare(a.created_at));
+    }
+  },
+  async getOrdersByTable(tableNumber: number): Promise<OrderRecord[]> {
+    try {
+      const data = await api<any[]>(`/orders?table_number=${encodeURIComponent(String(tableNumber))}`);
+      const normalized = data.map(normalizeOrder);
+      const db = readLocal(); db.orders = [...db.orders.filter(o => o.tableNumber !== tableNumber), ...normalized]; writeLocal(db);
+      return normalized;
+    } catch (error) {
+      if (!canFallbackToLocal(error)) throw error;
+      return readLocal().orders
+        .filter(o => o.tableNumber === tableNumber)
+        .sort((a, b) => b.created_at.localeCompare(a.created_at));
+    }
+  },
+  // La comanda de una mesa crece: agrega productos a un pedido ya enviado a cocina.
+  async addOrderItems(orderId: string, items: { productId: string; quantity: number; notes?: string }[]): Promise<OrderRecord> {
+    try {
+      const updated = await api<any>(`/orders/${encodeURIComponent(orderId)}/items`, { method: 'POST', body: JSON.stringify({ items }) });
+      const normalized = normalizeOrder(updated);
+      const db = readLocal(); db.orders = [normalized, ...db.orders.filter(o => o.id !== normalized.id)]; writeLocal(db);
+      return normalized;
+    } catch (error) {
+      if (!canFallbackToLocal(error)) throw error;
+      const db = readLocal();
+      const order = db.orders.find(o => o.id === orderId);
+      if (!order) throw new Error('Pedido no encontrado.');
+      if (order.status !== 'received' && order.status !== 'preparing') throw new Error('La comanda ya no está abierta.');
+      let total = order.total;
+      for (const item of items) {
+        const product = db.products.find(p => p.id === item.productId && p.productType !== 'ingredient' && p.productType !== 'supplies');
+        if (!product) throw new Error('Hay un producto que ya no está disponible.');
+        total += product.price * item.quantity;
+        order.items.push({ productId: product.id, productName: product.name, quantity: item.quantity, unitPrice: product.price, notes: item.notes });
+      }
+      order.total = money(total);
+      writeLocal(db);
+      return order;
+    }
+  },
+  async getTables(): Promise<RestaurantTableRecord[]> {
+    try {
+      const data = await api<RestaurantTableRecord[]>('/tables');
+      const db = readLocal(); db.tables = data; writeLocal(db);
+      return data;
+    } catch (error) {
+      if (!canFallbackToLocal(error)) throw error;
+      return readLocal().tables.slice().sort((a, b) => a.number - b.number);
+    }
+  },
+  async createTable(input: CreateTableInput): Promise<RestaurantTableRecord> {
+    const payload = { number: input.number, zone: input.zone || '', capacity: input.capacity || 4 };
+    let table: RestaurantTableRecord;
+    try {
+      table = await api<RestaurantTableRecord>('/tables', { method: 'POST', body: JSON.stringify(payload) });
+    } catch (error) {
+      if (!canFallbackToLocal(error)) throw error;
+      const db = readLocal();
+      if (db.tables.some(t => t.number === payload.number)) throw new Error(`Ya existe una mesa con el número ${payload.number}.`);
+      table = { id: uniqueId('MESA'), number: payload.number, zone: payload.zone, capacity: payload.capacity, status: 'active', openOrders: 0, openTotal: 0, waiter: '', since: null };
+    }
+    const db = readLocal();
+    db.tables = [...db.tables.filter(t => t.id !== table.id), table].sort((a, b) => a.number - b.number);
+    writeLocal(db);
+    return table;
+  },
+  async updateTable(id: string, input: UpdateTableInput): Promise<RestaurantTableRecord> {
+    let table: RestaurantTableRecord;
+    try {
+      table = await api<RestaurantTableRecord>(`/tables/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) });
+    } catch (error) {
+      if (!canFallbackToLocal(error)) throw error;
+      const db = readLocal();
+      const local = db.tables.find(t => t.id === id);
+      if (!local) throw new Error('Mesa no encontrada.');
+      const nextNumber = input.number ?? local.number;
+      if (nextNumber !== local.number && db.tables.some(t => t.number === nextNumber)) throw new Error(`Ya existe una mesa con el número ${nextNumber}.`);
+      table = {
+        ...local,
+        number: nextNumber,
+        zone: input.zone ?? local.zone,
+        capacity: input.capacity ?? local.capacity,
+        status: input.status ?? local.status,
+      };
+    }
+    const db = readLocal();
+    db.tables = [...db.tables.filter(t => t.id !== table.id), table].sort((a, b) => a.number - b.number);
+    writeLocal(db);
+    return table;
+  },
+  async deleteTable(id: string): Promise<void> {
+    try { await api(`/tables/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
+    catch (error) { if (!canFallbackToLocal(error)) throw error; }
+    const db = readLocal(); db.tables = db.tables.filter(t => t.id !== id); writeLocal(db);
   },
   async getInventoryMovements(limit = 10000, productId?: string): Promise<InventoryMovementRecord[]> {
     try {

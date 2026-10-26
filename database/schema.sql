@@ -317,6 +317,8 @@ CREATE TABLE IF NOT EXISTS orders (
   status TEXT NOT NULL DEFAULT 'received' CHECK(status IN ('received','preparing','ready','delivered','cancelled')),
   notes TEXT NOT NULL DEFAULT '',
   total REAL NOT NULL DEFAULT 0,
+  table_number INTEGER,
+  waiter TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -330,6 +332,19 @@ CREATE TABLE IF NOT EXISTS order_items (
   unit_price REAL NOT NULL CHECK(unit_price >= 0),
   notes TEXT NOT NULL DEFAULT ''
 );
+
+CREATE TABLE IF NOT EXISTS restaurant_tables (
+  id TEXT PRIMARY KEY,
+  business_id TEXT NOT NULL REFERENCES businesses(id),
+  number INTEGER NOT NULL,
+  zone TEXT NOT NULL DEFAULT '',
+  capacity INTEGER NOT NULL DEFAULT 4,
+  status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive')),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_restaurant_tables_number ON restaurant_tables(business_id, number);
 
 CREATE TABLE IF NOT EXISTS recipes (
   id TEXT PRIMARY KEY,

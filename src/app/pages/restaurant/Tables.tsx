@@ -1,288 +1,432 @@
-import { useState } from 'react';
-import { Layout } from '../../components/Layout';
-import { Card } from '../../components/ui/card';
-import { Button } from '../../components/ui/button';
-import { Badge } from '../../components/ui/badge';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router';
 import {
-  Users,
-  Clock,
-  CheckCircle,
-  XCircle,
+  CheckCircle2,
+  Clock3,
+  Pencil,
   Plus,
-  UtensilsCrossed
+  RefreshCw,
+  Send,
+  Trash2,
+  Users,
+  UtensilsCrossed,
+  XCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { Layout } from '../../components/Layout';
+import { RevealGroup, RevealItem } from '../../components/motion/Reveal';
+import { AnimatedCounter } from '../../components/motion/AnimatedCounter';
+import { Card } from '../../components/ui/card';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
+import { Label } from '../../components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
+import { dataService, type OrderRecord, type RestaurantTableRecord } from '../../services/dataService';
 
-interface Table {
-  id: string;
-  number: number;
-  capacity: number;
-  status: 'available' | 'occupied' | 'reserved';
-  currentOrder?: {
-    orderId: string;
-    items: number;
-    total: number;
-    startTime: string;
-  };
-}
+const money = (value: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(value);
+
+const elapsed = (iso: string) => {
+  const mins = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
+  if (mins < 60) return `Hace ${mins} min`;
+  return `Hace ${Math.floor(mins / 60)} h ${mins % 60} min`;
+};
+
+const STATUS_LABELS: Record<OrderRecord['status'], string> = {
+  received: 'Recibido',
+  preparing: 'En preparación',
+  ready: 'Listo',
+  delivered: 'Entregado',
+  cancelled: 'Cancelado',
+};
+
+const nextFreeNumber = (rows: RestaurantTableRecord[]) => {
+  const taken = new Set(rows.map((table) => table.number));
+  let candidate = 1;
+  while (taken.has(candidate)) candidate += 1;
+  return candidate;
+};
 
 export function Tables() {
-  const [tables] = useState<Table[]>([
-    {
-      id: 'T1',
-      number: 1,
-      capacity: 2,
-      status: 'available'
-    },
-    {
-      id: 'T2',
-      number: 2,
-      capacity: 4,
-      status: 'occupied',
-      currentOrder: {
-        orderId: 'ORD-001',
-        items: 5,
-        total: 45.50,
-        startTime: '2026-05-14T18:30:00'
+  const navigate = useNavigate();
+  const [tables, setTables] = useState<RestaurantTableRecord[]>([]);
+  const [orders, setOrders] = useState<OrderRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [detail, setDetail] = useState<RestaurantTableRecord | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<RestaurantTableRecord | null>(null);
+  const [number, setNumber] = useState('');
+  const [zone, setZone] = useState('');
+  const [capacity, setCapacity] = useState('4');
+  const [bulkCount, setBulkCount] = useState('8');
+  const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [tableRows, openOrders] = await Promise.all([dataService.getTables(), dataService.getOpenOrders()]);
+      setTables(tableRows);
+      setOrders(openOrders);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo cargar el salón.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const openOrdersFor = useCallback((tableNumber: number) => orders.filter((order) => order.tableNumber === tableNumber), [orders]);
+
+  const stats = useMemo(() => {
+    const occupied = tables.filter((table) => table.status === 'active' && openOrdersFor(table.number).length > 0).length;
+    return {
+      total: tables.length,
+      available: tables.filter((table) => table.status === 'active' && openOrdersFor(table.number).length === 0).length,
+      occupied,
+      open: orders.length,
+    };
+  }, [tables, orders, openOrdersFor]);
+
+  const detailOrders = useMemo(
+    () => (detail ? orders.filter((order) => order.tableNumber === detail.number) : []),
+    [detail, orders]
+  );
+
+  const openCreate = () => {
+    setEditing(null);
+    setNumber(String(nextFreeNumber(tables)));
+    setZone('');
+    setCapacity('4');
+    setConfirmDelete(false);
+    setFormOpen(true);
+  };
+
+  const openEdit = (table: RestaurantTableRecord) => {
+    setEditing(table);
+    setNumber(String(table.number));
+    setZone(table.zone);
+    setCapacity(String(table.capacity));
+    setConfirmDelete(false);
+    setFormOpen(true);
+  };
+
+  const submitForm = async (event: FormEvent) => {
+    event.preventDefault();
+    const parsedNumber = Number(number);
+    const parsedCapacity = Number(capacity) || 4;
+    if (!Number.isInteger(parsedNumber) || parsedNumber < 1) {
+      toast.error('El número de mesa debe ser un entero mayor a cero.');
+      return;
+    }
+    setSaving(true);
+    try {
+      if (editing) {
+        const updated = await dataService.updateTable(editing.id, { number: parsedNumber, zone: zone.trim(), capacity: parsedCapacity });
+        setTables((prev) => prev.map((table) => (table.id === updated.id ? updated : table)).sort((a, b) => a.number - b.number));
+        if (detail?.id === updated.id) setDetail(updated);
+        toast.success(`Mesa ${updated.number} actualizada.`);
+      } else {
+        const created = await dataService.createTable({ number: parsedNumber, zone: zone.trim(), capacity: parsedCapacity });
+        setTables((prev) => [...prev.filter((table) => table.id !== created.id), created].sort((a, b) => a.number - b.number));
+        toast.success(`Mesa ${created.number} creada.`);
       }
-    },
-    {
-      id: 'T3',
-      number: 3,
-      capacity: 4,
-      status: 'available'
-    },
-    {
-      id: 'T4',
-      number: 4,
-      capacity: 6,
-      status: 'reserved'
-    },
-    {
-      id: 'T5',
-      number: 5,
-      capacity: 2,
-      status: 'occupied',
-      currentOrder: {
-        orderId: 'ORD-002',
-        items: 3,
-        total: 28.00,
-        startTime: '2026-05-14T19:00:00'
+      setFormOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo guardar la mesa.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const bulkCreate = async () => {
+    const count = Math.min(50, Math.max(1, Number(bulkCount) || 0));
+    setSaving(true);
+    try {
+      const taken = new Set(tables.map((table) => table.number));
+      const created: RestaurantTableRecord[] = [];
+      let candidate = 1;
+      for (let index = 0; index < count; index += 1) {
+        while (taken.has(candidate)) candidate += 1;
+        try {
+          const table = await dataService.createTable({ number: candidate, zone: zone.trim(), capacity: Number(capacity) || 4 });
+          created.push(table);
+          taken.add(candidate);
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : `No se pudo crear la mesa ${candidate}.`);
+          break;
+        }
+        candidate += 1;
       }
-    },
-    {
-      id: 'T6',
-      number: 6,
-      capacity: 8,
-      status: 'available'
-    },
-    {
-      id: 'T7',
-      number: 7,
-      capacity: 4,
-      status: 'occupied',
-      currentOrder: {
-        orderId: 'ORD-003',
-        items: 7,
-        total: 68.75,
-        startTime: '2026-05-14T18:45:00'
+      if (created.length > 0) {
+        setTables((prev) => [...prev.filter((table) => !created.some((row) => row.id === table.id)), ...created].sort((a, b) => a.number - b.number));
+        toast.success(created.length === 1 ? 'Mesa creada.' : `${created.length} mesas creadas.`);
+        setFormOpen(false);
       }
-    },
-    {
-      id: 'T8',
-      number: 8,
-      capacity: 2,
-      status: 'available'
-    }
-  ]);
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'available':
-        return 'bg-green-50 border-green-300';
-      case 'occupied':
-        return 'bg-red-50 border-red-300';
-      case 'reserved':
-        return 'bg-yellow-50 border-yellow-300';
-      default:
-        return 'bg-gray-50 border-gray-300';
+    } finally {
+      setSaving(false);
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'available':
-        return <Badge className="bg-green-600 text-white">Disponible</Badge>;
-      case 'occupied':
-        return <Badge className="bg-red-600 text-white">Ocupada</Badge>;
-      case 'reserved':
-        return <Badge className="bg-yellow-600 text-white">Reservada</Badge>;
-      default:
-        return null;
+  const toggleStatus = async (table: RestaurantTableRecord) => {
+    try {
+      const updated = await dataService.updateTable(table.id, { status: table.status === 'active' ? 'inactive' : 'active' });
+      setTables((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
+      toast.success(updated.status === 'active' ? `Mesa ${updated.number} habilitada.` : `Mesa ${updated.number} fuera de servicio.`);
+      setFormOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo cambiar el estado de la mesa.');
     }
   };
 
-  const getElapsedTime = (startTime: string) => {
-    const start = new Date(startTime);
-    const now = new Date();
-    const diff = Math.floor((now.getTime() - start.getTime()) / 1000 / 60);
-    return `${diff} min`;
-  };
-
-  const handleOpenTable = (table: Table) => {
-    if (table.status === 'available') {
-      toast.success(`Mesa ${table.number} abierta`, {
-        description: 'Puedes comenzar a tomar la orden'
-      });
+  const removeTable = async (table: RestaurantTableRecord) => {
+    try {
+      await dataService.deleteTable(table.id);
+      setTables((prev) => prev.filter((row) => row.id !== table.id));
+      setFormOpen(false);
+      if (detail?.id === table.id) setDetail(null);
+      toast.success(`Mesa ${table.number} eliminada.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo eliminar la mesa.');
     }
   };
 
-  const handleCloseTable = (table: Table) => {
-    toast.success(`Mesa ${table.number} cerrada`, {
-      description: `Total: $${table.currentOrder?.total.toFixed(2)}`
-    });
+  const resolveOrder = async (order: OrderRecord, status: OrderRecord['status']) => {
+    try {
+      await dataService.updateOrderStatus(order.id, status);
+      setOrders((prev) => prev.filter((row) => row.id !== order.id));
+      toast.success(status === 'delivered' ? 'Comanda entregada: la mesa quedó libre.' : 'Comanda cancelada.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo actualizar la comanda.');
+    }
   };
 
-  const availableTables = tables.filter(t => t.status === 'available').length;
-  const occupiedTables = tables.filter(t => t.status === 'occupied').length;
-  const reservedTables = tables.filter(t => t.status === 'reserved').length;
+  const takeOrder = (tableNumber: number) => {
+    setDetail(null);
+    navigate(`/restaurant/waiter?mesa=${tableNumber}`);
+  };
+
+  const statCards = [
+    { label: 'Total mesas', value: stats.total, icon: UtensilsCrossed, accent: 'text-primary' },
+    { label: 'Disponibles', value: stats.available, icon: CheckCircle2, accent: 'text-emerald-400' },
+    { label: 'Ocupadas', value: stats.occupied, icon: Users, accent: 'text-amber-400' },
+    { label: 'Comandas abiertas', value: stats.open, icon: Clock3, accent: 'text-primary' },
+  ];
 
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex justify-between items-center">
-          <div>
-            <h2 className="text-3xl font-bold text-gray-900">Gestión de Mesas</h2>
-            <p className="text-gray-600 mt-1">Control en tiempo real de tu restaurante</p>
-          </div>
-          <Button className="bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600">
-            <Plus size={20} className="mr-2" />
-            Nueva Reserva
-          </Button>
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="p-4 border-2 border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Total Mesas</p>
-                <p className="text-2xl font-bold text-gray-900">{tables.length}</p>
-              </div>
-              <UtensilsCrossed className="text-gray-400" size={32} />
+        <RevealGroup>
+          <RevealItem className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">Operación de salón</p>
+              <h1 className="font-display text-4xl font-semibold text-foreground">Gestión de Mesas</h1>
+              <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">Control en tiempo real de tu restaurante</p>
             </div>
-          </Card>
-
-          <Card className="p-4 border-2 border-green-200 bg-green-50">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Disponibles</p>
-                <p className="text-2xl font-bold text-green-600">{availableTables}</p>
-              </div>
-              <CheckCircle className="text-green-600" size={32} />
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={() => void load()} disabled={loading}>
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                Actualizar
+              </Button>
+              <Button onClick={openCreate}>
+                <Plus className="h-4 w-4" />
+                Nueva mesa
+              </Button>
             </div>
-          </Card>
+          </RevealItem>
 
-          <Card className="p-4 border-2 border-red-200 bg-red-50">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Ocupadas</p>
-                <p className="text-2xl font-bold text-red-600">{occupiedTables}</p>
-              </div>
-              <XCircle className="text-red-600" size={32} />
-            </div>
-          </Card>
-
-          <Card className="p-4 border-2 border-yellow-200 bg-yellow-50">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Reservadas</p>
-                <p className="text-2xl font-bold text-yellow-600">{reservedTables}</p>
-              </div>
-              <Clock className="text-yellow-600" size={32} />
-            </div>
-          </Card>
-        </div>
-
-        {/* Tables Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {tables.map((table) => (
-            <Card
-              key={table.id}
-              className={`p-6 border-2 transition-all hover:shadow-lg cursor-pointer ${getStatusColor(table.status)}`}
-              onClick={() => handleOpenTable(table)}
-            >
-              <div className="space-y-4">
-                {/* Table Header */}
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="text-2xl font-bold text-gray-900">
-                      Mesa {table.number}
-                    </h3>
-                    <div className="flex items-center gap-1 text-sm text-gray-600 mt-1">
-                      <Users size={14} />
-                      <span>{table.capacity} personas</span>
-                    </div>
-                  </div>
-                  {getStatusBadge(table.status)}
+          <RevealItem className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {statCards.map((stat) => (
+              <Card key={stat.label} className="rounded-2xl p-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{stat.label}</p>
+                  <stat.icon className={`h-4 w-4 ${stat.accent}`} />
                 </div>
+                <p className="mt-2 text-2xl font-semibold text-foreground">
+                  <AnimatedCounter value={stat.value} />
+                </p>
+              </Card>
+            ))}
+          </RevealItem>
 
-                {/* Order Info */}
-                {table.currentOrder && (
-                  <div className="space-y-2 pt-3 border-t border-red-200">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Orden:</span>
-                      <span className="font-semibold">{table.currentOrder.orderId}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Items:</span>
-                      <span className="font-semibold">{table.currentOrder.items}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Total:</span>
-                      <span className="font-bold text-orange-600">
-                        ${table.currentOrder.total.toFixed(2)}
+          {loading ? (
+            <RevealItem>
+              <Card className="rounded-2xl p-8 text-center text-sm text-muted-foreground">Cargando mesas…</Card>
+            </RevealItem>
+          ) : tables.length === 0 ? (
+            <RevealItem>
+              <Card className="rounded-2xl border-dashed p-10 text-center">
+                <UtensilsCrossed className="mx-auto h-8 w-8 text-primary" />
+                <p className="mt-3 text-sm text-muted-foreground">Aún no hay mesas. Crea la primera para empezar a tomar pedidos en el salón.</p>
+                <Button className="mt-4" onClick={openCreate}>
+                  <Plus className="h-4 w-4" />
+                  Crear mesas
+                </Button>
+              </Card>
+            </RevealItem>
+          ) : (
+            <RevealItem className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {tables.map((table) => {
+                const tableOrders = openOrdersFor(table.number);
+                const inactive = table.status !== 'active';
+                const occupied = !inactive && tableOrders.length > 0;
+                const total = tableOrders.reduce((sum, order) => sum + order.total, 0);
+                const items = tableOrders.reduce((sum, order) => sum + order.items.length, 0);
+                return (
+                  <Card key={table.id} className={`rounded-2xl p-4 ${occupied ? 'border-amber-500/40' : ''}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-lg font-semibold text-foreground">Mesa {table.number}</p>
+                        <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                          <Users className="h-3.5 w-3.5" />
+                          {table.capacity} puestos{table.zone ? ` · ${table.zone}` : ''}
+                        </p>
+                      </div>
+                      <span
+                        className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                          inactive ? 'bg-muted text-muted-foreground' : occupied ? 'bg-amber-500/10 text-amber-400' : 'bg-emerald-500/10 text-emerald-400'
+                        }`}
+                      >
+                        {inactive ? 'Fuera de servicio' : occupied ? 'Ocupada' : 'Disponible'}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1 text-xs text-gray-500">
-                      <Clock size={12} />
-                      <span>{getElapsedTime(table.currentOrder.startTime)}</span>
-                    </div>
 
-                    <Button
-                      size="sm"
-                      className="w-full bg-red-600 hover:bg-red-700 mt-2"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleCloseTable(table);
-                      }}
-                    >
-                      Cerrar Cuenta
+                    {occupied && (
+                      <div className="mt-3 space-y-1 rounded-xl bg-muted/40 p-3 text-xs text-muted-foreground">
+                        <p className="font-semibold text-foreground">
+                          {items} {items === 1 ? 'producto' : 'productos'} · {money(total)}
+                        </p>
+                        {tableOrders[0]?.waiter && <p>Mesero: {tableOrders[0].waiter}</p>}
+                        {tableOrders[0] && <p>{elapsed(tableOrders[0].created_at)}</p>}
+                      </div>
+                    )}
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button size="sm" variant="outline" onClick={() => setDetail(table)} disabled={inactive}>
+                        Ver comanda
+                      </Button>
+                      <Button size="sm" onClick={() => takeOrder(table.number)} disabled={inactive}>
+                        <Send className="h-3.5 w-3.5" />
+                        Tomar pedido
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => openEdit(table)} aria-label={`Editar mesa ${table.number}`}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </Card>
+                );
+              })}
+            </RevealItem>
+          )}
+        </RevealGroup>
+      </div>
+
+      <Dialog open={Boolean(detail)} onOpenChange={(open) => !open && setDetail(null)}>
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              Mesa {detail?.number}
+              {detail?.zone ? ` · ${detail.zone}` : ''}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {detailOrders.length === 0 ? (
+              <p className="rounded-xl border border-dashed p-4 text-center text-sm text-muted-foreground">Esta mesa no tiene comandas abiertas.</p>
+            ) : (
+              detailOrders.map((order) => (
+                <Card key={order.id} className="rounded-xl p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                    <span className="rounded-full bg-muted px-2 py-1 font-semibold text-foreground">{STATUS_LABELS[order.status]}</span>
+                    {order.waiter && <span>Mesero: {order.waiter}</span>}
+                    <span>{elapsed(order.created_at)}</span>
+                  </div>
+                  <ul className="mt-2 space-y-1 text-sm">
+                    {order.items.map((item, index) => (
+                      <li key={`${order.id}-${item.productId}-${index}`} className="flex justify-between gap-3">
+                        <span className="text-foreground">
+                          {item.quantity} × {item.productName}
+                        </span>
+                        <span className="text-muted-foreground">{money(item.unitPrice * item.quantity)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-2 border-t border-border/60 pt-2 text-right text-sm font-semibold text-foreground">Total {money(order.total)}</p>
+                  <div className="mt-3 flex gap-2">
+                    <Button size="sm" className="flex-1" onClick={() => void resolveOrder(order, 'delivered')}>
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Entregado
+                    </Button>
+                    <Button size="sm" variant="outline" className="flex-1" onClick={() => void resolveOrder(order, 'cancelled')}>
+                      <XCircle className="h-3.5 w-3.5" />
+                      Cancelar
                     </Button>
                   </div>
-                )}
+                </Card>
+              ))
+            )}
+            {detail && (
+              <Button className="w-full" onClick={() => takeOrder(detail.number)}>
+                <Send className="h-4 w-4" />
+                Tomar pedido en esta mesa
+              </Button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
-                {/* Available Actions */}
-                {table.status === 'available' && (
-                  <Button
-                    size="sm"
-                    className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
-                  >
-                    Abrir Mesa
-                  </Button>
-                )}
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>{editing ? `Editar mesa ${editing.number}` : 'Nueva mesa'}</DialogTitle>
+          </DialogHeader>
 
-                {table.status === 'reserved' && (
-                  <div className="text-xs text-center text-yellow-700 bg-yellow-100 p-2 rounded">
-                    Reservada para las 20:00
-                  </div>
-                )}
+          <form onSubmit={submitForm} className="space-y-4">
+            <div className="grid gap-2">
+              <Label htmlFor="table-number">Número de mesa</Label>
+              <Input id="table-number" type="number" min={1} value={number} onChange={(event) => setNumber(event.target.value)} required />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="table-zone">
+                Zona <span className="text-muted-foreground">(opcional)</span>
+              </Label>
+              <Input id="table-zone" value={zone} onChange={(event) => setZone(event.target.value)} placeholder="Salón, terraza, barra…" />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="table-capacity">Capacidad</Label>
+              <Input id="table-capacity" type="number" min={1} max={50} value={capacity} onChange={(event) => setCapacity(event.target.value)} required />
+            </div>
+            <Button type="submit" className="w-full" disabled={saving}>
+              {saving ? 'Guardando…' : editing ? 'Guardar cambios' : 'Crear mesa'}
+            </Button>
+          </form>
+
+          {!editing && (
+            <div className="rounded-xl border border-border/60 p-3">
+              <p className="text-xs font-semibold text-muted-foreground">Creación rápida de varias mesas</p>
+              <div className="mt-2 flex items-center gap-2">
+                <Input type="number" min={1} max={50} value={bulkCount} onChange={(event) => setBulkCount(event.target.value)} className="h-9" aria-label="Cantidad de mesas" />
+                <Button variant="outline" onClick={() => void bulkCreate()} disabled={saving}>
+                  Crear mesas
+                </Button>
               </div>
-            </Card>
-          ))}
-        </div>
-      </div>
+            </div>
+          )}
+
+          {editing && (
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => void toggleStatus(editing)}>
+                {editing.status === 'active' ? 'Poner fuera de servicio' : 'Habilitar mesa'}
+              </Button>
+              <Button variant="destructive" className="flex-1" onClick={() => (confirmDelete ? void removeTable(editing) : setConfirmDelete(true))}>
+                <Trash2 className="h-4 w-4" />
+                {confirmDelete ? 'Confirmar eliminación' : 'Eliminar'}
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }

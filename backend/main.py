@@ -164,10 +164,12 @@ def required_permission_for_request(path: str, method: str) -> str | None:
         return "sales.view"
     if path.startswith("/api/cash/"):
         return "cash.view" if method == "GET" else "cash.manage"
+    if path == "/api/tables" or path.startswith("/api/tables/"):
+        return "orders.view" if method == "GET" else "orders.manage"
     if path == "/api/orders":
         return "orders.view" if method == "GET" else "orders.manage"
     if path.startswith("/api/orders/"):
-        return "orders.manage"
+        return "orders.view" if method == "GET" else "orders.manage"
     if path.startswith("/api/reports"):
         return "reports.view"
     if path == "/api/audit":
@@ -253,6 +255,8 @@ async def authenticate_and_authorize(request: Request, call_next):
             module = "pos"
         elif path.startswith("/api/orders"):
             module = "orders"
+        elif path.startswith("/api/tables"):
+            module = "tables"
         if module:
             try:
                 with connection() as conn:
@@ -275,6 +279,10 @@ async def authenticate_and_authorize(request: Request, call_next):
                     enabled = bool(features.get("inventory"))
                 elif module == "pos":
                     enabled = bool(features.get("pos"))
+                elif module == "tables":
+                    food = business_row and business_row["business_type"] == "food"
+                    active_modules = settings.get("foodConfig", {}).get("activeModules", []) if isinstance(settings, dict) and isinstance(settings.get("foodConfig"), dict) else []
+                    enabled = bool(food and ("mesas" in active_modules or "pedidos" in active_modules or features.get("tables")))
                 else:
                     food = business_row and business_row["business_type"] == "food"
                     active_modules = settings.get("foodConfig", {}).get("activeModules", []) if isinstance(settings, dict) and isinstance(settings.get("foodConfig"), dict) else []
@@ -305,8 +313,10 @@ async def authenticate_and_authorize(request: Request, call_next):
             allowed = request.method in {"GET", "POST"}
         elif path.startswith("/api/cash/sessions/"):
             allowed = request.method in {"GET", "POST"}
-        elif path.startswith("/api/orders/") and request.method == "PATCH":
+        elif path.startswith("/api/orders/") and (request.method in {"GET", "PATCH"} or (request.method == "POST" and path.endswith("/items"))):
             allowed = True
+        elif path == "/api/tables":
+            allowed = request.method == "GET"
         if not allowed:
             return JSONResponse(status_code=403, content={"detail": "Tu rol de cajero no permite esta operación."})
     elif role == "business_admin":
@@ -422,6 +432,9 @@ def delete_business_type_data(conn: sqlite3.Connection, business_id: str, old_ty
         if table_exists(conn, "orders") and table_has_column(conn, "orders", "business_id"):
             conn.execute("DELETE FROM orders WHERE business_id=?", (business_id,))
             deleted.append("orders")
+        if table_exists(conn, "restaurant_tables") and table_has_column(conn, "restaurant_tables", "business_id"):
+            conn.execute("DELETE FROM restaurant_tables WHERE business_id=?", (business_id,))
+            deleted.append("restaurant_tables")
         if table_exists(conn, "recipe_items") and table_exists(conn, "recipes"):
             conn.execute("DELETE FROM recipe_items WHERE recipe_id IN (SELECT id FROM recipes WHERE business_id=?)", (business_id,))
             deleted.append("recipe_items")
@@ -529,6 +542,15 @@ async def startup():
             conn.execute("ALTER TABLE businesses ADD COLUMN suspension_description TEXT NOT NULL DEFAULT ''")
         if "suspended_at" not in business_columns:
             conn.execute("ALTER TABLE businesses ADD COLUMN suspended_at TEXT")
+        # Migración del módulo de restaurante: mesas y mesero en los pedidos.
+        if table_exists(conn, "orders"):
+            if not table_has_column(conn, "orders", "table_number"):
+                conn.execute("ALTER TABLE orders ADD COLUMN table_number INTEGER")
+            if not table_has_column(conn, "orders", "waiter"):
+                conn.execute("ALTER TABLE orders ADD COLUMN waiter TEXT NOT NULL DEFAULT ''")
+            # El índice debe crearse después del ALTER: en bases existentes la
+            # columna table_number no está en el CREATE TABLE de schema.sql.
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_orders_table ON orders(business_id, table_number)")
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS auth_users (
                 id TEXT PRIMARY KEY,
@@ -2489,13 +2511,18 @@ def delete_service_appointment(appointment_id: str):
 
 
 @app.get("/api/orders")
-def list_orders(status: str | None = None):
+def list_orders(status: str | None = None, table_number: int | None = None, open: bool = False):
     with connection() as conn:
         query = "SELECT * FROM orders WHERE business_id=?"
         params: list = [current_business_id()]
         if status:
             query += " AND status=?"
             params.append(status)
+        if table_number is not None:
+            query += " AND table_number=?"
+            params.append(table_number)
+        if open:
+            query += " AND status NOT IN ('delivered','cancelled')"
         query += " ORDER BY created_at DESC"
         rows = conn.execute(query, params).fetchall()
         result = []
@@ -2520,6 +2547,8 @@ class OrderPayload(BaseModel):
     phone: str = Field(default="", max_length=60)
     address: str = Field(default="", max_length=240)
     notes: str = Field(default="", max_length=1000)
+    tableNumber: int | None = Field(default=None, ge=1, le=999)
+    waiter: str = Field(default="", max_length=80)
     items: list[OrderItemPayload] = Field(min_length=1, max_length=200)
 
 
@@ -2540,14 +2569,15 @@ def create_order(payload: OrderPayload):
                 raise HTTPException(409, f"Stock insuficiente para {product['name']}.")
             total += product["price"] * item.quantity
             resolved.append((item, product))
-        conn.execute("INSERT INTO orders (id,business_id,channel,customer,phone,address,status,notes,total) VALUES (?,?,?,?,?,?,'received',?,?)",
-                     (order_id, current_business_id(), payload.channel, payload.customer, payload.phone, payload.address, payload.notes, round(total, 2)))
+        channel = "table" if payload.tableNumber else payload.channel
+        conn.execute("INSERT INTO orders (id,business_id,channel,customer,phone,address,status,notes,total,table_number,waiter) VALUES (?,?,?,?,?,?,'received',?,?,?,?)",
+                     (order_id, current_business_id(), channel, payload.customer, payload.phone, payload.address, payload.notes, round(total, 2), payload.tableNumber, payload.waiter.strip()))
         for item, product in resolved:
             conn.execute("INSERT INTO order_items (order_id,product_id,product_name,quantity,unit_price,notes) VALUES (?,?,?,?,?,?)",
                          (order_id, item.productId, product["name"], item.quantity, product["price"], item.notes))
-        audit(conn, "create", "order", order_id, {"total": total, "channel": payload.channel})
+        audit(conn, "create", "order", order_id, {"total": total, "channel": channel, "tableNumber": payload.tableNumber, "waiter": payload.waiter.strip()})
         conn.commit()
-        return {"id": order_id, "status": "received", "total": round(total, 2), "createdAt": datetime.now().astimezone().isoformat(timespec="seconds")}
+        return {"id": order_id, "status": "received", "total": round(total, 2), "tableNumber": payload.tableNumber, "waiter": payload.waiter.strip(), "createdAt": datetime.now().astimezone().isoformat(timespec="seconds")}
 
 
 @app.patch("/api/orders/{order_id}/status")
@@ -2558,6 +2588,150 @@ def update_order_status(order_id: str, status: Literal["received", "preparing", 
             raise HTTPException(404, "Pedido no encontrado.")
         audit(conn, "status_change", "order", order_id, {"status": status})
         return {"id": order_id, "status": status}
+
+
+def order_to_dict(conn: sqlite3.Connection, row) -> dict:
+    items = conn.execute("SELECT * FROM order_items WHERE order_id=?", (row["id"],)).fetchall()
+    order_data = dict(row)
+    order_data["created_at"] = timestamp_iso(order_data.get("created_at"))
+    order_data["updated_at"] = timestamp_iso(order_data.get("updated_at"))
+    return {**order_data, "items": [dict(i) for i in items]}
+
+
+@app.get("/api/orders/{order_id}")
+def get_order(order_id: str):
+    with connection() as conn:
+        row = conn.execute("SELECT * FROM orders WHERE id=? AND business_id=?", (order_id, current_business_id())).fetchone()
+        if not row:
+            raise HTTPException(404, "Pedido no encontrado.")
+        return order_to_dict(conn, row)
+
+
+class OrderItemsPayload(BaseModel):
+    items: list[OrderItemPayload] = Field(min_length=1, max_length=200)
+
+
+@app.post("/api/orders/{order_id}/items", status_code=201)
+def add_order_items(order_id: str, payload: OrderItemsPayload):
+    """Agrega productos a una comanda abierta (la comanda de una mesa crece tras enviarse)."""
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        order = conn.execute("SELECT * FROM orders WHERE id=? AND business_id=?", (order_id, current_business_id())).fetchone()
+        if not order:
+            conn.rollback()
+            raise HTTPException(404, "Pedido no encontrado.")
+        if order["status"] not in ("received", "preparing"):
+            conn.rollback()
+            raise HTTPException(409, "Solo puedes agregar productos a una comanda abierta (recibida o en preparación).")
+        total = float(order["total"] or 0)
+        resolved = []
+        for item in payload.items:
+            product = conn.execute("SELECT * FROM products WHERE id=? AND business_id=? AND active=1 AND product_type='sale_item'", (item.productId, current_business_id())).fetchone()
+            if not product:
+                conn.rollback()
+                raise HTTPException(404, f"Producto no encontrado: {item.productId}")
+            if product["stock"] < item.quantity:
+                conn.rollback()
+                raise HTTPException(409, f"Stock insuficiente para {product['name']}.")
+            total += product["price"] * item.quantity
+            resolved.append((item, product))
+        for item, product in resolved:
+            conn.execute("INSERT INTO order_items (order_id,product_id,product_name,quantity,unit_price,notes) VALUES (?,?,?,?,?,?)",
+                         (order_id, item.productId, product["name"], item.quantity, product["price"], item.notes))
+        conn.execute("UPDATE orders SET total=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND business_id=?",
+                     (round(total, 2), order_id, current_business_id()))
+        audit(conn, "update", "order_items", order_id, {"added": len(resolved), "total": round(total, 2)})
+        conn.commit()
+        updated = conn.execute("SELECT * FROM orders WHERE id=?", (order_id,)).fetchone()
+        return order_to_dict(conn, updated)
+
+
+def table_to_dict(conn: sqlite3.Connection, row) -> dict:
+    open_orders = conn.execute(
+        "SELECT status,total,waiter,created_at FROM orders WHERE business_id=? AND channel='table' AND table_number=? AND status IN ('received','preparing','ready') ORDER BY created_at",
+        (row["business_id"], row["number"]),
+    ).fetchall()
+    return {
+        "id": row["id"], "number": row["number"], "zone": row["zone"] or "", "capacity": row["capacity"],
+        "status": row["status"], "openOrders": len(open_orders),
+        "openTotal": round(sum(float(o["total"] or 0) for o in open_orders), 2),
+        "waiter": next((o["waiter"] for o in reversed(open_orders) if o["waiter"]), ""),
+        "since": timestamp_iso(open_orders[0]["created_at"]) if open_orders else None,
+    }
+
+
+class TablePayload(BaseModel):
+    number: int = Field(ge=1, le=999)
+    zone: str = Field(default="", max_length=80)
+    capacity: int = Field(default=4, ge=1, le=50)
+
+
+class TableUpdatePayload(BaseModel):
+    number: int | None = Field(default=None, ge=1, le=999)
+    zone: str | None = Field(default=None, max_length=80)
+    capacity: int | None = Field(default=None, ge=1, le=50)
+    status: Literal["active", "inactive"] | None = None
+
+
+@app.get("/api/tables")
+def list_restaurant_tables():
+    with connection() as conn:
+        rows = conn.execute("SELECT * FROM restaurant_tables WHERE business_id=? ORDER BY number", (current_business_id(),)).fetchall()
+        return [table_to_dict(conn, row) for row in rows]
+
+
+@app.post("/api/tables", status_code=201)
+def create_restaurant_table(payload: TablePayload):
+    with connection() as conn:
+        existing = conn.execute("SELECT id FROM restaurant_tables WHERE business_id=? AND number=?", (current_business_id(), payload.number)).fetchone()
+        if existing:
+            raise HTTPException(409, f"Ya existe una mesa con el número {payload.number}.")
+        table_id = f"MESA-{uuid.uuid4().hex[:8].upper()}"
+        conn.execute("INSERT INTO restaurant_tables (id,business_id,number,zone,capacity,status) VALUES (?,?,?,?,?,'active')",
+                     (table_id, current_business_id(), payload.number, payload.zone.strip(), payload.capacity))
+        audit(conn, "create", "restaurant_table", table_id, {"number": payload.number})
+        row = conn.execute("SELECT * FROM restaurant_tables WHERE id=?", (table_id,)).fetchone()
+        return table_to_dict(conn, row)
+
+
+@app.patch("/api/tables/{table_id}")
+def update_restaurant_table(table_id: str, payload: TableUpdatePayload):
+    with connection() as conn:
+        row = conn.execute("SELECT * FROM restaurant_tables WHERE id=? AND business_id=?", (table_id, current_business_id())).fetchone()
+        if not row:
+            raise HTTPException(404, "Mesa no encontrada.")
+        number = payload.number if payload.number is not None else row["number"]
+        if number != row["number"]:
+            clash = conn.execute("SELECT id FROM restaurant_tables WHERE business_id=? AND number=? AND id<>?", (current_business_id(), number, table_id)).fetchone()
+            if clash:
+                raise HTTPException(409, f"Ya existe una mesa con el número {number}.")
+            open_count = conn.execute("SELECT COUNT(*) AS c FROM orders WHERE business_id=? AND channel='table' AND table_number=? AND status IN ('received','preparing','ready')",
+                                      (current_business_id(), row["number"])).fetchone()["c"]
+            if open_count:
+                raise HTTPException(409, "La mesa tiene comandas abiertas; no puedes cambiar su número todavía.")
+        zone = payload.zone.strip() if payload.zone is not None else row["zone"]
+        capacity = payload.capacity if payload.capacity is not None else row["capacity"]
+        status = payload.status if payload.status is not None else row["status"]
+        conn.execute("UPDATE restaurant_tables SET number=?, zone=?, capacity=?, status=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND business_id=?",
+                     (number, zone, capacity, status, table_id, current_business_id()))
+        audit(conn, "update", "restaurant_table", table_id, {"number": number, "status": status})
+        row = conn.execute("SELECT * FROM restaurant_tables WHERE id=?", (table_id,)).fetchone()
+        return table_to_dict(conn, row)
+
+
+@app.delete("/api/tables/{table_id}")
+def delete_restaurant_table(table_id: str):
+    with connection() as conn:
+        row = conn.execute("SELECT * FROM restaurant_tables WHERE id=? AND business_id=?", (table_id, current_business_id())).fetchone()
+        if not row:
+            raise HTTPException(404, "Mesa no encontrada.")
+        open_count = conn.execute("SELECT COUNT(*) AS c FROM orders WHERE business_id=? AND channel='table' AND table_number=? AND status IN ('received','preparing','ready')",
+                                  (current_business_id(), row["number"])).fetchone()["c"]
+        if open_count:
+            raise HTTPException(409, "La mesa tiene comandas abiertas. Entrega o cancela esos pedidos antes de eliminarla.")
+        conn.execute("DELETE FROM restaurant_tables WHERE id=? AND business_id=?", (table_id, current_business_id()))
+        audit(conn, "delete", "restaurant_table", table_id, {"number": row["number"]})
+    return None
 
 
 class RecipeIngredientPayload(BaseModel):

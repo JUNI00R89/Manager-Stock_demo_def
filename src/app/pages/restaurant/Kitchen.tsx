@@ -46,6 +46,8 @@ function OrderCard({ order, busy, onAdvance, onCancel, reveal = false }: { order
     </div>
     <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
       <span className="rounded-lg bg-muted px-2 py-1">{CHANNEL_LABEL[order.channel]}</span>
+      {order.tableNumber != null && <span className="rounded-lg bg-primary/10 px-2 py-1 font-semibold text-primary">Mesa {order.tableNumber}</span>}
+      {order.waiter && <span className="rounded-lg bg-muted px-2 py-1">{order.waiter}</span>}
       <span className={`inline-flex items-center gap-1 ${delayed ? 'font-semibold text-rose-600' : ''}`}><Clock3 className="h-3.5 w-3.5" />{ageMinutes} min</span>
       {order.phone && <span>{order.phone}</span>}
     </div>

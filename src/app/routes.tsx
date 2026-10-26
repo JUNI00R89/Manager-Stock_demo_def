@@ -18,6 +18,7 @@ import { Notifications } from './pages/Notifications';
 import { Subscription } from './pages/Subscription';
 import { Settings } from './pages/Settings';
 import { Tables } from './pages/restaurant/Tables';
+import { Waiter } from './pages/restaurant/Waiter';
 import { Kitchen } from './pages/restaurant/Kitchen';
 import { Rooms } from './pages/hotel/Rooms';
 import { Availability } from './pages/hotel/Availability';
@@ -132,6 +133,7 @@ export const router = createBrowserRouter([
       { path: 'inventory/physical-count', element: <PhysicalCount /> },
       { path: 'inventory/movements', element: <Movements /> },
       { path: 'restaurant/tables', element: <Tables /> },
+      { path: 'restaurant/waiter', element: <Waiter /> },
       { path: 'restaurant/kitchen', element: <Kitchen /> },
       { path: 'hotel/rooms', element: <Rooms /> },
       { path: 'hotel/availability', element: <Availability /> },
