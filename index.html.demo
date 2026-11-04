@@ -1,0 +1,36 @@
+
+  <!DOCTYPE html>
+  <html lang="es">
+    <head>
+      
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>Manager Stock | Gestión de tu negocio</title>
+      <meta name="description" content="Administra ventas, inventario, pedidos, recetas y caja desde una plataforma clara para negocios pequeños." />
+      <meta name="robots" content="noindex, nofollow" />
+      <meta name="theme-color" content="#F4F4F6" media="(prefers-color-scheme: light)" />
+      <meta name="theme-color" content="#0D0D10" media="(prefers-color-scheme: dark)" />
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+      <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..800&display=swap" rel="stylesheet" />
+      <style>html, body { height: 100%; margin: 0; } #root { height: 100%; }</style>
+      <script>
+        // Aplica el tema antes de pintar para evitar el "flash" blanco en modo oscuro.
+        try {
+          var t = localStorage.getItem('theme');
+          if (t === 'dark') {
+            document.documentElement.classList.add('dark');
+          }
+        } catch (e) {}
+      </script>
+      
+    </head>
+
+    <body>
+      
+      <div id="root"></div>
+      <script type="module" src="/src/main.tsx"></script>
+      
+    </body>
+  </html>
+  

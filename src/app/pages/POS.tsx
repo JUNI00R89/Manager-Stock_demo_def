@@ -305,14 +305,14 @@ export function POS() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* ── Products panel ── */}
         <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-xl font-bold text-foreground">Punto de Venta</h2>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:flex">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setShowScanner(true)}
-                className="border-orange-300 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/30"
+                className="justify-center border-orange-300 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/30"
               >
                 <ScanLine size={16} className="mr-1.5" />
                 Escanear
@@ -321,7 +321,7 @@ export function POS() {
                 variant="outline"
                 size="sm"
                 onClick={() => { if (cart.length) { toast.error('Termina o vacía la venta actual antes de cerrar caja.'); return; } setClosingAmount(''); setShowCloseTurn(true); }}
-                className="border-gray-300 text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800"
+                className="justify-center border-gray-300 text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800"
               >
                 <Lock size={16} className="mr-1.5" />
                 Cerrar turno
@@ -362,7 +362,7 @@ export function POS() {
           {/* Product grid */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[520px] overflow-y-auto pr-1">
             {filteredProducts.length === 0 ? (
-              <div className="col-span-3 text-center py-12 text-muted-foreground">
+              <div className="col-span-2 py-12 text-center text-muted-foreground sm:col-span-3">
                 <Package size={40} className="mx-auto mb-2 opacity-40" />
                 <p className="text-sm">No se encontraron productos</p>
               </div>
@@ -375,8 +375,8 @@ export function POS() {
                     key={product.id}
                     className={`p-4 border cursor-pointer transition-all select-none ${
                       outOfStock ? 'border-border opacity-50 cursor-not-allowed'
-                      : inCart ? 'border-green-500 bg-green-50 dark:bg-green-950/20'
-                      : 'border-border hover:border-orange-400 hover:shadow-sm'
+                      : inCart ? 'border-primary bg-primary/10'
+                      : 'border-border hover:border-primary'
                     }`}
                     onClick={() => !outOfStock && addToCart(product)}
                   >
@@ -384,7 +384,7 @@ export function POS() {
                       <div className="flex justify-between items-start">
                         <h3 className="text-sm font-semibold text-foreground line-clamp-2 leading-tight">{product.name}</h3>
                         {inCart && (
-                          <span className="ml-1 w-5 h-5 bg-green-600 text-white text-[10px] rounded-full flex items-center justify-center font-bold flex-shrink-0">
+                          <span className="ml-1 w-5 h-5 bg-primary text-white text-[10px] rounded-full flex items-center justify-center font-bold flex-shrink-0">
                             {inCart.quantity}
                           </span>
                         )}

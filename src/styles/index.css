@@ -106,8 +106,9 @@
   animation: ms-grow-x 0.8s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
-/* Barrido de tema: el snapshot nuevo se revela con clip-path desde el botón (ver
-   Layout). Aquí solo se anula el cross-fade por defecto de View Transitions. */
+/* Barrido de tema: el snapshot nuevo se revela con un clip-path orgánico con
+   tentáculos desde el botón (ver Layout). Aquí solo se anula el cross-fade por
+   defecto de View Transitions. */
 ::view-transition-old(root) { animation: none; mix-blend-mode: normal; z-index: 1; }
 /* El snapshot nuevo va encima: el clip-path orgánico (ver Layout) lo va revelando
    sobre el anterior. */
@@ -132,9 +133,13 @@
    página aplica (rounded-2xl, shadow-sm, p-5…), así todas las tarjetas de la
    vista comparten radio, elevación y aire. */
 [data-slot="card"]:not([data-slot="card"] *) {
-  border-radius: 1.125rem;
+  border-radius: 1.25rem;
   box-shadow: var(--app-shadow-card);
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  background: var(--card);
+  transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 /* Un poco más de tamaño: las tarjetas de la vista con p-5 (1.25rem) pasan a
    1.5rem por lado. Las de dentro se quedan como estaban. */
@@ -142,10 +147,73 @@
 /* Excepciones: variantes que salen del estilo común. */
 [data-slot="card"].rounded-3xl:not([data-slot="card"] *) { border-radius: 1.5rem; }
 [data-slot="card"].border-dashed:not([data-slot="card"] *) { box-shadow: none; }
-/* Las tarjetas de la vista se elevan suavemente al pasar el cursor (y: -2). */
+/* Hover: sin destello ni sombra de color. Las tarjetas tampoco se elevan. */
 [data-slot="card"]:not([data-slot="card"] *):hover {
-  transform: translateY(-2px);
-  box-shadow: var(--app-shadow-card-hover);
+  box-shadow: var(--app-shadow-card);
+}
+
+/* ── Marco de la aplicación ─────────────────────────────────────────────────
+   El lienzo, la barra lateral y el header comparten el mismo lenguaje en ambos
+   modos: salvia cálida en claro, vidrio oscuro en oscuro. */
+.app-shell {
+  background:
+    radial-gradient(ellipse 58% 48% at 8% 0%, color-mix(in srgb, var(--brand-primary) 7%, transparent), transparent 64%),
+    radial-gradient(ellipse 52% 46% at 100% 100%, rgba(111, 143, 120, 0.16), transparent 70%),
+    var(--brand-background);
+}
+
+.dark .app-shell {
+  background:
+    radial-gradient(ellipse 55% 45% at 8% 0%, color-mix(in srgb, var(--brand-primary) 14%, transparent), transparent 62%),
+    radial-gradient(ellipse 45% 40% at 100% 100%, color-mix(in srgb, var(--brand-secondary) 8%, transparent), transparent 65%),
+    var(--brand-background);
+}
+
+.app-sidebar {
+  background: var(--brand-surface);
+  background: var(--sidebar);
+  border: 1px solid var(--sidebar-border);
+  box-shadow: var(--app-shadow-chrome);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+}
+
+/* Con la barra colapsada el ancho es mínimo: ocultamos la barra de scroll para
+   que no consuma el espacio y los iconos conserven sus 22 px. La navegación
+   sigue siendo desplazable con la rueda o el trackpad. */
+.app-sidebar-collapsed [data-sidebar-nav="true"] {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.app-sidebar-collapsed [data-sidebar-nav="true"]::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.app-header {
+  background: var(--brand-surface);
+  background: var(--app-header-bg);
+  border: 1px solid var(--border);
+  box-shadow: var(--app-shadow-chrome);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+}
+
+.app-nav-indicator {
+  background: var(--brand-soft);
+  background: var(--nav-active-bg);
+  border: 1px solid var(--nav-active-border);
+  box-shadow: var(--nav-active-shadow);
+  backdrop-filter: blur(12px) saturate(150%);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+}
+
+.app-mobile-nav {
+  background: var(--brand-surface);
+  background: var(--sidebar);
+  border-top: 1px solid var(--sidebar-border);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
 }
 
 /* Números: anchura fija de dígito para que no salten al contar ni en tablas. */
@@ -162,8 +230,8 @@
   --brand-primary: #F26A1B;
   --brand-secondary: #FF8A4C;
   --brand-accent: #FFC09B;
-  --brand-background: #F4F4F6;
-  --brand-surface: #FFFFFF;
+  --brand-background: #DEE4DA;
+  --brand-surface: #EEF2EC;
   --brand-soft: #F26A1B14;
 }
 .bg-orange-600, .bg-orange-500 { background-color: var(--brand-primary) !important; }

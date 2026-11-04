@@ -24,6 +24,8 @@ export interface BusinessTheme {
   customized: boolean;
 }
 export interface BusinessConfig {
+  /** Identificador del negocio cuando la API lo expone. */
+  id?: string;
   type: BusinessType;
   name: string;
   currency: string;
@@ -53,22 +55,23 @@ export const DEFAULT_CONFIGS: Record<BusinessType, Omit<BusinessConfig, 'name'>>
 
 /**
  * Paleta por defecto de la aplicación (sistema visual de referencia):
- * acento naranja #F26A1B → #FF8A4C sobre superficies neutras
- * (claro: fondo #F4F4F6 / tarjetas blancas · oscuro: fondo #0D0D10 / tarjetas #17171B).
+ * acento naranja #FF6B00 sobre superficies neutras. En modo claro la paleta se
+ * mezcla con salvia para bajar el brillo (fondo #DEE4DA / tarjetas #EEF2EC);
+ * en oscuro se mantiene el lienzo #080B10 y las tarjetas #11161E.
  *
  * Cada empresa puede seguir personalizando sus colores en Configuración: cuando lo
  * hace, su paleta guardada (`customized: true`) se respeta tal cual.
  */
 const DEFAULT_PALETTE: Omit<BusinessTheme, 'customized'> = {
-  primary: '#F26A1B',
-  secondary: '#FF8A4C',
-  accent: '#FFC09B',
-  background: '#F4F4F6',
+  primary: '#FF6B00',
+  secondary: '#E85D00',
+  accent: '#FF6B00',
+  background: '#F5F5F5',
   surface: '#FFFFFF',
-  lightBackground: '#F4F4F6',
+  lightBackground: '#F5F5F5',
   lightSurface: '#FFFFFF',
-  darkBackground: '#0D0D10',
-  darkSurface: '#17171B',
+  darkBackground: '#080B10',
+  darkSurface: '#11161E',
   mode: 'light',
 };
 
@@ -81,6 +84,41 @@ export const DEFAULT_BUSINESS_THEMES: Record<BusinessType, BusinessTheme> = {
 };
 
 /**
+ * El modo claro de la app descansa sobre un verde salvia muy suave. En lugar de
+ * mostrar el blanco puro configurado por el negocio, mezclamos su paleta con ese
+ * tono: conserva la identidad de marca y baja el brillo de fondo y tarjetas.
+ */
+const LIGHT_CANVAS_TINT: [number, number, number] = [198, 210, 198];
+const LIGHT_SURFACE_TINT: [number, number, number] = [225, 232, 222];
+const LIGHT_CANVAS_WEIGHT = 0.55;
+const LIGHT_SURFACE_WEIGHT = 0.6;
+
+function parseHexColor(value: string): [number, number, number] | null {
+  const hex = value.trim().replace(/^#/, '');
+  if (!/^[0-9a-f]{3}$|^[0-9a-f]{6}$/i.test(hex)) return null;
+  const normalized = hex.length === 3 ? hex.split('').map(char => char + char).join('') : hex;
+  return [0, 2, 4].map(index => parseInt(normalized.slice(index, index + 2), 16)) as [number, number, number];
+}
+
+function mixHexColor(base: string, tint: [number, number, number], tintWeight: number) {
+  const rgb = parseHexColor(base);
+  if (!rgb) return base;
+  const channels = rgb.map((channel, index) => Math.round(channel * (1 - tintWeight) + tint[index] * tintWeight));
+  return `#${channels.map(channel => channel.toString(16).padStart(2, '0')).join('')}`.toUpperCase();
+}
+
+/** Colores efectivos que la interfaz pinta para el tema indicado. */
+export function resolveThemeColors(theme: BusinessTheme) {
+  const background = theme.mode === 'dark' ? (theme.darkBackground || '#080B10') : (theme.lightBackground || theme.background);
+  const surface = theme.mode === 'dark' ? (theme.darkSurface || '#11161E') : (theme.lightSurface || theme.surface);
+  if (theme.mode === 'dark') return { background, surface };
+  return {
+    background: mixHexColor(background, LIGHT_CANVAS_TINT, LIGHT_CANVAS_WEIGHT),
+    surface: mixHexColor(surface, LIGHT_SURFACE_TINT, LIGHT_SURFACE_WEIGHT),
+  };
+}
+
+/**
  * Aplica la paleta al documento de forma sincrónica (clase `.dark` + variables
  * `--brand-*`). Al ser sincrónica se puede llamar dentro del callback de
  * View Transitions: el snapshot del tema nuevo ya sale con el color nuevo, sin
@@ -88,11 +126,10 @@ export const DEFAULT_BUSINESS_THEMES: Record<BusinessType, BusinessTheme> = {
  */
 export function applyTheme(theme: BusinessTheme) {
   const root = document.documentElement;
+  const { background, surface } = resolveThemeColors(theme);
   root.style.setProperty('--brand-primary', theme.primary);
   root.style.setProperty('--brand-secondary', theme.secondary);
   root.style.setProperty('--brand-accent', theme.accent);
-  const background = theme.mode === 'dark' ? (theme.darkBackground || '#0D0D10') : (theme.lightBackground || theme.background);
-  const surface = theme.mode === 'dark' ? (theme.darkSurface || '#17171B') : (theme.lightSurface || theme.surface);
   root.style.setProperty('--brand-background', background);
   root.style.setProperty('--brand-surface', surface);
   root.style.setProperty('--brand-soft', `${theme.primary}14`);
@@ -122,7 +159,11 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { setTheme } = useTheme();
   const [config, setConfigState] = useState<BusinessConfig | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  // Identifica para qué usuario ya terminó la carga de configuración. Así los
+  // guards no confunden "todavía no cargó" con "el negocio no está configurado"
+  // al refrescar una ruta interna (POS, Mesas, etc.).
+  const [loadedUserId, setLoadedUserId] = useState<string | null>(null);
+  const isLoading = !!user && user.role !== 'superadmin' && loadedUserId !== user.id;
 
   useEffect(() => {
     if (config?.theme) {
@@ -139,10 +180,9 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
       // Never carry a previous tenant's custom palette onto the login page or global platform panel.
       applyTheme(DEFAULT_BUSINESS_THEMES.retail);
       setTheme('light');
-      setIsLoading(false);
+      setLoadedUserId(null);
       return;
     }
-    setIsLoading(true);
     getBusinessConfig<BusinessConfig>()
       .then((remote) => {
         if (!active) return;
@@ -154,7 +194,7 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
       .catch(() => {
         if (active) setConfigState(null);
       })
-      .finally(() => { if (active) setIsLoading(false); });
+      .finally(() => { if (active) setLoadedUserId(user.id); });
     return () => { active = false; };
   }, [user?.id, user?.role]);
 

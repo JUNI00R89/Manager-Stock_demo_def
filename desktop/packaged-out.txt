@@ -1,0 +1,82 @@
+
+[smoke] click cuenta demo: true
+[smoke] url actual: http://127.0.0.1:41731/dashboard
+[smoke] Manager Stock Pro
+
+Hotel
+
+Sucursal principal
+
+Configuración actual
+
+Dashboard
+
+VENTAS
+
+Punto de Venta
+Ventas
+Reportes
+
+HOTEL
+
+Habitaciones
+Disponibilidad
+Limpieza
+
+INVENTARIO
+
+Productos
+Proveedores
+
+SISTEMA
+
+Alertas
+3
+Usuarios y permisos
+Configuración
+P
+
+Propietario Hotel Demo
+
+Propietario
+
+Cerrar sesión
+
+Hotel Senderos (Demo)
+
+Modo escritorio local
+Hotel Senderos (Demo)
+3
+
+PANEL DE CONTROL
+
+Hola, bienvenido
+
+Hotel Senderos (Demo) · Resumen operativo basado en los registros guardados.
+
+Ver inventario
+Abrir caja
+Ingresos de hoy
+
+$ 0
+
+0 ventas completadas
+
+Ventas de hoy
+
+0
+
+Operaciones con estado completado
+
+Ticket promedio
+
+$ 0
+
+Calculado con ventas de hoy
+
+Stock por revisar
+
+3
+
+Productos en 
+[smoke] captura guardada

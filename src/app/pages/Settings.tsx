@@ -16,7 +16,7 @@ import {
   RefreshCw,
   CheckCircle
 } from 'lucide-react';
-import { useBusiness, BusinessConfig, DEFAULT_BUSINESS_THEMES, type BusinessTheme } from '../context/BusinessContext';
+import { useBusiness, BusinessConfig, DEFAULT_BUSINESS_THEMES, resolveThemeColors, type BusinessTheme } from '../context/BusinessContext';
 import { useTheme } from '../context/ThemeContext';
 import { toast } from 'sonner';
 import { ConfirmActionDialog } from '../components/ConfirmActionDialog';
@@ -43,6 +43,9 @@ export function Settings() {
 
   const activeBackground = themeDraft.mode === 'dark' ? (themeDraft.darkBackground || '#0D0D10') : (themeDraft.lightBackground || themeDraft.background);
   const activeSurface = themeDraft.mode === 'dark' ? (themeDraft.darkSurface || '#17171B') : (themeDraft.lightSurface || themeDraft.surface);
+  // El modo claro mezcla la paleta con salvia para bajar el brillo; la vista
+  // previa debe usar exactamente los mismos colores que la aplicación real.
+  const previewColors = resolveThemeColors(themeDraft);
   const changeThemeColor = (key: 'primary' | 'secondary' | 'accent' | 'background' | 'surface', value: string) => {
     setThemeDraft(previous => {
       if (key === 'background') return previous.mode === 'dark' ? { ...previous, darkBackground: value, customized: true } : { ...previous, background: value, lightBackground: value, customized: true };
@@ -56,13 +59,13 @@ export function Settings() {
     root.style.setProperty('--brand-primary', themeDraft.primary);
     root.style.setProperty('--brand-secondary', themeDraft.secondary);
     root.style.setProperty('--brand-accent', themeDraft.accent);
-    root.style.setProperty('--brand-background', activeBackground);
-    root.style.setProperty('--brand-surface', activeSurface);
+    root.style.setProperty('--brand-background', previewColors.background);
+    root.style.setProperty('--brand-surface', previewColors.surface);
     root.style.setProperty('--brand-soft', `${themeDraft.primary}14`);
     root.classList.toggle('dark', themeDraft.mode === 'dark');
     root.dataset.businessTheme = themeDraft.mode;
     setTheme(themeDraft.mode);
-  }, [themeDraft, activeBackground, activeSurface, setTheme]);
+  }, [themeDraft, previewColors.background, previewColors.surface, setTheme]);
 
   const handleSave = async () => {
     if (!config || !formData.name.trim()) {
@@ -192,7 +195,7 @@ export function Settings() {
             })}
             <label className="flex items-center justify-between gap-3 rounded-xl border border-border p-3"><span className="text-sm font-medium">Modo de interfaz</span><select value={themeDraft.mode} onChange={event => setThemeDraft(prev => ({ ...prev, mode: event.target.value as 'light' | 'dark', customized: true }))} className="rounded-lg border border-input bg-background px-3 py-2 text-sm"><option value="light">Claro</option><option value="dark">Oscuro</option></select></label>
           </div>
-          <div className="mt-5 rounded-2xl border border-border p-4" style={{ backgroundColor: activeBackground, color: themeDraft.mode === 'dark' ? '#F4F7F8' : '#26343B' }}><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wider opacity-70">Vista previa</p><p className="mt-1 text-lg font-semibold">{config.name || 'Nombre del negocio'}</p><p className="mt-1 text-sm opacity-75">Así se verán tus componentes principales.</p></div><div className="rounded-xl px-4 py-2 text-sm font-semibold text-white shadow-sm" style={{ backgroundColor: themeDraft.primary }}>Acción principal</div></div><div className="mt-4 grid grid-cols-3 gap-2"><div className="rounded-lg p-3 text-xs font-medium" style={{ backgroundColor: activeSurface, color: themeDraft.mode === 'dark' ? '#F4F7F8' : '#26343B' }}>Panel principal</div><div className="rounded-lg p-3 text-xs font-medium" style={{ backgroundColor: themeDraft.secondary, color: '#FFFFFF' }}>Secundario</div><div className="rounded-lg p-3 text-xs font-medium" style={{ backgroundColor: themeDraft.accent, color: '#26343B' }}>Acento</div></div></div>
+          <div className="mt-5 rounded-2xl border border-border p-4" style={{ backgroundColor: previewColors.background, color: themeDraft.mode === 'dark' ? '#F4F7F8' : '#26312B' }}><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wider opacity-70">Vista previa</p><p className="mt-1 text-lg font-semibold">{config.name || 'Nombre del negocio'}</p><p className="mt-1 text-sm opacity-75">Así se verán tus componentes principales.</p></div><div className="rounded-xl px-4 py-2 text-sm font-semibold text-white shadow-sm" style={{ backgroundColor: themeDraft.primary }}>Acción principal</div></div><div className="mt-4 grid grid-cols-3 gap-2"><div className="rounded-lg p-3 text-xs font-medium" style={{ backgroundColor: previewColors.surface, color: themeDraft.mode === 'dark' ? '#F4F7F8' : '#26312B' }}>Panel principal</div><div className="rounded-lg p-3 text-xs font-medium" style={{ backgroundColor: themeDraft.secondary, color: '#FFFFFF' }}>Secundario</div><div className="rounded-lg p-3 text-xs font-medium" style={{ backgroundColor: themeDraft.accent, color: '#26312B' }}>Acento</div></div></div>
           <div className="mt-5 flex flex-wrap justify-end gap-2"><Button type="button" variant="outline" onClick={cancelAppearance}>Cancelar</Button><Button type="button" variant="outline" onClick={resetAppearance}>Restaurar predeterminados</Button><Button type="button" onClick={() => void saveAppearance()} disabled={saving} className="bg-[var(--brand-primary)] text-white hover:opacity-90"><Save size={16} className="mr-2"/>{saving ? 'Guardando…' : 'Guardar apariencia'}</Button></div>
         </Card>
 

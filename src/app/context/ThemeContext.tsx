@@ -28,6 +28,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
+  // La opción "Cambiar estilo" (clásico/malla) ya no existe. Limpiamos cualquier
+  // rastro guardado de versiones anteriores para que no quede una clase pegada.
+  useEffect(() => {
+    document.documentElement.classList.remove('theme-mesh');
+    localStorage.removeItem('themeStyle');
+  }, []);
+
   const toggleTheme = () => setTheme(t => (t === 'light' ? 'dark' : 'light'));
 
   return (

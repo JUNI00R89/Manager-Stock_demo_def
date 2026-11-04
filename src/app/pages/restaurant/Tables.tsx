@@ -1,43 +1,43 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router';
-import {
-  CheckCircle2,
-  Clock3,
-  Pencil,
-  Plus,
-  RefreshCw,
-  Send,
-  Trash2,
-  Users,
-  UtensilsCrossed,
-  XCircle
-} from 'lucide-react';
-import { toast } from 'sonner';
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { Layout } from '../../components/Layout';
-import { RevealGroup, RevealItem } from '../../components/motion/Reveal';
-import { AnimatedCounter } from '../../components/motion/AnimatedCounter';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
+import { Badge } from '../../components/ui/badge';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui/dialog';
+import { Separator } from '../../components/ui/separator';
+import {
+  Users,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  Plus,
+  UtensilsCrossed,
+  Search,
+  Minus,
+  ShoppingCart,
+  Receipt,
+  X,
+  Pencil,
+  RefreshCw,
+  Trash2,
+} from 'lucide-react';
+import { toast } from 'sonner';
 import { dataService, type OrderRecord, type RestaurantTableRecord } from '../../services/dataService';
+import { findProductByBarcode, type Product } from '../../utils/mockData';
+import { useAuth } from '../../context/AuthContext';
 
 const money = (value: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(value);
 
-const elapsed = (iso: string) => {
-  const mins = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
-  if (mins < 60) return `Hace ${mins} min`;
-  return `Hace ${Math.floor(mins / 60)} h ${mins % 60} min`;
-};
-
-const STATUS_LABELS: Record<OrderRecord['status'], string> = {
-  received: 'Recibido',
-  preparing: 'En preparación',
-  ready: 'Listo',
-  delivered: 'Entregado',
-  cancelled: 'Cancelado',
-};
+const NON_KITCHEN_CATEGORIES = ['bebidas', 'gaseosas', 'aguas', 'jugos', 'café', 'te', 'cervezas', 'vinos', 'licores', 'refrescos', 'sodas'];
+const goesToKitchen = (category: string) => !NON_KITCHEN_CATEGORIES.some((c) => category.toLowerCase().includes(c));
 
 const nextFreeNumber = (rows: RestaurantTableRecord[]) => {
   const taken = new Set(rows.map((table) => table.number));
@@ -46,27 +46,80 @@ const nextFreeNumber = (rows: RestaurantTableRecord[]) => {
   return candidate;
 };
 
+interface CartItem {
+  productId: string;
+  name: string;
+  price: number;
+  quantity: number;
+  sku: string;
+  sendToKitchen: boolean;
+}
+
+interface TableView {
+  table: RestaurantTableRecord;
+  orders: OrderRecord[];
+  billOnly: CartItem[];
+  items: number;
+  total: number;
+  occupied: boolean;
+  inactive: boolean;
+  since: string | null;
+}
+
+const billOnlyKey = (tableId: string) => `table_bill_only_${tableId}`;
+
+function readBillOnly(tableId: string): CartItem[] {
+  try {
+    const raw = localStorage.getItem(billOnlyKey(tableId));
+    return raw ? (JSON.parse(raw) as CartItem[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeBillOnly(tableId: string, items: CartItem[]) {
+  if (items.length === 0) localStorage.removeItem(billOnlyKey(tableId));
+  else localStorage.setItem(billOnlyKey(tableId), JSON.stringify(items));
+}
+
+const elapsedLabel = (iso: string | null) => {
+  if (!iso) return '';
+  const mins = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
+  if (mins < 60) return `${mins} min`;
+  return `${Math.floor(mins / 60)} h ${mins % 60} min`;
+};
+
 export function Tables() {
-  const navigate = useNavigate();
+  const { user } = useAuth();
   const [tables, setTables] = useState<RestaurantTableRecord[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [detail, setDetail] = useState<RestaurantTableRecord | null>(null);
+
+  const [selectedTable, setSelectedTable] = useState<RestaurantTableRecord | null>(null);
+  const [showOrderModal, setShowOrderModal] = useState(false);
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [activeCategory, setActiveCategory] = useState('Todos');
+  const [customerName, setCustomerName] = useState('');
+  const [savingOrder, setSavingOrder] = useState(false);
+  const [closingId, setClosingId] = useState<string | null>(null);
+
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<RestaurantTableRecord | null>(null);
-  const [number, setNumber] = useState('');
+  const [tableNumber, setTableNumber] = useState('');
   const [zone, setZone] = useState('');
   const [capacity, setCapacity] = useState('4');
   const [bulkCount, setBulkCount] = useState('8');
-  const [saving, setSaving] = useState(false);
+  const [savingTable, setSavingTable] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [tableRows, openOrders] = await Promise.all([dataService.getTables(), dataService.getOpenOrders()]);
+      const [tableRows, orderRows] = await Promise.all([dataService.getTables(), dataService.getOrders()]);
       setTables(tableRows);
-      setOrders(openOrders);
+      setOrders(orderRows);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No se pudo cargar el salón.');
     } finally {
@@ -78,26 +131,122 @@ export function Tables() {
     void load();
   }, [load]);
 
-  const openOrdersFor = useCallback((tableNumber: number) => orders.filter((order) => order.tableNumber === tableNumber), [orders]);
+  useEffect(() => {
+    let active = true;
+    setProducts([]);
+    void dataService.getProducts().then((list) => {
+      if (!active) return;
+      setProducts(list.filter((p) => p.productType !== 'ingredient' && p.productType !== 'supplies'));
+    });
+    return () => {
+      active = false;
+    };
+  }, [user?.businessId]);
+
+  const activeOrders = useMemo(
+    () => orders.filter((o) => o.status !== 'delivered' && o.status !== 'cancelled'),
+    [orders]
+  );
+
+  const tableViews = useMemo<TableView[]>(
+    () =>
+      tables.map((table) => {
+        const tableOrders = activeOrders.filter((o) => Number(o.tableNumber) === table.number);
+        const billOnly = readBillOnly(table.id);
+        const kitchenItems = tableOrders.reduce((sum, order) => sum + order.items.reduce((s, item) => s + item.quantity, 0), 0);
+        const billItems = billOnly.reduce((sum, item) => sum + item.quantity, 0);
+        const kitchenTotal = tableOrders.reduce((sum, order) => sum + order.total, 0);
+        const billTotal = billOnly.reduce((sum, item) => sum + item.price * item.quantity, 0);
+        const inactive = table.status !== 'active';
+        const items = kitchenItems + billItems;
+        return {
+          table,
+          orders: tableOrders,
+          billOnly,
+          items,
+          total: kitchenTotal + billTotal,
+          occupied: !inactive && items > 0,
+          inactive,
+          since: tableOrders[0]?.created_at ?? null,
+        };
+      }),
+    [tables, activeOrders]
+  );
 
   const stats = useMemo(() => {
-    const occupied = tables.filter((table) => table.status === 'active' && openOrdersFor(table.number).length > 0).length;
+    const occupied = tableViews.filter((view) => view.occupied).length;
     return {
-      total: tables.length,
-      available: tables.filter((table) => table.status === 'active' && openOrdersFor(table.number).length === 0).length,
+      total: tableViews.length,
+      available: tableViews.filter((view) => !view.inactive && !view.occupied).length,
       occupied,
-      open: orders.length,
+      open: activeOrders.length,
     };
-  }, [tables, orders, openOrdersFor]);
+  }, [tableViews, activeOrders.length]);
 
-  const detailOrders = useMemo(
-    () => (detail ? orders.filter((order) => order.tableNumber === detail.number) : []),
-    [detail, orders]
+  const selectedView = useMemo(
+    () => (selectedTable ? tableViews.find((view) => view.table.id === selectedTable.id) ?? null : null),
+    [selectedTable, tableViews]
   );
+
+  const categories = ['Todos', ...Array.from(new Set(products.map((p) => p.category)))];
+
+  const filteredProducts = useMemo(
+    () =>
+      products.filter((product) => {
+        const matchSearch =
+          product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          product.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          product.category.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchCat = activeCategory === 'Todos' || product.category === activeCategory;
+        return matchSearch && matchCat;
+      }),
+    [products, searchTerm, activeCategory]
+  );
+
+  const addToCart = (product: Product) => {
+    const existing = cart.find((item) => item.productId === product.id);
+    if (existing) {
+      if (existing.quantity + 1 > product.stock) {
+        toast.error('Sin stock suficiente');
+        return;
+      }
+      setCart(cart.map((item) => (item.productId === product.id ? { ...item, quantity: item.quantity + 1 } : item)));
+    } else {
+      if (product.stock < 1) {
+        toast.error('Producto sin stock');
+        return;
+      }
+      setCart([
+        ...cart,
+        { productId: product.id, name: product.name, price: product.price, quantity: 1, sku: product.sku, sendToKitchen: goesToKitchen(product.category) },
+      ]);
+    }
+  };
+
+  const updateQuantity = (productId: string, delta: number) => {
+    const product = products.find((p) => p.id === productId);
+    const cartItem = cart.find((item) => item.productId === productId);
+    if (!product || !cartItem) return;
+    const newQty = cartItem.quantity + delta;
+    if (newQty < 1) {
+      setCart(cart.filter((item) => item.productId !== productId));
+      return;
+    }
+    if (newQty > product.stock) {
+      toast.error('Sin stock suficiente');
+      return;
+    }
+    setCart(cart.map((item) => (item.productId === productId ? { ...item, quantity: newQty } : item)));
+  };
+
+  const removeFromCart = (productId: string) => setCart(cart.filter((item) => item.productId !== productId));
+
+  const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const cartItemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   const openCreate = () => {
     setEditing(null);
-    setNumber(String(nextFreeNumber(tables)));
+    setTableNumber(String(nextFreeNumber(tables)));
     setZone('');
     setCapacity('4');
     setConfirmDelete(false);
@@ -106,7 +255,7 @@ export function Tables() {
 
   const openEdit = (table: RestaurantTableRecord) => {
     setEditing(table);
-    setNumber(String(table.number));
+    setTableNumber(String(table.number));
     setZone(table.zone);
     setCapacity(String(table.capacity));
     setConfirmDelete(false);
@@ -115,18 +264,17 @@ export function Tables() {
 
   const submitForm = async (event: FormEvent) => {
     event.preventDefault();
-    const parsedNumber = Number(number);
+    const parsedNumber = Number(tableNumber);
     const parsedCapacity = Number(capacity) || 4;
     if (!Number.isInteger(parsedNumber) || parsedNumber < 1) {
       toast.error('El número de mesa debe ser un entero mayor a cero.');
       return;
     }
-    setSaving(true);
+    setSavingTable(true);
     try {
       if (editing) {
         const updated = await dataService.updateTable(editing.id, { number: parsedNumber, zone: zone.trim(), capacity: parsedCapacity });
         setTables((prev) => prev.map((table) => (table.id === updated.id ? updated : table)).sort((a, b) => a.number - b.number));
-        if (detail?.id === updated.id) setDetail(updated);
         toast.success(`Mesa ${updated.number} actualizada.`);
       } else {
         const created = await dataService.createTable({ number: parsedNumber, zone: zone.trim(), capacity: parsedCapacity });
@@ -137,13 +285,13 @@ export function Tables() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No se pudo guardar la mesa.');
     } finally {
-      setSaving(false);
+      setSavingTable(false);
     }
   };
 
   const bulkCreate = async () => {
     const count = Math.min(50, Math.max(1, Number(bulkCount) || 0));
-    setSaving(true);
+    setSavingTable(true);
     try {
       const taken = new Set(tables.map((table) => table.number));
       const created: RestaurantTableRecord[] = [];
@@ -166,7 +314,7 @@ export function Tables() {
         setFormOpen(false);
       }
     } finally {
-      setSaving(false);
+      setSavingTable(false);
     }
   };
 
@@ -186,206 +334,480 @@ export function Tables() {
       await dataService.deleteTable(table.id);
       setTables((prev) => prev.filter((row) => row.id !== table.id));
       setFormOpen(false);
-      if (detail?.id === table.id) setDetail(null);
       toast.success(`Mesa ${table.number} eliminada.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No se pudo eliminar la mesa.');
     }
   };
 
-  const resolveOrder = async (order: OrderRecord, status: OrderRecord['status']) => {
+  const openTable = (view: TableView) => {
+    if (view.inactive) return;
+    setSelectedTable(view.table);
+    setCart([]);
+    setCustomerName(user?.name || '');
+    setSearchTerm('');
+    setActiveCategory('Todos');
+    setShowOrderModal(true);
+  };
+
+  const saveTableOrder = async () => {
+    if (!selectedTable) return;
+    if (cart.length === 0) {
+      toast.error('Agrega al menos un producto nuevo a la mesa');
+      return;
+    }
+    setSavingOrder(true);
     try {
-      await dataService.updateOrderStatus(order.id, status);
-      setOrders((prev) => prev.filter((row) => row.id !== order.id));
-      toast.success(status === 'delivered' ? 'Comanda entregada: la mesa quedó libre.' : 'Comanda cancelada.');
+      const kitchenItems = cart.filter((item) => item.sendToKitchen);
+      const billOnlyItems = cart.filter((item) => !item.sendToKitchen);
+
+      if (billOnlyItems.length > 0) {
+        const existingBillOnly = readBillOnly(selectedTable.id);
+        const mergedBillOnly = existingBillOnly.map((item) => ({ ...item }));
+        billOnlyItems.forEach((newItem) => {
+          const existing = mergedBillOnly.find((i) => i.productId === newItem.productId);
+          if (existing) existing.quantity += newItem.quantity;
+          else mergedBillOnly.push({ ...newItem });
+        });
+        writeBillOnly(selectedTable.id, mergedBillOnly);
+      }
+
+      if (kitchenItems.length > 0) {
+        const openOrder = activeOrders.find(
+          (order) => Number(order.tableNumber) === selectedTable.number && (order.status === 'received' || order.status === 'preparing')
+        );
+        const items = kitchenItems.map((item) => ({ productId: item.productId, quantity: item.quantity }));
+        if (openOrder) {
+          await dataService.addOrderItems(openOrder.id, items);
+        } else {
+          await dataService.createOrder({
+            channel: 'table',
+            customer: customerName.trim() || `Mesa ${selectedTable.number}`,
+            phone: '',
+            address: '',
+            notes: `Mesa ${selectedTable.number}`,
+            tableId: selectedTable.id,
+            tableNumber: selectedTable.number,
+            items,
+          });
+        }
+      }
+
+      const refreshed = await dataService.getOrders();
+      setOrders(refreshed);
+
+      const kitchenCount = kitchenItems.reduce((sum, item) => sum + item.quantity, 0);
+      const billCount = billOnlyItems.reduce((sum, item) => sum + item.quantity, 0);
+      const parts: string[] = [];
+      if (kitchenCount > 0) parts.push(`${kitchenCount} a cocina`);
+      if (billCount > 0) parts.push(`${billCount} a cuenta`);
+      toast.success(`Mesa ${selectedTable.number} actualizada`, { description: parts.join(' · ') + ` · ${money(cartTotal)}` });
+      setShowOrderModal(false);
+      setCart([]);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo actualizar la comanda.');
+      toast.error(error instanceof Error ? error.message : 'No se pudo guardar el pedido');
+    } finally {
+      setSavingOrder(false);
     }
   };
 
-  const takeOrder = (tableNumber: number) => {
-    setDetail(null);
-    navigate(`/restaurant/waiter?mesa=${tableNumber}`);
+  const closeTable = async (view: TableView) => {
+    if (!view.occupied) return;
+    setClosingId(view.table.id);
+    try {
+      await Promise.all(view.orders.map((order) => dataService.updateOrderStatus(order.id, 'delivered')));
+      writeBillOnly(view.table.id, []);
+      const refreshed = await dataService.getOrders();
+      setOrders(refreshed);
+      toast.success(`Mesa ${view.table.number} cerrada`, { description: `Total cobrado: ${money(view.total)}` });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo cerrar la mesa');
+    } finally {
+      setClosingId(null);
+    }
   };
 
-  const statCards = [
-    { label: 'Total mesas', value: stats.total, icon: UtensilsCrossed, accent: 'text-primary' },
-    { label: 'Disponibles', value: stats.available, icon: CheckCircle2, accent: 'text-emerald-400' },
-    { label: 'Ocupadas', value: stats.occupied, icon: Users, accent: 'text-amber-400' },
-    { label: 'Comandas abiertas', value: stats.open, icon: Clock3, accent: 'text-primary' },
-  ];
+  const handleBarcodeSearch = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      const code = searchTerm.trim();
+      const product =
+        products.find((p) => p.sku.toLowerCase() === code.toLowerCase() || p.codigosBarras?.includes(code)) ||
+        findProductByBarcode(code);
+      if (product) {
+        addToCart(product);
+        setSearchTerm('');
+        toast.success(`${product.name} añadido`);
+      }
+    }
+  };
+
+  const statusColor = (view: TableView) => {
+    if (view.inactive) return 'bg-muted/40 border-border';
+    if (view.occupied) return 'bg-rose-500/10 border-rose-500/30';
+    return 'bg-emerald-500/10 border-emerald-500/30';
+  };
+
+  const statusBadge = (view: TableView) => {
+    if (view.inactive) return <Badge className="bg-muted text-muted-foreground">Fuera de servicio</Badge>;
+    if (view.occupied) return <Badge className="bg-rose-500 text-white">Ocupada</Badge>;
+    return <Badge className="bg-emerald-500 text-white">Disponible</Badge>;
+  };
 
   return (
     <Layout>
       <div className="space-y-6">
-        <RevealGroup>
-          <RevealItem className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">Operación de salón</p>
-              <h1 className="font-display text-4xl font-semibold text-foreground">Gestión de Mesas</h1>
-              <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">Control en tiempo real de tu restaurante</p>
-            </div>
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={() => void load()} disabled={loading}>
-                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                Actualizar
-              </Button>
-              <Button onClick={openCreate}>
-                <Plus className="h-4 w-4" />
-                Nueva mesa
-              </Button>
-            </div>
-          </RevealItem>
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
+          <div>
+            <h2 className="text-2xl font-bold text-foreground">Gestión de Mesas</h2>
+            <p className="text-muted-foreground mt-1">Crea tus mesas, abre una mesa y envía el pedido a cocina</p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Button variant="outline" onClick={() => void load()} disabled={loading}>
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              Actualizar
+            </Button>
+            <Button onClick={openCreate}>
+              <Plus className="h-4 w-4" />
+              Nueva mesa
+            </Button>
+          </div>
+        </div>
 
-          <RevealItem className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {statCards.map((stat) => (
-              <Card key={stat.label} className="rounded-2xl p-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{stat.label}</p>
-                  <stat.icon className={`h-4 w-4 ${stat.accent}`} />
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+          <Card className="min-w-0 p-4 border border-border">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm text-muted-foreground">Total mesas</p>
+                <p className="text-2xl font-bold text-foreground">{stats.total}</p>
+              </div>
+              <UtensilsCrossed className="text-muted-foreground" size={32} />
+            </div>
+          </Card>
+
+          <Card className="min-w-0 p-4 border border-border">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm text-muted-foreground">Disponibles</p>
+                <p className="text-2xl font-bold text-emerald-500">{stats.available}</p>
+              </div>
+              <CheckCircle2 className="text-emerald-500" size={32} />
+            </div>
+          </Card>
+
+          <Card className="min-w-0 p-4 border border-border">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm text-muted-foreground">Ocupadas</p>
+                <p className="text-2xl font-bold text-rose-500">{stats.occupied}</p>
+              </div>
+              <XCircle className="text-rose-500" size={32} />
+            </div>
+          </Card>
+
+          <Card className="min-w-0 p-4 border border-border">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm text-muted-foreground">Comandas abiertas</p>
+                <p className="text-2xl font-bold text-amber-500">{stats.open}</p>
+              </div>
+              <Clock className="text-amber-500" size={32} />
+            </div>
+          </Card>
+        </div>
+
+        {loading ? (
+          <Card className="p-10 text-center text-sm text-muted-foreground">Cargando mesas…</Card>
+        ) : tableViews.length === 0 ? (
+          <Card className="border-dashed p-10 text-center">
+            <UtensilsCrossed className="mx-auto h-8 w-8 text-primary" />
+            <p className="mt-3 text-sm text-muted-foreground">Aún no hay mesas. Crea la primera para empezar a tomar pedidos en el salón.</p>
+            <Button className="mt-4" onClick={openCreate}>
+              <Plus className="h-4 w-4" />
+              Crear mesas
+            </Button>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            {tableViews.map((view) => (
+              <Card
+                key={view.table.id}
+                className={`min-w-0 p-5 border transition-colors ${view.inactive ? 'cursor-default' : 'cursor-pointer'} ${statusColor(view)}`}
+                onClick={() => openTable(view)}
+              >
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h3 className="text-xl font-bold text-foreground">Mesa {view.table.number}</h3>
+                      <div className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground mt-1">
+                        <Users size={14} />
+                        <span>{view.table.capacity} personas</span>
+                        {view.table.zone ? <span>· {view.table.zone}</span> : null}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {statusBadge(view)}
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7"
+                        aria-label={`Editar mesa ${view.table.number}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openEdit(view.table);
+                        }}
+                      >
+                        <Pencil size={14} />
+                      </Button>
+                    </div>
+                  </div>
+
+                  {view.occupied && (
+                    <div className="space-y-2 pt-3 border-t border-border">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Productos:</span>
+                        <span className="font-semibold text-foreground">{view.items}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Total:</span>
+                        <span className="font-bold text-primary">{money(view.total)}</span>
+                      </div>
+                      {view.since && (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Clock size={12} />
+                          <span>{elapsedLabel(view.since)}</span>
+                        </div>
+                      )}
+
+                      <Button
+                        size="sm"
+                        className="w-full bg-rose-600 hover:bg-rose-700"
+                        disabled={closingId === view.table.id}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void closeTable(view);
+                        }}
+                      >
+                        <Receipt size={14} className="mr-1" />
+                        {closingId === view.table.id ? 'Cerrando...' : 'Cerrar Cuenta'}
+                      </Button>
+                    </div>
+                  )}
+
+                  {!view.inactive && !view.occupied && (
+                    <Button size="sm" className="w-full bg-emerald-600 hover:bg-emerald-700">
+                      <Plus size={14} className="mr-1" />
+                      Abrir Mesa
+                    </Button>
+                  )}
+
+                  {view.inactive && (
+                    <p className="text-xs text-muted-foreground">Habilítala desde el lápiz para volver a usarla.</p>
+                  )}
                 </div>
-                <p className="mt-2 text-2xl font-semibold text-foreground">
-                  <AnimatedCounter value={stat.value} />
-                </p>
               </Card>
             ))}
-          </RevealItem>
-
-          {loading ? (
-            <RevealItem>
-              <Card className="rounded-2xl p-8 text-center text-sm text-muted-foreground">Cargando mesas…</Card>
-            </RevealItem>
-          ) : tables.length === 0 ? (
-            <RevealItem>
-              <Card className="rounded-2xl border-dashed p-10 text-center">
-                <UtensilsCrossed className="mx-auto h-8 w-8 text-primary" />
-                <p className="mt-3 text-sm text-muted-foreground">Aún no hay mesas. Crea la primera para empezar a tomar pedidos en el salón.</p>
-                <Button className="mt-4" onClick={openCreate}>
-                  <Plus className="h-4 w-4" />
-                  Crear mesas
-                </Button>
-              </Card>
-            </RevealItem>
-          ) : (
-            <RevealItem className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {tables.map((table) => {
-                const tableOrders = openOrdersFor(table.number);
-                const inactive = table.status !== 'active';
-                const occupied = !inactive && tableOrders.length > 0;
-                const total = tableOrders.reduce((sum, order) => sum + order.total, 0);
-                const items = tableOrders.reduce((sum, order) => sum + order.items.length, 0);
-                return (
-                  <Card key={table.id} className={`rounded-2xl p-4 ${occupied ? 'border-amber-500/40' : ''}`}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-lg font-semibold text-foreground">Mesa {table.number}</p>
-                        <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
-                          <Users className="h-3.5 w-3.5" />
-                          {table.capacity} puestos{table.zone ? ` · ${table.zone}` : ''}
-                        </p>
-                      </div>
-                      <span
-                        className={`rounded-full px-2 py-1 text-xs font-semibold ${
-                          inactive ? 'bg-muted text-muted-foreground' : occupied ? 'bg-amber-500/10 text-amber-400' : 'bg-emerald-500/10 text-emerald-400'
-                        }`}
-                      >
-                        {inactive ? 'Fuera de servicio' : occupied ? 'Ocupada' : 'Disponible'}
-                      </span>
-                    </div>
-
-                    {occupied && (
-                      <div className="mt-3 space-y-1 rounded-xl bg-muted/40 p-3 text-xs text-muted-foreground">
-                        <p className="font-semibold text-foreground">
-                          {items} {items === 1 ? 'producto' : 'productos'} · {money(total)}
-                        </p>
-                        {tableOrders[0]?.waiter && <p>Mesero: {tableOrders[0].waiter}</p>}
-                        {tableOrders[0] && <p>{elapsed(tableOrders[0].created_at)}</p>}
-                      </div>
-                    )}
-
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button size="sm" variant="outline" onClick={() => setDetail(table)} disabled={inactive}>
-                        Ver comanda
-                      </Button>
-                      <Button size="sm" onClick={() => takeOrder(table.number)} disabled={inactive}>
-                        <Send className="h-3.5 w-3.5" />
-                        Tomar pedido
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => openEdit(table)} aria-label={`Editar mesa ${table.number}`}>
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </Card>
-                );
-              })}
-            </RevealItem>
-          )}
-        </RevealGroup>
+          </div>
+        )}
       </div>
 
-      <Dialog open={Boolean(detail)} onOpenChange={(open) => !open && setDetail(null)}>
-        <DialogContent className="rounded-2xl">
-          <DialogHeader>
-            <DialogTitle>
-              Mesa {detail?.number}
-              {detail?.zone ? ` · ${detail.zone}` : ''}
+      <Dialog open={showOrderModal} onOpenChange={setShowOrderModal}>
+        <DialogContent className="w-full sm:w-[96vw] max-w-full sm:max-w-7xl max-h-[100vh] sm:max-h-[92vh] overflow-y-auto p-0 top-0 sm:top-[4%] translate-y-0 rounded-none sm:rounded-lg">
+          <DialogHeader className="p-4 sm:p-6 pb-3 sm:pb-4">
+            <DialogTitle className="flex items-center gap-2">
+              <UtensilsCrossed className="text-primary" size={24} />
+              {selectedView?.occupied ? `Mesa ${selectedTable?.number} · Agregar pedido` : `Abrir Mesa ${selectedTable?.number}`}
             </DialogTitle>
+            <DialogDescription>Selecciona productos y envíalos a cocina o directo a la cuenta</DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            {detailOrders.length === 0 ? (
-              <p className="rounded-xl border border-dashed p-4 text-center text-sm text-muted-foreground">Esta mesa no tiene comandas abiertas.</p>
-            ) : (
-              detailOrders.map((order) => (
-                <Card key={order.id} className="rounded-xl p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <span className="rounded-full bg-muted px-2 py-1 font-semibold text-foreground">{STATUS_LABELS[order.status]}</span>
-                    {order.waiter && <span>Mesero: {order.waiter}</span>}
-                    <span>{elapsed(order.created_at)}</span>
+
+          <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-6 sm:gap-8 px-4 sm:px-8 pb-8">
+            <div className="space-y-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
+                <Input
+                  placeholder="Buscar producto o código..."
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  onKeyDown={handleBarcodeSearch}
+                  className="pl-10 h-12 text-base"
+                />
+              </div>
+              <div className="flex gap-1.5 overflow-x-auto pb-1">
+                {categories.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setActiveCategory(cat)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+                      activeCategory === cat ? 'bg-primary text-primary-foreground' : 'bg-accent text-muted-foreground hover:bg-accent/80'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 max-h-[50vh] sm:max-h-[60vh] overflow-y-auto pr-1">
+                {filteredProducts.map((product) => (
+                  <Card
+                    key={product.id}
+                    className="p-5 border cursor-pointer hover:border-primary transition-colors min-h-[80px] outline-none focus:outline-none focus:ring-0"
+                    onClick={() => addToCart(product)}
+                  >
+                    <div className="space-y-1">
+                      <p className="text-base font-semibold text-foreground line-clamp-2">{product.name}</p>
+                      <div className="flex justify-between items-center mt-1">
+                        <span className="text-sm text-muted-foreground">Stock: {product.stock}</span>
+                        <span className="text-base font-bold text-primary">{money(product.price)}</span>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <Card className="p-4 border border-border">
+                <div className="flex items-center gap-2 mb-3">
+                  <ShoppingCart className="text-primary" size={20} />
+                  <h3 className="font-bold">Pedido de Mesa {selectedTable?.number}</h3>
+                  <Badge className="ml-auto bg-primary text-primary-foreground">{cartItemsCount} nuevos</Badge>
+                </div>
+
+                {selectedView && selectedView.items > 0 && (
+                  <div className="mb-3 rounded-lg border border-border bg-muted/30 p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Consumo actual</p>
+                    <ul className="mt-2 max-h-36 space-y-1 overflow-y-auto text-sm">
+                      {selectedView.orders.flatMap((order) =>
+                        order.items.map((item, index) => (
+                          <li key={`${order.id}-${item.productId}-${index}`} className="flex justify-between gap-2">
+                            <span className="text-foreground">
+                              {item.quantity} × {item.productName}
+                            </span>
+                            <span className="text-muted-foreground">{money(item.unitPrice * item.quantity)}</span>
+                          </li>
+                        ))
+                      )}
+                      {selectedView.billOnly.map((item) => (
+                        <li key={`bill-${item.productId}`} className="flex justify-between gap-2">
+                          <span className="text-foreground">
+                            {item.quantity} × {item.name} <span className="text-[10px] text-muted-foreground">(cuenta)</span>
+                          </span>
+                          <span className="text-muted-foreground">{money(item.price * item.quantity)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="mt-2 flex justify-between border-t border-border pt-2 text-sm font-semibold">
+                      <span>Total actual</span>
+                      <span>{money(selectedView.total)}</span>
+                    </div>
                   </div>
-                  <ul className="mt-2 space-y-1 text-sm">
-                    {order.items.map((item, index) => (
-                      <li key={`${order.id}-${item.productId}-${index}`} className="flex justify-between gap-3">
-                        <span className="text-foreground">
-                          {item.quantity} × {item.productName}
-                        </span>
-                        <span className="text-muted-foreground">{money(item.unitPrice * item.quantity)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="mt-2 border-t border-border/60 pt-2 text-right text-sm font-semibold text-foreground">Total {money(order.total)}</p>
-                  <div className="mt-3 flex gap-2">
-                    <Button size="sm" className="flex-1" onClick={() => void resolveOrder(order, 'delivered')}>
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                      Entregado
-                    </Button>
-                    <Button size="sm" variant="outline" className="flex-1" onClick={() => void resolveOrder(order, 'cancelled')}>
-                      <XCircle className="h-3.5 w-3.5" />
-                      Cancelar
-                    </Button>
+                )}
+
+                <Input
+                  placeholder="Nombre del cliente (opcional)"
+                  value={customerName}
+                  onChange={(event) => setCustomerName(event.target.value)}
+                  className="mb-3 h-9"
+                />
+
+                <Separator className="mb-3" />
+
+                <div className="space-y-3 max-h-[42vh] overflow-y-auto mb-3">
+                  {cart.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <ShoppingCart className="mx-auto mb-2 opacity-30" size={40} />
+                      <p className="text-sm">Sin productos nuevos</p>
+                      <p className="text-xs">Selecciona productos del menú</p>
+                    </div>
+                  ) : (
+                    cart.map((item) => (
+                      <div key={item.productId} className="bg-accent/50 rounded-lg p-3 border border-border">
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-foreground truncate">{item.name}</p>
+                            <p className="text-xs text-muted-foreground">{money(item.price)} c/u</p>
+                          </div>
+                          <button onClick={() => removeFromCart(item.productId)} className="ml-1 p-1 hover:text-rose-500 text-muted-foreground">
+                            <X size={14} />
+                          </button>
+                        </div>
+                        <div className="flex items-center justify-between mb-1">
+                          <button
+                            onClick={() =>
+                              setCart(cart.map((c) => (c.productId === item.productId ? { ...c, sendToKitchen: !c.sendToKitchen } : c)))
+                            }
+                            className={`text-[11px] px-2 py-1 rounded-md font-medium transition-colors ${
+                              item.sendToKitchen ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
+                            }`}
+                          >
+                            {item.sendToKitchen ? '🍳 A cocina' : '📋 Solo cuenta'}
+                          </button>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => updateQuantity(item.productId, -1)}
+                              className="w-8 h-8 rounded border border-border flex items-center justify-center hover:bg-accent"
+                            >
+                              <Minus size={14} />
+                            </button>
+                            <span className="w-8 text-center text-base font-bold">{item.quantity}</span>
+                            <button
+                              onClick={() => updateQuantity(item.productId, 1)}
+                              className="w-8 h-8 rounded border border-border flex items-center justify-center hover:bg-accent"
+                            >
+                              <Plus size={14} />
+                            </button>
+                          </div>
+                          <span className="text-sm font-bold text-primary">{money(item.price * item.quantity)}</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <Separator className="mb-3" />
+
+                <div className="flex justify-between font-bold text-base">
+                  <span>Nuevo pedido</span>
+                  <span className="text-primary">{money(cartTotal)}</span>
+                </div>
+                {selectedView && selectedView.total > 0 && (
+                  <div className="mb-4 mt-1 flex justify-between text-xs text-muted-foreground">
+                    <span>Total mesa (actual + nuevo)</span>
+                    <span>{money(selectedView.total + cartTotal)}</span>
                   </div>
-                </Card>
-              ))
-            )}
-            {detail && (
-              <Button className="w-full" onClick={() => takeOrder(detail.number)}>
-                <Send className="h-4 w-4" />
-                Tomar pedido en esta mesa
-              </Button>
-            )}
+                )}
+                {!(selectedView && selectedView.total > 0) && <div className="mb-4" />}
+
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setShowOrderModal(false)} className="flex-1">
+                    Cancelar
+                  </Button>
+                  <Button
+                    onClick={() => void saveTableOrder()}
+                    disabled={cart.length === 0 || savingOrder}
+                    className="flex-1 bg-primary hover:bg-primary-hover"
+                  >
+                    {savingOrder ? 'Guardando...' : cart.some((i) => i.sendToKitchen) ? 'Enviar a Cocina' : 'Agregar a Cuenta'}
+                  </Button>
+                </div>
+              </Card>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="rounded-2xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{editing ? `Editar mesa ${editing.number}` : 'Nueva mesa'}</DialogTitle>
+            <DialogDescription>Configura el número, la zona y la capacidad de la mesa.</DialogDescription>
           </DialogHeader>
 
           <form onSubmit={submitForm} className="space-y-4">
             <div className="grid gap-2">
               <Label htmlFor="table-number">Número de mesa</Label>
-              <Input id="table-number" type="number" min={1} value={number} onChange={(event) => setNumber(event.target.value)} required />
+              <Input id="table-number" type="number" min={1} value={tableNumber} onChange={(event) => setTableNumber(event.target.value)} required />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="table-zone">
@@ -397,8 +819,8 @@ export function Tables() {
               <Label htmlFor="table-capacity">Capacidad</Label>
               <Input id="table-capacity" type="number" min={1} max={50} value={capacity} onChange={(event) => setCapacity(event.target.value)} required />
             </div>
-            <Button type="submit" className="w-full" disabled={saving}>
-              {saving ? 'Guardando…' : editing ? 'Guardar cambios' : 'Crear mesa'}
+            <Button type="submit" className="w-full" disabled={savingTable}>
+              {savingTable ? 'Guardando…' : editing ? 'Guardar cambios' : 'Crear mesa'}
             </Button>
           </form>
 
@@ -407,7 +829,7 @@ export function Tables() {
               <p className="text-xs font-semibold text-muted-foreground">Creación rápida de varias mesas</p>
               <div className="mt-2 flex items-center gap-2">
                 <Input type="number" min={1} max={50} value={bulkCount} onChange={(event) => setBulkCount(event.target.value)} className="h-9" aria-label="Cantidad de mesas" />
-                <Button variant="outline" onClick={() => void bulkCreate()} disabled={saving}>
+                <Button variant="outline" onClick={() => void bulkCreate()} disabled={savingTable}>
                   Crear mesas
                 </Button>
               </div>

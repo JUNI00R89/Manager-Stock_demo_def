@@ -26,9 +26,11 @@ const pathPermission = (path: string): string | null => {
   if (path === '/suppliers') return 'suppliers.view';
   if (path === '/suppliers/new') return 'suppliers.manage';
   if (path.startsWith('/inventory/')) return 'inventory.view';
-  if (path === '/restaurant/kitchen') return 'orders.view';
   if (path === '/restaurant/waiter') return 'orders.manage';
-  if (path === '/restaurant/tables') return 'orders.view';
+  if (path === '/restaurant/kitchen') return 'orders.view';
+  if (path === '/restaurant/orders') return 'orders.manage';
+  if (path === '/restaurant/catalog') return 'catalog.edit';
+  if (path === '/restaurant/settings') return 'orders.manage';
   if (path === '/reports') return 'reports.view';
   if (path === '/activity') return 'activity.view';
   if (path === '/notifications') return 'dashboard.view';
@@ -51,7 +53,7 @@ export function canAccessPath(path: string, role?: AppRole | null, config?: Busi
   if (role === 'cashier' && customPermissions === undefined) {
     const cashierRoutes = [
       '/dashboard', '/pos', '/sales', '/sales/new', '/notifications', '/products',
-      '/restaurant/kitchen', '/restaurant/tables', '/restaurant/waiter',
+      '/restaurant/waiter', '/restaurant/kitchen', '/restaurant/tables',
     ];
     if (!cashierRoutes.some((allowed) => path === allowed || path.startsWith(`${allowed}/`))) return false;
     if (path.startsWith('/products/') && path !== '/products') return false;
@@ -70,8 +72,6 @@ export function canAccessPath(path: string, role?: AppRole | null, config?: Busi
     if ((path === '/suppliers' || path.startsWith('/suppliers/')) && !config.features.inventory) return false;
     if ((path === '/pos' || path === '/sales/new' || path === '/sales' || path.startsWith('/sales/') || path === '/reports') && !config.features.pos) return false;
     if (path === '/restaurant/tables' && !config.features.tables) return false;
-    if (path === '/restaurant/waiter' && (!config.features.tables || !(config.foodConfig?.activeModules ?? []).includes('pedidos'))) return false;
-    if (path === '/restaurant/kitchen' && !(config.foodConfig?.activeModules ?? []).includes('pedidos')) return false;
   }
   return true;
 }

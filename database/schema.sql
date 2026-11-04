@@ -323,16 +323,6 @@ CREATE TABLE IF NOT EXISTS orders (
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS order_items (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  order_id TEXT NOT NULL REFERENCES orders(id),
-  product_id TEXT NOT NULL REFERENCES products(id),
-  product_name TEXT NOT NULL,
-  quantity REAL NOT NULL CHECK(quantity > 0),
-  unit_price REAL NOT NULL CHECK(unit_price >= 0),
-  notes TEXT NOT NULL DEFAULT ''
-);
-
 CREATE TABLE IF NOT EXISTS restaurant_tables (
   id TEXT PRIMARY KEY,
   business_id TEXT NOT NULL REFERENCES businesses(id),
@@ -345,6 +335,16 @@ CREATE TABLE IF NOT EXISTS restaurant_tables (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_restaurant_tables_number ON restaurant_tables(business_id, number);
+
+CREATE TABLE IF NOT EXISTS order_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_id TEXT NOT NULL REFERENCES orders(id),
+  product_id TEXT NOT NULL REFERENCES products(id),
+  product_name TEXT NOT NULL,
+  quantity REAL NOT NULL CHECK(quantity > 0),
+  unit_price REAL NOT NULL CHECK(unit_price >= 0),
+  notes TEXT NOT NULL DEFAULT ''
+);
 
 CREATE TABLE IF NOT EXISTS recipes (
   id TEXT PRIMARY KEY,

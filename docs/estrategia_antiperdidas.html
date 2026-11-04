@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Estrategia anti-pérdidas · Hotel Senderos (Demo)</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--ink:#111318;--muted:#5b6170;--line:#e6e8ee;--accent:#F26A1B}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,Segoe UI,system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+  .page{max-width:1080px;margin:0 auto;padding:40px 24px 64px}
+  header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:26px}
+  h1{font-size:26px;margin:0 0 6px;letter-spacing:-.02em}
+  .sub{color:var(--muted);font-size:13px}
+  .pill{background:#fff;border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:12px;color:var(--muted)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:20px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 20px}
+  .kpi-label{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+  .kpi-value{font-size:26px;font-weight:700;margin-top:6px;letter-spacing:-.02em}
+  .kpi-note{font-size:12px;color:var(--muted);margin-top:4px}
+  h2{font-size:16px;margin:0 0 4px}
+  .lead{margin:0 0 14px;font-size:13px;color:var(--muted)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--line)}
+  td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+  .muted{color:var(--muted);font-size:11px}
+  .tag{display:inline-block;border-radius:8px;padding:2px 8px;font-size:11px;font-weight:600;white-space:nowrap}
+  .tag-quiebre{background:#ffe4e6;color:#9f1239}
+  .tag-critico{background:#ffedd5;color:#9a3412}
+  .tag-sobre_stock{background:#e0e7ff;color:#3730a3}
+  .tag-sin_rotacion{background:#f3e8ff;color:#6b21a8}
+  .tag-margen_bajo{background:#fef3c7;color:#92400e}
+  .tag-ok{background:#dcfce7;color:#166534}
+  .two{display:grid;grid-template-columns:1.2fr 1fr;gap:14px}
+  @media(max-width:820px){.two{grid-template-columns:1fr}}
+  ul{margin:6px 0 0;padding-left:18px;font-size:13px;line-height:1.7}
+  .warn{background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:14px 16px;font-size:13px;line-height:1.6;color:#78350f;margin-top:14px}
+  .foot{margin-top:24px;font-size:11px;color:var(--muted)}
+  code{background:#eef0f4;padding:1px 5px;border-radius:5px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div>
+      <h1>Estrategia anti-pérdidas</h1>
+      <div class="sub">Hotel Senderos (Demo) · 11 productos · ventana 30 días</div>
+    </div>
+    <div class="pill">Generado 22/10/2026 10:13 · datos demo</div>
+  </header>
+
+  <div class="grid">
+    <div class="card"><div class="kpi-label">Ventas en riesgo / mes</div><div class="kpi-value" style="color:#be123c">$2.406.054</div><div class="kpi-note">$1.291.646 de margen · techo si el quiebre dura el mes</div></div>
+    <div class="card"><div class="kpi-label">Capital inmovilizado</div><div class="kpi-value" style="color:#4338ca">$316.500</div><div class="kpi-note">sobre-stock y sin rotación</div></div>
+    <div class="card"><div class="kpi-label">Inversión de reposición</div><div class="kpi-value">$525.000</div><div class="kpi-note">14 días de demanda proyectada</div></div>
+    <div class="card"><div class="kpi-label">Proyección 30 días</div><div class="kpi-value">$5.341.220</div><div class="kpi-note">banda 80 %: $4.692.503 – $6.161.869</div></div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <h2>Lectura de la proyección</h2>
+    <p class="lead">La demanda estimada para los próximos 30 días es <strong>+21.4 %</strong> frente a los últimos 30 días. Con la cobertura actual, esa demanda adicional se pierde en los productos sin stock.</p>
+    <ul>
+      <li><strong>Próxima semana:</strong> $1.183.249 · <strong>30 días:</strong> $5.341.220.</li>
+      <li><strong>Días valle:</strong> martes y lunes → combos y paquetes para mover sobre-stock sin bajar margen.</li>
+      <li><strong>Días pico:</strong> sábado y miércoles → asegurar stock y no descontar.</li>
+      <li><strong>Quiebres actuales:</strong> 1 · <strong>cobertura crítica:</strong> 1 · <strong>sobre-stock:</strong> 5.</li>
+      <li><strong>Inversión de reposición:</strong> $525.000 · margen en riesgo: $1.291.646/mes.</li>
+    </ul>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <h2>Diagnóstico por producto</h2>
+    <p class="lead">Cobertura = stock / demanda diaria. Menos de 7 días es riesgo de quiebre; más de 60 días es capital detenido.</p>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr><th>Producto</th><th>Precio</th><th>Margen</th><th>Uds 30 d</th><th>Stock</th><th>Cobertura</th><th>Riesgo</th><th>Acción</th></tr></thead>
+        <tbody><tr><td><strong>Cena para dos</strong><br><span class='muted'>Restaurante</span></td><td class='num'>$68.000</td><td class='num'>51%</td><td class='num'>24</td><td class='num'>0</td><td class='num'>0 d</td><td><span class='tag tag-quiebre'>Quiebre</span></td><td>Reponer 14 uds ya</td></tr><tr><td><strong>Lavandería express</strong><br><span class='muted'>Servicios</span></td><td class='num'>$25.000</td><td class='num'>64%</td><td class='num'>14</td><td class='num'>1</td><td class='num'>2 d</td><td><span class='tag tag-critico'>Cobertura crítica</span></td><td>Reponer 7 uds antes del fin de semana</td></tr><tr><td><strong>Cerveza 330 ml</strong><br><span class='muted'>Minibar</span></td><td class='num'>$8.000</td><td class='num'>40%</td><td class='num'>19</td><td class='num'>39</td><td class='num'>62 d</td><td><span class='tag tag-sobre_stock'>Sobre-stock</span></td><td>Congelar compra · mover con combo</td></tr><tr><td><strong>Refresco lata</strong><br><span class='muted'>Minibar</span></td><td class='num'>$5.000</td><td class='num'>44%</td><td class='num'>15</td><td class='num'>31</td><td class='num'>62 d</td><td><span class='tag tag-sobre_stock'>Sobre-stock</span></td><td>Congelar compra · mover con combo</td></tr><tr><td><strong>Toalla extra</strong><br><span class='muted'>Recepción</span></td><td class='num'>$6.000</td><td class='num'>58%</td><td class='num'>30</td><td class='num'>65</td><td class='num'>65 d</td><td><span class='tag tag-sobre_stock'>Sobre-stock</span></td><td>Congelar compra · mover con combo</td></tr><tr><td><strong>Snack mix</strong><br><span class='muted'>Minibar</span></td><td class='num'>$9.500</td><td class='num'>41%</td><td class='num'>17</td><td class='num'>51</td><td class='num'>90 d</td><td><span class='tag tag-sobre_stock'>Sobre-stock</span></td><td>Congelar compra · mover con combo</td></tr><tr><td><strong>Agua mineral 600 ml</strong><br><span class='muted'>Minibar</span></td><td class='num'>$4.500</td><td class='num'>51%</td><td class='num'>9</td><td class='num'>36</td><td class='num'>120 d</td><td><span class='tag tag-sobre_stock'>Sobre-stock</span></td><td>Congelar compra · mover con combo</td></tr><tr><td><strong>Desayuno a la habitación</strong><br><span class='muted'>Restaurante</span></td><td class='num'>$32.000</td><td class='num'>52%</td><td class='num'>9</td><td class='num'>8</td><td class='num'>27 d</td><td><span class='tag tag-ok'>Saludable</span></td><td>Mantener</td></tr><tr><td><strong>Kit de bienvenida</strong><br><span class='muted'>Minibar</span></td><td class='num'>$12.000</td><td class='num'>58%</td><td class='num'>19</td><td class='num'>23</td><td class='num'>36 d</td><td><span class='tag tag-ok'>Saludable</span></td><td>Mantener</td></tr><tr><td><strong>Vino tinto copa</strong><br><span class='muted'>Minibar</span></td><td class='num'>$18.000</td><td class='num'>42%</td><td class='num'>21</td><td class='num'>33</td><td class='num'>47 d</td><td><span class='tag tag-ok'>Saludable</span></td><td>Mantener</td></tr><tr><td><strong>Kit de aseo premium</strong><br><span class='muted'>Recepción</span></td><td class='num'>$12.000</td><td class='num'>47%</td><td class='num'>24</td><td class='num'>40</td><td class='num'>50 d</td><td><span class='tag tag-ok'>Saludable</span></td><td>Mantener</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="two">
+    <div class="card">
+      <h2>Plan de acción inmediato</h2>
+      <p class="lead">Primero lo que evita venta perdida; después lo que libera capital.</p>
+      <ul><li><strong>Reponer 14 uds de Cena para dos</strong> · inversión $462.000 · demanda 0.97 uds/día</li><li><strong>Reponer 7 uds de Lavandería express</strong> · inversión $63.000 · demanda 0.57 uds/día</li><li><strong>Congelar compra de Agua mineral 600 ml</strong> (cobertura 120 días) y moverlo con combo</li><li><strong>Congelar compra de Cerveza 330 ml</strong> (cobertura 62 días) y moverlo con combo</li><li><strong>Congelar compra de Refresco lata</strong> (cobertura 62 días) y moverlo con combo</li><li><strong>Congelar compra de Snack mix</strong> (cobertura 90 días) y moverlo con combo</li><li><strong>Congelar compra de Toalla extra</strong> (cobertura 65 días) y moverlo con combo</li></ul>
+    </div>
+    <div class="card">
+      <h2>Combos con datos de canasta</h2>
+      <p class="lead">Pares comprados juntos en los últimos 30 días.</p>
+      <ul><li><strong>Cena para dos + Toalla extra</strong> · 6 ventas conjuntas</li><li><strong>Refresco lata + Vino tinto copa</strong> · 4 ventas conjuntas</li><li><strong>Cerveza 330 ml + Kit de bienvenida</strong> · 4 ventas conjuntas</li><li><strong>Cena para dos + Kit de aseo premium</strong> · 3 ventas conjuntas</li><li><strong>Cena para dos + Lavandería express</strong> · 3 ventas conjuntas</li></ul>
+      <p class="lead" style="margin-top:12px">Promocionar en martes y lunes, nunca en sábado.</p>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <h2>Punto de reorden sugerido</h2>
+    <p class="lead">Fórmula: demanda proyectada de 7 días × 1,2 de colchón.</p>
+    <table>
+      <thead><tr><th>Producto</th><th>Mínimo actual</th><th>Sugerido</th><th>Cambio</th></tr></thead>
+      <tbody><tr><td>Toalla extra</td><td class='num'>10</td><td class='num'><strong>11</strong></td><td class='num'>+1</td></tr><tr><td>Cena para dos</td><td class='num'>8</td><td class='num'><strong>9</strong></td><td class='num'>+1</td></tr><tr><td>Kit de aseo premium</td><td class='num'>8</td><td class='num'><strong>9</strong></td><td class='num'>+1</td></tr><tr><td>Vino tinto copa</td><td class='num'>6</td><td class='num'><strong>8</strong></td><td class='num'>+2</td></tr><tr><td>Cerveza 330 ml</td><td class='num'>10</td><td class='num'><strong>7</strong></td><td class='num'>-3</td></tr><tr><td>Kit de bienvenida</td><td class='num'>5</td><td class='num'><strong>7</strong></td><td class='num'>+2</td></tr><tr><td>Refresco lata</td><td class='num'>10</td><td class='num'><strong>6</strong></td><td class='num'>-4</td></tr><tr><td>Snack mix</td><td class='num'>8</td><td class='num'><strong>6</strong></td><td class='num'>-2</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <h2>Rutina y control</h2>
+    <ul>
+      <li><strong>Lunes:</strong> revisar cobertura, quiebres y capital inmovilizado.</li>
+      <li><strong>Martes:</strong> activar combos del valle y medir conversión.</li>
+      <li><strong>Miércoles:</strong> ejecutar compras según punto de reorden (no por intuición).</li>
+      <li><strong>Viernes:</strong> asegurar stock para el pico del fin de semana.</li>
+      <li><strong>Domingo:</strong> registrar mermas con movimiento <code>waste</code>.</li>
+      <li><strong>KPIs:</strong> quiebres = 0 · cobertura mínima 7 días · capital inmovilizado &lt; 30 días · margen bruto estable · merma &lt; 2 %.</li>
+    </ul>
+  </div>
+
+  <div class="warn">
+    <strong>Supuestos.</strong> Demanda diaria calculada con ventas de los últimos 30 días y escalada con la proyección del negocio.
+    La cobertura no descuenta mermas no registradas. Los importes priorizan decisiones: validar el conteo físico antes de comprar.
+    Datos de demostración.
+  </div>
+
+  <div class="foot">Generado por <code>scripts/build_loss_strategy.py</code> · fuente: ventas completadas, productos y movimientos de la base SQLite.</div>
+</div>
+</body>
+</html>

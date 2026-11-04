@@ -49,6 +49,9 @@ app = FastAPI(title="Manager Stock API", version="1.0.0", description="API local
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:4173", "http://127.0.0.1:4173"],
+    # Permite el acceso desde el celular/PC en la misma red al levantar el
+    # backend en 0.0.0.0 y la app frontend con Vite en 0.0.0.0.
+    allow_origin_regex=r"^https?://([0-9]{1,3}\.){3}[0-9]{1,3}(:[0-9]+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -164,12 +167,10 @@ def required_permission_for_request(path: str, method: str) -> str | None:
         return "sales.view"
     if path.startswith("/api/cash/"):
         return "cash.view" if method == "GET" else "cash.manage"
-    if path == "/api/tables" or path.startswith("/api/tables/"):
-        return "orders.view" if method == "GET" else "orders.manage"
     if path == "/api/orders":
         return "orders.view" if method == "GET" else "orders.manage"
     if path.startswith("/api/orders/"):
-        return "orders.view" if method == "GET" else "orders.manage"
+        return "orders.manage"
     if path.startswith("/api/reports"):
         return "reports.view"
     if path == "/api/audit":
@@ -255,8 +256,6 @@ async def authenticate_and_authorize(request: Request, call_next):
             module = "pos"
         elif path.startswith("/api/orders"):
             module = "orders"
-        elif path.startswith("/api/tables"):
-            module = "tables"
         if module:
             try:
                 with connection() as conn:
@@ -279,10 +278,6 @@ async def authenticate_and_authorize(request: Request, call_next):
                     enabled = bool(features.get("inventory"))
                 elif module == "pos":
                     enabled = bool(features.get("pos"))
-                elif module == "tables":
-                    food = business_row and business_row["business_type"] == "food"
-                    active_modules = settings.get("foodConfig", {}).get("activeModules", []) if isinstance(settings, dict) and isinstance(settings.get("foodConfig"), dict) else []
-                    enabled = bool(food and ("mesas" in active_modules or "pedidos" in active_modules or features.get("tables")))
                 else:
                     food = business_row and business_row["business_type"] == "food"
                     active_modules = settings.get("foodConfig", {}).get("activeModules", []) if isinstance(settings, dict) and isinstance(settings.get("foodConfig"), dict) else []
@@ -313,10 +308,8 @@ async def authenticate_and_authorize(request: Request, call_next):
             allowed = request.method in {"GET", "POST"}
         elif path.startswith("/api/cash/sessions/"):
             allowed = request.method in {"GET", "POST"}
-        elif path.startswith("/api/orders/") and (request.method in {"GET", "PATCH"} or (request.method == "POST" and path.endswith("/items"))):
+        elif path.startswith("/api/orders/") and request.method == "PATCH":
             allowed = True
-        elif path == "/api/tables":
-            allowed = request.method == "GET"
         if not allowed:
             return JSONResponse(status_code=403, content={"detail": "Tu rol de cajero no permite esta operación."})
     elif role == "business_admin":
@@ -542,15 +535,6 @@ async def startup():
             conn.execute("ALTER TABLE businesses ADD COLUMN suspension_description TEXT NOT NULL DEFAULT ''")
         if "suspended_at" not in business_columns:
             conn.execute("ALTER TABLE businesses ADD COLUMN suspended_at TEXT")
-        # Migración del módulo de restaurante: mesas y mesero en los pedidos.
-        if table_exists(conn, "orders"):
-            if not table_has_column(conn, "orders", "table_number"):
-                conn.execute("ALTER TABLE orders ADD COLUMN table_number INTEGER")
-            if not table_has_column(conn, "orders", "waiter"):
-                conn.execute("ALTER TABLE orders ADD COLUMN waiter TEXT NOT NULL DEFAULT ''")
-            # El índice debe crearse después del ALTER: en bases existentes la
-            # columna table_number no está en el CREATE TABLE de schema.sql.
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_orders_table ON orders(business_id, table_number)")
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS auth_users (
                 id TEXT PRIMARY KEY,
@@ -634,6 +618,44 @@ async def startup():
         item_columns = {row["name"] for row in conn.execute("PRAGMA table_info(sale_items)").fetchall()}
         if "unit_cost_snapshot" not in item_columns:
             conn.execute("ALTER TABLE sale_items ADD COLUMN unit_cost_snapshot REAL NOT NULL DEFAULT 0")
+        # Mesas del salón: columnas añadidas por versiones anteriores de Manager Stock.
+        order_columns = {row["name"] for row in conn.execute("PRAGMA table_info(orders)").fetchall()}
+        if "table_number" not in order_columns:
+            conn.execute("ALTER TABLE orders ADD COLUMN table_number INTEGER")
+        if "waiter" not in order_columns:
+            conn.execute("ALTER TABLE orders ADD COLUMN waiter TEXT NOT NULL DEFAULT ''")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_orders_table ON orders(business_id, table_number)")
+        # Si un negocio de comidas ya tiene mesas guardadas, el módulo de mesas
+        # debe quedar habilitado aunque su configuración sea anterior a la fusión.
+        try:
+            food_businesses = conn.execute("SELECT id, settings_json FROM businesses WHERE business_type='food'").fetchall()
+            for business in food_businesses:
+                has_table = conn.execute("SELECT 1 FROM restaurant_tables WHERE business_id=? LIMIT 1", (business["id"],)).fetchone()
+                if not has_table:
+                    continue
+                try:
+                    settings = json.loads(business["settings_json"] or "{}")
+                except json.JSONDecodeError:
+                    settings = {}
+                if not isinstance(settings, dict):
+                    settings = {}
+                features = settings.get("features") if isinstance(settings.get("features"), dict) else {}
+                food_config = settings.get("foodConfig") if isinstance(settings.get("foodConfig"), dict) else {}
+                active_modules = food_config.get("activeModules") if isinstance(food_config.get("activeModules"), list) else []
+                changed = False
+                if features.get("tables") is not True:
+                    features["tables"] = True
+                    changed = True
+                if "mesas" not in active_modules:
+                    active_modules.append("mesas")
+                    changed = True
+                if changed:
+                    settings["features"] = features
+                    food_config["activeModules"] = active_modules
+                    settings["foodConfig"] = food_config
+                    conn.execute("UPDATE businesses SET settings_json=? WHERE id=?", (json.dumps(settings, ensure_ascii=False), business["id"]))
+        except sqlite3.OperationalError:
+            pass
         # New installations no longer receive a fake demo business or pretend sales stock.
         # Historical databases are left intact; no user data is removed during startup.
         process_due_type_transitions()

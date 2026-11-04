@@ -27,13 +27,13 @@ if not exist ".venv\Scripts\python.exe" (
   if errorlevel 1 goto :error
 )
 
-".venv\Scripts\python.exe" -c "import fastapi, uvicorn, httpx" >nul 2>nul
+".venv\Scripts\python.exe" -c "import fastapi, uvicorn, httpx, tzdata" >nul 2>nul
 if errorlevel 1 (
   echo Instalando o reparando las dependencias del backend...
   ".venv\Scripts\python.exe" -m ensurepip --upgrade >nul 2>nul
   ".venv\Scripts\python.exe" -m pip install -r backend\requirements.txt
   if errorlevel 1 goto :error
-  ".venv\Scripts\python.exe" -c "import fastapi, uvicorn, httpx" >nul 2>nul
+  ".venv\Scripts\python.exe" -c "import fastapi, uvicorn, httpx, tzdata" >nul 2>nul
   if errorlevel 1 goto :error
 )
 type nul > ".venv\manager_stock_deps.ok"

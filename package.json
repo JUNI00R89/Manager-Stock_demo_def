@@ -2,7 +2,7 @@
   "name": "manager-stock",
   "private": true,
   "version": "2.0.0",
-  "description": "Manager Stock - inventario, ventas y operación para negocios",
+  "description": "Manager Stock - inventario, ventas y operaci\u00c3\u00b3n para negocios",
   "author": "Manager Stock",
   "type": "module",
   "main": "electron/main.cjs",
@@ -94,7 +94,7 @@
   "build": {
     "appId": "com.managerstock.app",
     "productName": "Manager Stock",
-    "copyright": "Copyright © 2026 Manager Stock",
+    "copyright": "Copyright \u00c2\u00a9 2026 Manager Stock",
     "asar": true,
     "npmRebuild": false,
     "directories": {

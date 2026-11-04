@@ -18,8 +18,11 @@ import { Notifications } from './pages/Notifications';
 import { Subscription } from './pages/Subscription';
 import { Settings } from './pages/Settings';
 import { Tables } from './pages/restaurant/Tables';
-import { Waiter } from './pages/restaurant/Waiter';
 import { Kitchen } from './pages/restaurant/Kitchen';
+import { Waiter } from './pages/restaurant/Waiter';
+import { Orders } from './pages/restaurant/Orders';
+import { Catalog as RestaurantCatalog } from './pages/restaurant/Catalog';
+import { RestaurantSettingsPage } from './pages/restaurant/Settings';
 import { Rooms } from './pages/hotel/Rooms';
 import { Availability } from './pages/hotel/Availability';
 import { Housekeeping } from './pages/hotel/Housekeeping';
@@ -133,8 +136,11 @@ export const router = createBrowserRouter([
       { path: 'inventory/physical-count', element: <PhysicalCount /> },
       { path: 'inventory/movements', element: <Movements /> },
       { path: 'restaurant/tables', element: <Tables /> },
-      { path: 'restaurant/waiter', element: <Waiter /> },
       { path: 'restaurant/kitchen', element: <Kitchen /> },
+      { path: 'restaurant/waiter', element: <Waiter /> },
+      { path: 'restaurant/orders', element: <Orders /> },
+      { path: 'restaurant/catalog', element: <RestaurantCatalog /> },
+      { path: 'restaurant/settings', element: <RestaurantSettingsPage /> },
       { path: 'hotel/rooms', element: <Rooms /> },
       { path: 'hotel/availability', element: <Availability /> },
       { path: 'hotel/housekeeping', element: <Housekeeping /> },

@@ -1,0 +1,55 @@
+{
+  "name": "manager-stock-desktop",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Manager Stock - aplicación de escritorio con datos demo locales",
+  "main": "main.cjs",
+  "author": "Manager Stock",
+  "license": "UNLICENSED",
+  "scripts": {
+    "prepare-web": "node prepare.mjs",
+    "start": "electron .",
+    "build": "node prepare.mjs && electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^37.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "com.managerstock.desktop",
+    "productName": "Manager Stock",
+    "copyright": "Manager Stock",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "web/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}

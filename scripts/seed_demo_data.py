@@ -57,8 +57,8 @@ def main() -> int:
             "owner": ("owner.comidas@managerstock.test", "Propietario Comidas Demo", "ComidasDemo2026!"),
             "employee": ("empleado.comidas@managerstock.test", "Empleado Comidas Demo", "EmpleadoComidas2026!"),
             "category": "Hamburguesas", "sku": "DEMO-FOOD-001", "product": "Hamburguesa clásica", "price": 18000, "cost": 7200, "stock": 32, "min_stock": 8,
-            "supplier": "Alimentos Sabores", "features": {"inventory": True, "pos": True, "reservations": False, "tables": False, "rooms": False, "warehouse": False, "services": False, "delivery": False},
-            "foodConfig": {"serviceModes": ["mostrador", "para_llevar"], "foodTypes": ["hamburguesas", "variadas"], "activeModules": ["menu", "caja", "inventario", "pedidos"], "displayLabel": "Negocio de comidas"},
+            "supplier": "Alimentos Sabores", "features": {"inventory": True, "pos": True, "reservations": False, "tables": True, "rooms": False, "warehouse": False, "services": False, "delivery": False},
+            "foodConfig": {"serviceModes": ["mostrador", "para_llevar"], "foodTypes": ["hamburguesas", "variadas"], "activeModules": ["menu", "caja", "inventario", "pedidos", "mesas"], "displayLabel": "Negocio de comidas"},
             "theme": {"primary": "#A95F45", "secondary": "#C79658", "accent": "#DCA184", "background": "#FBF6F0", "surface": "#FFFFFF", "lightBackground": "#FBF6F0", "lightSurface": "#FFFFFF", "darkBackground": "#211914", "darkSurface": "#30241E", "mode": "light", "customized": False},
         },
         {

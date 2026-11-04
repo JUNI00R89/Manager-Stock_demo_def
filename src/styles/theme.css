@@ -1,108 +1,119 @@
-@custom-variant dark (&:is(.dark *));
-
-/* ── Sistema visual (claro) ──────────────────────────────────────────────────
-   Minimalista tipo Apple/Linear: fondo neutro, tarjetas blancas, texto negro y
-   acento naranja (#F26A1B → #FF8A4C). Los tokens alimentan a todo shadcn. */
+/* ── Sistema visual Manager Stock ─────────────────────────────────────────────
+   - Claro: lienzo verde salvia cálido y tarjetas de papel; menos brillo y una
+     segunda tonalidad que acompaña al naranja de marca.
+   - Oscuro: lienzo #080B10 y tarjetas de vidrio oscuro.
+   - Acento: color de marca configurable por negocio.
+   - Radio: 20px en tarjetas y controles redondeados.
+   - Verde/rojo para positivos/negativos.
+   - Tipografía: DM Sans.
+   */
+/* ── Modo claro ───────────────────────────────────────────────────────────────*/
 :root {
-  --font-size: 16px;
-  --background: #F4F4F6;
-  --foreground: #0B0B0E;
-  --card: #FFFFFF;
-  --card-foreground: #0B0B0E;
-  --popover: #FFFFFF;
-  --popover-foreground: #0B0B0E;
+  --background: #DEE4DA;
+  --foreground: #26312B;
+  --card: #EEF2EC;
+  --card-foreground: #26312B;
+  --popover: #F4F7F1;
+  --popover-foreground: #26312B;
   --primary: #F26A1B;
   --primary-foreground: #FFFFFF;
-  --secondary: #EDEDF1;
-  --secondary-foreground: #0B0B0E;
-  --muted: #EDEDF1;
-  --muted-foreground: #6E6E78;
-  --accent: #EFEFF3;
-  --accent-foreground: #0B0B0E;
+  --primary-hover: #D95A12;
+  --secondary: #D8E0D5;
+  --secondary-foreground: #26312B;
+  --muted: #D9E1D6;
+  --muted-foreground: rgba(38, 49, 43, 0.66);
+  --accent: color-mix(in srgb, var(--brand-primary) 10%, transparent);
+  --accent-foreground: #7C3A12;
   --destructive: #DC2626;
   --destructive-foreground: #FFFFFF;
-  --border: rgba(9, 9, 11, 0.08);
-  --input: rgba(9, 9, 11, 0.10);
-  --input-background: #FFFFFF;
-  --switch-background: #D4D4D8;
+  --border: rgba(38, 55, 44, 0.16);
+  --input: rgba(38, 55, 44, 0.2);
+  --input-background: #F6F8F3;
+  --switch-background: #C9D3C7;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --ring: rgba(242, 106, 27, 0.45);
-  /* Gráficos: el acento naranja alterna con el negro del texto. */
-  --chart-1: #F26A1B;
-  --chart-2: #0B0B0E;
-  --chart-3: #FF8A4C;
-  --chart-4: #A1A1AA;
-  --chart-5: #10B981;
-  /* Radio base 16 px (las tarjetas quedan en 20 px con --radius-2xl). */
-  --radius: 1rem;
-  --sidebar: #FFFFFF;
-  --sidebar-foreground: #0B0B0E;
-  --sidebar-primary: #F26A1B;
+  --ring: color-mix(in srgb, var(--brand-primary) 42%, transparent);
+  --chart-1: #C25A1C;
+  --chart-2: #15803D;
+  --chart-3: #B91C1C;
+  --chart-4: #B45309;
+  --chart-5: #0E7490;
+  --radius: 1.25rem;
+  --sidebar: rgba(237, 241, 235, 0.9);
+  --sidebar-foreground: #2B352F;
+  --sidebar-primary: var(--brand-primary);
   --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #EFEFF3;
-  --sidebar-accent-foreground: #0B0B0E;
-  --sidebar-border: rgba(9, 9, 11, 0.08);
-  --sidebar-ring: rgba(242, 106, 27, 0.4);
-  /* Positivos / negativos y acento degradado. */
-  --positive: #059669;
-  --negative: #DC2626;
-  --accent-from: #F26A1B;
-  --accent-to: #FF8A4C;
-  /* Elevaciones suaves y píldora activa de navegación. */
-  --app-shadow-card: 0 1px 2px rgba(9, 9, 11, 0.04), 0 14px 30px -24px rgba(9, 9, 11, 0.35);
-  --app-shadow-card-hover: 0 2px 6px rgba(9, 9, 11, 0.05), 0 26px 44px -30px rgba(9, 9, 11, 0.45);
-  --nav-active-bg: #0B0B0E;
-  --nav-active-fg: #FFFFFF;
+  --sidebar-accent: color-mix(in srgb, var(--brand-primary) 10%, transparent);
+  --sidebar-accent-foreground: color-mix(in srgb, var(--brand-primary) 68%, #1F2B24);
+  --sidebar-border: rgba(38, 55, 44, 0.12);
+  --sidebar-ring: color-mix(in srgb, var(--brand-primary) 42%, transparent);
+  --positive: #15803D;
+  --negative: #B91C1C;
+  --accent-from: var(--brand-primary);
+  --accent-to: var(--brand-secondary);
+  --app-shadow-card: 0 18px 40px -30px rgba(38, 55, 44, 0.38), 0 2px 6px rgba(38, 55, 44, 0.06);
+  --app-shadow-chrome: 0 18px 40px -32px rgba(38, 55, 44, 0.3), 0 2px 10px rgba(38, 55, 44, 0.06);
+  --app-header-bg: rgba(241, 244, 238, 0.9);
+  /* Sin destello al pasar el cursor: la tarjeta conserva siempre su sombra base. */
+  --app-shadow-card-hover: var(--app-shadow-card);
+  --nav-active-bg: color-mix(in srgb, var(--brand-primary) 13%, transparent);
+  --nav-active-fg: color-mix(in srgb, var(--brand-primary) 66%, #1F2B24);
+  --nav-active-border: color-mix(in srgb, var(--brand-primary) 24%, transparent);
+  --nav-active-shadow: 0 8px 24px -18px color-mix(in srgb, var(--brand-primary) 40%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  --font-sans: 'DM Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: 'DM Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
 
-/* ── Sistema visual (oscuro): fondo #0D0D10, tarjetas #17171B, texto blanco.
-   El naranja se mantiene igual que en modo claro. */
+/* ── Modo oscuro ─────────────────────────────────────────────────────────────*/
 .dark {
-  --background: #0D0D10;
-  --foreground: #FAFAFA;
-  --card: #17171B;
-  --card-foreground: #FAFAFA;
-  --popover: #17171B;
-  --popover-foreground: #FAFAFA;
-  --primary: #F26A1B;
+  --background: #080B10;
+  --foreground: #FFFFFF;
+  --card: rgba(17, 17, 17, 0.7);
+  --card-foreground: #FFFFFF;
+  --popover: rgba(17, 17, 17, 0.9);
+  --popover-foreground: #FFFFFF;
+  --primary: #FF5A1F;
   --primary-foreground: #FFFFFF;
-  --secondary: #232329;
-  --secondary-foreground: #FAFAFA;
-  --muted: #232329;
-  --muted-foreground: #9A9AA5;
-  --accent: #232329;
-  --accent-foreground: #FAFAFA;
+  --primary-hover: #FF3D00;
+  --secondary: rgba(255, 255, 255, 0.08);
+  --secondary-foreground: #FFFFFF;
+  --muted: rgba(255, 255, 255, 0.05);
+  --muted-foreground: rgba(255, 255, 255, 0.7);
+  --accent: rgba(255, 90, 31, 0.3);
+  --accent-foreground: #FFFFFF;
   --destructive: #EF4444;
   --destructive-foreground: #FFFFFF;
-  --border: rgba(255, 255, 255, 0.06);
-  --input: rgba(255, 255, 255, 0.14);
-  --input-background: #1C1C21;
-  --switch-background: #3F3F46;
-  --ring: rgba(242, 106, 27, 0.5);
-  --font-weight-medium: 500;
-  --font-weight-normal: 400;
-  --chart-1: #F26A1B;
-  --chart-2: #FAFAFA;
-  --chart-3: #FF8A4C;
-  --chart-4: #71717A;
-  --chart-5: #34D399;
-  --sidebar: #131317;
-  --sidebar-foreground: #FAFAFA;
-  --sidebar-primary: #F26A1B;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.08);
+  --input-background: rgba(17, 17, 17, 0.6);
+  --switch-background: rgba(255, 255, 255, 0.2);
+  --ring: rgba(255, 90, 31, 0.5);
+  --chart-1: #FF5A1F;
+  --chart-2: #22C55E;
+  --chart-3: #EF4444;
+  --chart-4: #F59E0B;
+  --chart-5: #06B6D4;
+  --sidebar: rgba(17, 17, 17, 0.8);
+  --sidebar-foreground: #FFFFFF;
+  --sidebar-primary: #FF5A1F;
   --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #232329;
-  --sidebar-accent-foreground: #FAFAFA;
+  --sidebar-accent: rgba(255, 90, 31, 0.2);
+  --sidebar-accent-foreground: #FFFFFF;
   --sidebar-border: rgba(255, 255, 255, 0.08);
-  --sidebar-ring: rgba(242, 106, 27, 0.45);
-  --positive: #34D399;
-  --negative: #F87171;
-  --accent-from: #F26A1B;
-  --accent-to: #FF8A4C;
-  --app-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.45), 0 18px 34px -26px rgba(0, 0, 0, 0.75);
-  --app-shadow-card-hover: 0 2px 6px rgba(0, 0, 0, 0.5), 0 30px 50px -32px rgba(0, 0, 0, 0.85);
-  --nav-active-bg: #2C2C34;
+  --sidebar-ring: rgba(255, 90, 31, 0.5);
+  --positive: #22C55E;
+  --negative: #EF4444;
+  --accent-from: #FF5A1F;
+  --accent-to: #FF3D00;
+  --app-shadow-card: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --app-shadow-chrome: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --app-header-bg: rgba(17, 17, 17, 0.72);
+  /* Sin destello al pasar el cursor: la tarjeta conserva siempre su sombra base. */
+  --app-shadow-card-hover: var(--app-shadow-card);
+  --nav-active-bg: rgba(255, 255, 255, 0.1);
   --nav-active-fg: #FFFFFF;
+  --nav-active-border: rgba(255, 255, 255, 0.25);
+  --nav-active-shadow: 0 8px 32px rgba(15, 40, 80, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 
 @theme inline {
@@ -114,6 +125,7 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -132,13 +144,12 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  /* Tarjetas y contenedores: 20 px (rango 16-20 px del sistema visual). */
-  --radius-2xl: 1.25rem;
-  --radius-3xl: 1.5rem;
+  --radius-sm: 0.75rem;
+  --radius-md: 1rem;
+  --radius-lg: 1.25rem;
+  --radius-xl: 1.5rem;
+  --radius-2xl: 1.75rem;
+  --radius-3xl: 2rem;
   --color-positive: var(--positive);
   --color-negative: var(--negative);
   --color-nav-active: var(--nav-active-bg);
@@ -153,8 +164,8 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
-  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-display: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-sans: 'DM Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'DM Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
 @layer base {
@@ -163,29 +174,34 @@
   }
 
   body {
-    @apply bg-background text-foreground antialiased;
+    background: var(--background);
+    background-attachment: fixed;
+    @apply text-foreground antialiased;
     font-family: var(--font-sans);
   }
 
-  /* Títulos con la tipografía display heredada de Managuer_Stock. */
+  body::before {
+    display: none;
+  }
+
+  #root {
+    position: relative;
+    z-index: 1;
+  }
+
   h1, h2 {
     font-family: var(--font-display);
     letter-spacing: -0.02em;
     text-wrap: balance;
   }
-  /* Evita que el input se vea 'saltón' al enfocar en iOS. */
+
   input, select, textarea {
     font-family: inherit;
   }
 
   ::selection {
-    background: color-mix(in srgb, var(--brand-primary, #F26A1B) 22%, transparent);
+    background: color-mix(in srgb, var(--primary) 25%, transparent);
   }
-
-  /**
-  * Default typography styles for HTML elements (h1-h4, p, label, button, input).
-  * These are in @layer base, so Tailwind utility classes (like text-sm, text-lg) automatically override them.
-  */
 
   html {
     font-size: var(--font-size);
@@ -234,7 +250,6 @@
   }
 }
 
-/* ── Utilidades de la app (fusión con Managuer_Stock) ────────────────────── */
 @utility scrollbar-thin {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in oklab, var(--muted-foreground) 35%, transparent) transparent;
@@ -245,7 +260,7 @@
 }
 
 @utility bg-brand {
-  background-color: var(--brand-primary, #F26A1B);
+  background-color: var(--primary);
 }
 
 @utility num {
@@ -265,41 +280,50 @@
   }
 }
 
-/* ── Responsive: base global ──────────────────────────────────────────────
-   Estas reglas corrigen en un solo lugar problemas que se repiten en muchas
-   páginas, sin tener que editar cada una. */
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
+
 body {
   -webkit-tap-highlight-color: transparent;
   overflow-wrap: break-word;
 }
+
 img, video, canvas, svg { max-width: 100%; }
 
-/* Celulares: los encabezados "título + botón" saltan de línea en vez de apretarse */
 @media (max-width: 639px) {
   .flex.justify-between.items-center:has(> :first-child > h1),
   .flex.justify-between.items-center:has(> :first-child > h2) {
     flex-wrap: wrap;
     gap: 0.75rem;
   }
-  /* Evita que una tabla o tarjeta ancha empuje la página en horizontal */
   main { overflow-x: clip; }
 }
 
-/* Pantallas táctiles: objetivos de toque cómodos (44 px), salvo controles
-   diminutos que el diseño define a propósito (h-5, h-6, h-7). */
 @media (pointer: coarse) {
-  [data-slot="button"]:not([class*="h-5"]):not([class*="h-6"]):not([class*="h-7"]) { min-height: 44px; }
+  [data-slot="button"]:not([class*="h-5"]):not([class*="h-6"]):not([class*="h-7"]) {
+    min-height: 44px;
+  }
   [data-slot="button"][class*="size-"] { min-width: 44px; }
   [data-slot="input"], select { min-height: 44px; }
   header button { min-width: 44px; min-height: 44px; }
   aside nav a { min-height: 44px; }
 }
 
-/* Los inputs a 16 px evitan el zoom automático de iOS al enfocar */
 @media (max-width: 767px) {
   input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: 16px; }
+}
+
+html {
+  transition-property: background-color, color, border-color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 500ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    transition-duration: 0.01ms !important;
+    transition-property: none !important;
+  }
 }

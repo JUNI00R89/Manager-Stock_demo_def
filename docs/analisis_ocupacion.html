@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Análisis de ocupación · Hotel Senderos (Demo)</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#ffffff;--ink:#111318;--muted:#5b6170;--line:#e6e8ee;--accent:#F26A1B}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,Segoe UI,system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+  .page{max-width:1060px;margin:0 auto;padding:40px 24px 64px}
+  header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:28px}
+  h1{font-size:26px;margin:0 0 6px;letter-spacing:-.02em}
+  .sub{color:var(--muted);font-size:13px}
+  .pill{background:#fff;border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:12px;color:var(--muted)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:22px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 20px}
+  .kpi-label{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+  .kpi-value{font-size:28px;font-weight:700;margin-top:6px;letter-spacing:-.02em}
+  .kpi-note{font-size:12px;color:var(--muted);margin-top:4px}
+  .card h2{font-size:15px;margin:0 0 4px}
+  .card p.lead{margin:0 0 16px;font-size:13px;color:var(--muted)}
+  .bars{display:flex;align-items:flex-end;gap:10px;height:200px;margin-top:8px}
+  .bar-col{flex:1;display:flex;flex-direction:column;align-items:center;height:100%}
+  .bar-wrap{flex:1;width:100%;display:flex;align-items:flex-end;justify-content:center}
+  .bar{width:70%;border-radius:8px 8px 4px 4px;min-height:3px;opacity:.92}
+  .bar-val{font-size:11px;color:var(--muted);margin-top:6px;white-space:nowrap}
+  .bar-lbl{font-size:11px;margin-top:2px;color:var(--ink)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--line)}
+  td{padding:10px;border-bottom:1px solid var(--line)}
+  td.num{font-variant-numeric:tabular-nums;font-weight:600}
+  .occ-bar{position:relative;height:10px;border-radius:999px;background:#eef0f4;overflow:hidden;min-width:120px}
+  .occ-fill{height:100%;border-radius:999px}
+  .occ-bar span{position:absolute;right:6px;top:-3px;font-size:10px;color:var(--muted)}
+  .two{display:grid;grid-template-columns:1.3fr 1fr;gap:14px}
+  @media(max-width:760px){.two{grid-template-columns:1fr}}
+  ul{margin:8px 0 0;padding-left:18px;font-size:13px;line-height:1.65}
+  li{margin-bottom:6px}
+  .tag{display:inline-block;background:#fff4ec;color:#b3470c;border-radius:8px;padding:2px 8px;font-size:11px;font-weight:600;margin-right:6px}
+  .warn{background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:14px 16px;font-size:13px;line-height:1.6;color:#78350f}
+  .foot{margin-top:26px;font-size:11px;color:var(--muted);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .band{position:relative;height:34px;margin-top:10px}
+  .band-range{position:absolute;top:8px;height:18px;border-radius:9px;background:linear-gradient(90deg,#ffe0cc,#ffc59e);left:0;right:0}
+  .band-median{position:absolute;top:4px;width:2px;height:26px;background:#b3470c}
+  code{background:#eef0f4;padding:1px 5px;border-radius:5px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div>
+      <h1>Análisis de ingresos y ocupación</h1>
+      <div class="sub">Hotel Senderos (Demo) · 90 días de historia · horizonte 30 días</div>
+    </div>
+    <div class="pill">Generado 22/10/2026 09:31 · datos demo</div>
+  </header>
+
+  <div class="grid">
+    <div class="card"><div class="kpi-label">Ocupación histórica</div><div class="kpi-value">49.8%</div><div class="kpi-note">RevPAR $67.201/día</div></div>
+    <div class="card"><div class="kpi-label">Próxima semana</div><div class="kpi-value">$1.183.249</div><div class="kpi-note">Ocupación 62.6%</div></div>
+    <div class="card"><div class="kpi-label">Próximos 30 días</div><div class="kpi-value">$5.341.220</div><div class="kpi-note">Ocupación 65.9%</div></div>
+    <div class="card"><div class="kpi-label">Banda 80 % (30 días)</div><div class="kpi-value" style="font-size:20px">$4.692.503 – $6.161.869</div><div class="kpi-note">Mediana $5.413.987</div></div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <h2>Ingreso medio por día de la semana</h2>
+    <p class="lead">Base del componente estacional del modelo (índice 1,00 = promedio).</p>
+    <div class="bars"><div class="bar-col"><div class="bar-wrap"><div class="bar" style="height:55.9%;background:#F26A1B"></div></div><div class="bar-val">$106.118</div><div class="bar-lbl">Lunes</div></div><div class="bar-col"><div class="bar-wrap"><div class="bar" style="height:36.2%;background:#F26A1B"></div></div><div class="bar-val">$68.773</div><div class="bar-lbl">Martes</div></div><div class="bar-col"><div class="bar-wrap"><div class="bar" style="height:87.0%;background:#F26A1B"></div></div><div class="bar-val">$165.264</div><div class="bar-lbl">Miércoles</div></div><div class="bar-col"><div class="bar-wrap"><div class="bar" style="height:76.2%;background:#F26A1B"></div></div><div class="bar-val">$144.710</div><div class="bar-lbl">Jueves</div></div><div class="bar-col"><div class="bar-wrap"><div class="bar" style="height:64.2%;background:#F26A1B"></div></div><div class="bar-val">$121.927</div><div class="bar-lbl">Viernes</div></div><div class="bar-col"><div class="bar-wrap"><div class="bar" style="height:100.0%;background:#F26A1B"></div></div><div class="bar-val">$189.895</div><div class="bar-lbl">Sábado</div></div><div class="bar-col"><div class="bar-wrap"><div class="bar" style="height:76.3%;background:#F26A1B"></div></div><div class="bar-val">$144.919</div><div class="bar-lbl">Domingo</div></div></div>
+  </div>
+
+  <div class="two">
+    <div class="card">
+      <h2>Proyección día por día</h2>
+      <p class="lead">Tendencia + estacionalidad semanal. La ocupación es implícita (ingreso / ADR).</p>
+      <table>
+        <thead><tr><th>Día</th><th>Fecha</th><th>Ingreso</th><th>Ocupación</th></tr></thead>
+        <tbody><tr><td>Jueves</td><td>22/10/2026</td><td class='num'>$173.047</td><td><div class="occ-bar"><div class="occ-fill" style="width:64.1%;background:#F26A1B"></div><span>64.1%</span></div></td></tr><tr><td>Viernes</td><td>23/10/2026</td><td class='num'>$159.673</td><td><div class="occ-bar"><div class="occ-fill" style="width:59.1%;background:#F26A1B"></div><span>59.1%</span></div></td></tr><tr><td>Sábado</td><td>24/10/2026</td><td class='num'>$202.961</td><td><div class="occ-bar"><div class="occ-fill" style="width:75.2%;background:#059669"></div><span>75.2%</span></div></td></tr><tr><td>Domingo</td><td>25/10/2026</td><td class='num'>$175.631</td><td><div class="occ-bar"><div class="occ-fill" style="width:65.0%;background:#F26A1B"></div><span>65.0%</span></div></td></tr><tr><td>Lunes</td><td>26/10/2026</td><td class='num'>$151.938</td><td><div class="occ-bar"><div class="occ-fill" style="width:56.3%;background:#F26A1B"></div><span>56.3%</span></div></td></tr><tr><td>Martes</td><td>27/10/2026</td><td class='num'>$128.942</td><td><div class="occ-bar"><div class="occ-fill" style="width:47.8%;background:#e11d48"></div><span>47.8%</span></div></td></tr><tr><td>Miércoles</td><td>28/10/2026</td><td class='num'>$191.057</td><td><div class="occ-bar"><div class="occ-fill" style="width:70.8%;background:#059669"></div><span>70.8%</span></div></td></tr></tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h2>Escenario comercial</h2>
+      <p class="lead">−12 % de tarifa en <strong>martes</strong> y <strong>lunes</strong> con +25 % de demanda.</p>
+      <table>
+        <tbody>
+          <tr><td>Ingreso 30 días</td><td class="num">$5.459.031</td></tr>
+          <tr><td>Diferencia vs. base</td><td class="num">+117,811</td></tr>
+          <tr><td>Ocupación estimada</td><td class="num">67.4% (base 65.9%)</td></tr>
+          <tr><td>Habitación-noche extra / semana</td><td class="num">≈ $580.500/mes</td></tr>
+        </tbody>
+      </table>
+      <div class="band"><div class="band-range"></div><div class="band-median" style="left:49%"></div></div>
+      <div class="sub" style="margin-top:4px">Banda de incertidumbre del mes: $4.692.503 · mediana · $6.161.869</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin:14px 0">
+    <h2>Plan para subir la ocupación</h2>
+    <p class="lead">Priorizado por impacto; los valles son <strong>martes y lunes</strong> y los picos <strong>miércoles y sábado</strong>.</p>
+    <ul>
+      <li><span class="tag">1</span><strong>Paquete de 2 noches domingo→martes con desayuno.</strong> Convierte una reserva de 1 noche en 2 y sube el ticket de restaurante.</li>
+      <li><span class="tag">2</span><strong>Precio dinámico:</strong> −12 % lunes/martes y +5 % sábado. Evita descuentos generalizados que solo regalan margen en picos.</li>
+      <li><span class="tag">3</span><strong>Tarifa corporativa lunes-miércoles</strong> con cupo semanal: llena el valle de forma recurrente y predecible.</li>
+      <li><span class="tag">4</span><strong>Estancia mínima de 2 noches el sábado</strong> para proteger el pico del canibalismo promocional.</li>
+      <li><span class="tag">5</span><strong>Reserva directa (web/WhatsApp)</strong> frente a OTAs: ahorra 15–20 % de comisión por reserva.</li>
+      <li><span class="tag">6</span><strong>Medir de verdad:</strong> registrar tarifa/noche y noches vendidas. Hoy la ocupación es un proxy (ingreso / ADR), no una medición.</li>
+    </ul>
+  </div>
+
+  <div class="warn">
+    <strong>Límites de los datos.</strong> El negocio tiene 2 habitaciones (capacidad $270.000/día): cada noche vendida mueve ~50 pp de ocupación diaria, así que lee esto como tendencia, no como precisión fina.
+    El POS no registra la tarifa de la habitación, por lo que la ocupación se estima con el ingreso y el ADR ($135.000).
+    Validación del modelo: WAPE 66.7 % vs. 101.3 % del baseline naive estacional (MAE $100.777).
+  </div>
+
+  <div class="foot">
+    <span>Fuente: <code>sales</code> completadas + <code>hotel_rooms</code> · método: tendencia + estacionalidad semanal + Monte Carlo</span>
+    <span>Generado por <code>scripts/build_analysis_report.py</code></span>
+  </div>
+</div>
+</body>
+</html>
