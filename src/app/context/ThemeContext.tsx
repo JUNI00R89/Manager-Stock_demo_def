@@ -20,12 +20,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const root = document.documentElement;
+    root.classList.add('theme-transitioning');
     if (theme === 'dark') {
       root.classList.add('dark');
     } else {
       root.classList.remove('dark');
     }
     localStorage.setItem('theme', theme);
+    const timer = window.setTimeout(() => root.classList.remove('theme-transitioning'), 750);
+    return () => window.clearTimeout(timer);
   }, [theme]);
 
   // La opción "Cambiar estilo" (clásico/malla) ya no existe. Limpiamos cualquier

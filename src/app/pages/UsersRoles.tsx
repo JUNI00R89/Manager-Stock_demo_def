@@ -6,7 +6,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { ShieldCheck, Users, UserPlus, RefreshCw, UserRound, Mail, KeyRound, CircleCheck, CircleX, LoaderCircle, Plus, Shield, Save } from 'lucide-react';
+import { ShieldCheck, Users, UserPlus, RefreshCw, UserRound, Mail, KeyRound, CircleCheck, CircleX, LoaderCircle, Plus, Shield, Save, Camera } from 'lucide-react';
 import { toast } from 'sonner';
 import { ConfirmActionDialog } from '../components/ConfirmActionDialog';
 import { useAuth } from '../context/AuthContext';
@@ -42,6 +42,9 @@ const roleStyle = (role: BusinessUserRecord['role'], isCustom?: boolean) => isCu
 
 export function UsersRoles() {
   const { user } = useAuth();
+  const [ownerPhoto, setOwnerPhoto] = useState<string | null>(() => {
+    try { return localStorage.getItem('manager_stock_owner_photo'); } catch { return null; }
+  });
   const [users, setUsers] = useState<BusinessUserRecord[]>([]);
   const [customRoles, setCustomRoles] = useState<CustomRoleRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -133,6 +136,46 @@ export function UsersRoles() {
 
   return <Layout><div className="mx-auto max-w-7xl space-y-6">
     <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-[.2em] text-[var(--brand-primary)]">Administración del negocio</p><h1 className="mt-2 text-3xl font-bold tracking-tight">Usuarios y permisos</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">Crea cuentas y define permisos operativos para tu equipo. Los privilegios se verifican en el backend.</p></div><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => void refresh()} disabled={loading} className="rounded-xl"><RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`}/>Actualizar</Button>{canCreateAdmin && <Button variant="outline" onClick={() => setShowRoleForm(v => !v)} className="rounded-xl"><Shield className="mr-2 h-4 w-4"/>{showRoleForm ? 'Cerrar roles' : 'Crear rol'}</Button>}<Button onClick={() => setShowForm(v => !v)} className="rounded-xl bg-[var(--brand-primary)] text-white hover:opacity-90"><UserPlus className="mr-2 h-4 w-4"/>{showForm ? 'Cerrar usuario' : 'Nuevo usuario'}</Button></div></div>
+
+    <Card className="rounded-2xl border-border/70 p-5 sm:p-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        <label className="relative flex h-20 w-20 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-2xl border border-border bg-muted text-muted-foreground transition-colors hover:bg-accent" title="Clic para cambiar la foto. Doble clic para quitarla."
+          onDoubleClick={e => { e.preventDefault(); setOwnerPhoto(null); try { localStorage.removeItem('manager_stock_owner_photo'); } catch {} }}>
+          {ownerPhoto ? (
+            <img src={ownerPhoto} alt="Dueño" className="h-full w-full object-cover" />
+          ) : (
+            <UserRound size={32} />
+          )}
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={e => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const reader = new FileReader();
+              reader.onload = () => {
+                const data = String(reader.result || '');
+                setOwnerPhoto(data);
+                try { localStorage.setItem('manager_stock_owner_photo', data); } catch {}
+              };
+              reader.readAsDataURL(file);
+              e.target.value = '';
+            }}
+          />
+        </label>
+        <div className="flex-1 space-y-1">
+          <p className="text-xs font-bold uppercase tracking-[.2em] text-[var(--brand-primary)]">Perfil del dueño</p>
+          <h2 className="text-xl font-bold tracking-tight">{user?.name || 'Dueño'}</h2>
+          <p className="text-sm text-muted-foreground">{user?.email || '—'}</p>
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Badge variant="outline" className="border-violet-200 bg-violet-50 text-violet-700">Propietario</Badge>
+            <Badge variant="outline">{user?.businessId || 'Negocio'}</Badge>
+          </div>
+          <p className="text-xs text-muted-foreground pt-1">Clic en la foto para cambiarla. Doble clic para quitarla.</p>
+        </div>
+      </div>
+    </Card>
 
     <div className="grid gap-4 sm:grid-cols-3"><Card className="rounded-2xl p-5"><div className="flex items-center gap-3"><div className="rounded-xl bg-[var(--brand-soft)] p-3 text-[var(--brand-primary)]"><Users size={21}/></div><div><p className="text-sm text-muted-foreground">Usuarios</p><p className="mt-1 text-2xl font-bold">{users.length}</p></div></div></Card><Card className="rounded-2xl p-5"><div className="flex items-center gap-3"><div className="rounded-xl bg-emerald-50 p-3 text-emerald-700"><CircleCheck size={21}/></div><div><p className="text-sm text-muted-foreground">Accesos activos</p><p className="mt-1 text-2xl font-bold">{users.filter(u => u.active).length}</p></div></div></Card><Card className="rounded-2xl p-5"><div className="flex items-center gap-3"><div className="rounded-xl bg-slate-100 p-3 text-slate-700"><ShieldCheck size={21}/></div><div><p className="text-sm text-muted-foreground">Roles personalizados</p><p className="mt-1 text-2xl font-bold">{customRoles.length}</p></div></div></Card></div>
 

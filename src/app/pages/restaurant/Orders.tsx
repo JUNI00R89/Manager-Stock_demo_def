@@ -33,7 +33,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { useAuth } from '../../context/AuthContext';
 import { useBusiness } from '../../context/BusinessContext';
-import { useRestaurantScope } from '../../utils/restaurantScope';
+import { useRestaurantScope, useRestaurantBusinessId } from '../../utils/restaurantScope';
 import { useRestaurantStaff } from '../../utils/restaurantStaffStore';
 import { useRestaurantSettings } from '../../utils/restaurantSettingsStore';
 import { useRestaurantCatalog } from '../../utils/restaurantCatalogStore';
@@ -69,10 +69,12 @@ export function Orders() {
   const { user } = useAuth();
   const { config } = useBusiness();
   const scope = useRestaurantScope();
+  const businessId = useRestaurantBusinessId();
+  const ordersScope = import.meta.env.VITE_RESTAURANT_BACKEND === 'firebase' ? businessId : scope;
   const { settings } = useRestaurantSettings(scope);
   const { activeStaff, toEmployee } = useRestaurantStaff(scope, user?.name || '');
   const active = activeStaff('admin');
-  const { orders, loading, repository } = useRestaurantOrders(scope);
+  const { orders, loading, repository } = useRestaurantOrders(ordersScope);
   const { tables } = useRestaurantTables();
   const { activeMenu, setActive, setDirectSale, loading: menuLoading } = useRestaurantCatalog(scope);
   const now = useNow(30_000);

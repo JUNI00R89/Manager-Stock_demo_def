@@ -13,7 +13,11 @@
     "backend": "python -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000",
     "desktop": "npm run build && electron .",
     "desktop:dev": "electron .",
-    "desktop:build": "npm run build && electron-builder --win nsis"
+    "desktop:build": "npm run build && electron-builder --win nsis",
+    "firebase:emulators": "firebase emulators:start --project demo-manager-stock",
+    "firebase:seed": "node scripts/seed_firebase_emulator.mjs",
+    "firebase:test-rules": "firebase emulators:exec --project demo-manager-stock --only firestore \"node scripts/test_firestore_rules.mjs\"",
+    "firebase:test-functions": "firebase emulators:exec --project demo-manager-stock --only auth,firestore,functions \"node scripts/seed_firebase_emulator.mjs && node scripts/test_functions_emulator.mjs\""
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
@@ -53,6 +57,7 @@
     "cmdk": "1.1.1",
     "date-fns": "3.6.0",
     "embla-carousel-react": "8.6.0",
+    "firebase": "^13.2.0",
     "input-otp": "1.4.2",
     "lucide-react": "0.487.0",
     "motion": "12.23.24",
@@ -75,6 +80,7 @@
     "vaul": "1.1.2"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^6.0.0",
     "@tailwindcss/vite": "4.1.12",
     "@types/node": "22.13.10",
     "@types/react": "18.3.18",
@@ -82,6 +88,8 @@
     "@vitejs/plugin-react": "4.7.0",
     "electron": "^45.0.0",
     "electron-builder": "^26.18.0",
+    "firebase-admin": "^14.5.0",
+    "firebase-tools": "^15.34.2",
     "tailwindcss": "4.1.12",
     "typescript": "5.7.3",
     "vite": "6.3.5"

@@ -34,7 +34,7 @@ import {
 } from '../../components/ui/dialog';
 import { useAuth } from '../../context/AuthContext';
 import { useBusiness } from '../../context/BusinessContext';
-import { useRestaurantScope } from '../../utils/restaurantScope';
+import { useRestaurantScope, useRestaurantBusinessId } from '../../utils/restaurantScope';
 import { useRestaurantStaff } from '../../utils/restaurantStaffStore';
 import { useRestaurantSettings } from '../../utils/restaurantSettingsStore';
 import { useRestaurantCatalog, type RestaurantCatalogProduct } from '../../utils/restaurantCatalogStore';
@@ -74,10 +74,12 @@ export function Waiter() {
   const { user } = useAuth();
   const { config } = useBusiness();
   const scope = useRestaurantScope();
+  const businessId = useRestaurantBusinessId();
+  const ordersScope = import.meta.env.VITE_RESTAURANT_BACKEND === 'firebase' ? businessId : scope;
   const { settings } = useRestaurantSettings(scope);
   const { staff, activeStaff, toEmployee, setActive } = useRestaurantStaff(scope, user?.name || '');
   const active = activeStaff('mesero');
-  const { orders, loading: ordersLoading, repository } = useRestaurantOrders(scope);
+  const { orders, loading: ordersLoading, repository } = useRestaurantOrders(ordersScope);
   const { tables, loading: tablesLoading } = useRestaurantTables();
   const { activeMenu, loading: menuLoading, error: menuError } = useRestaurantCatalog(scope);
   const now = useNow(30_000);

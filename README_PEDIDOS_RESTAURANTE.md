@@ -13,7 +13,13 @@ El objetivo es que el mesero cree pedidos, la cocina los tome/finalice y el admi
 ## Estado actual
 
 - **Fase 1:** completada y validada en navegador durante esta sesión.
-- **Fase 2:** pendiente. Falta documentar integración futura con Supabase/Firebase, esquema, RLS, variables de entorno y dependencia, sin instalar nada todavía.
+- **Fase 2:** en implementación con **Firebase** (decisión confirmada).
+  - Diseño: [`docs/INTEGRACION_TIEMPO_REAL_FASE2_FIREBASE.md`](docs/INTEGRACION_TIEMPO_REAL_FASE2_FIREBASE.md)
+  - F2F.1 completado en modo emulador: [`docs/FIREBASE_F2F1.md`](docs/FIREBASE_F2F1.md)
+  - F2F.2 completado en modo emulador: [`docs/FIREBASE_F2F2.md`](docs/FIREBASE_F2F2.md)
+  - F2F.3 completado: [`docs/FIREBASE_F2F3.md`](docs/FIREBASE_F2F3.md)
+  - La app sigue usando el repositorio local por defecto. Activar con
+    `VITE_RESTAURANT_BACKEND=firebase`.
 
 ## Qué se implementó en la Fase 1
 
@@ -83,13 +89,42 @@ El objetivo es que el mesero cree pedidos, la cocina los tome/finalice y el admi
 - Steppers del carrito aumentados a 44 px.
 - Botones y controles del nuevo pedido, catálogo y ajustes ajustados a objetivos táctiles.
 
-## Fase 2 pendiente
+## Fase 2 — Firebase en implementación
 
-- Documentar integración con Supabase/Firebase.
-- Esquema de datos.
-- RLS.
-- Variables de entorno.
-- Dependencia a instalar, sin instalarla todavía.
+Se eligió Firebase. El diseño completo está en
+[`docs/INTEGRACION_TIEMPO_REAL_FASE2_FIREBASE.md`](docs/INTEGRACION_TIEMPO_REAL_FASE2_FIREBASE.md)
+y la variante Supabase queda como referencia SQL en
+[`docs/INTEGRACION_TIEMPO_REAL_FASE2.md`](docs/INTEGRACION_TIEMPO_REAL_FASE2.md).
+
+### F2F.1 — base local (completada)
+
+- Emuladores de Auth, Firestore y UI configurados en `firebase.json`.
+- Reglas de aislamiento por negocio en `firestore.rules`.
+- Índices en `firestore.indexes.json`.
+- Seed de usuarios, claims, personal, mesas, ajustes y productos.
+- 10 pruebas de reglas.
+- Guía: [`docs/FIREBASE_F2F1.md`](docs/FIREBASE_F2F1.md).
+
+### F2F.2 — Cloud Functions (completada)
+
+- `crearPedido`, `tomarPedido`, `finalizarPedido`, `entregarPedido`,
+  `cancelarPedido` en `functions/src/index.ts`.
+- 10 pruebas de humo.
+- Guía: [`docs/FIREBASE_F2F2.md`](docs/FIREBASE_F2F2.md).
+
+### F2F.3 — Repositorio remoto (completada)
+
+- Cliente Firebase, repositorio remoto y bandera `VITE_RESTAURANT_BACKEND`.
+- Tablas leídas desde Firestore en modo Firebase.
+- Guía: [`docs/FIREBASE_F2F3.md`](docs/FIREBASE_F2F3.md).
+
+### Pendiente
+
+- F2F.4: migrar personal, ajustes y catálogo a Firestore.
+- F2F.5: venta y stock atómicos al entregar (variante B con FastAPI).
+- F2F.6: cola offline idempotente (opcional).
+- F2F.7: pruebas multidispositivo y corte.
+- F2F.3b: login real con Firebase Auth para producción.
 
 ## Comandos
 
@@ -100,9 +135,14 @@ python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
 # Frontend
 npx vite --host 0.0.0.0 --port 5173
 
+# Firebase (F2F.1, emuladores)
+npm run firebase:emulators      # Auth 9099, Firestore 8080, UI 4000
+npm run firebase:seed           # datos y usuarios de prueba
+npm run firebase:test-rules     # 10 pruebas de reglas
+
 # Validaciones
 npx tsc --noEmit
-npx vite build
+npm run build
 ```
 
 ## Cuenta demo usada

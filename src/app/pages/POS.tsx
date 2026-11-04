@@ -435,33 +435,38 @@ export function POS() {
             <Separator className="mb-3" />
 
             {/* Cart items */}
-            <div className="space-y-2 max-h-[280px] overflow-y-auto mb-3">
+            <div className="space-y-2.5 max-h-[300px] overflow-y-auto mb-3 pr-1">
               {cart.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <ShoppingCart className="mx-auto mb-2 opacity-30" size={40} />
-                  <p className="text-sm">Carrito vacío</p>
+                <div className="text-center py-10 text-muted-foreground">
+                  <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/60">
+                    <ShoppingCart className="opacity-40" size={26} />
+                  </div>
+                  <p className="text-sm font-medium">Carrito vacío</p>
                   <p className="text-xs mt-1 text-muted-foreground">Haz clic en un producto o escanea un código</p>
                 </div>
               ) : (
                 cart.map(item => (
-                  <div key={item.productId} className="bg-accent/50 rounded-lg p-3 border border-border">
-                    <div className="flex justify-between items-start mb-2">
+                  <div key={item.productId} className="group rounded-xl border border-border bg-card p-3 shadow-sm">
+                    <div className="flex justify-between items-start gap-2 mb-2.5">
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-foreground truncate">{item.name}</p>
-                        <p className="text-[10px] text-muted-foreground">{item.sku}</p>
+                        <p className="text-sm font-semibold text-foreground truncate leading-tight">{item.name}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">{item.sku}</p>
                       </div>
-                      <button onClick={() => removeFromCart(item.productId)} className="ml-1 p-1 hover:text-red-500 text-muted-foreground">
+                      <button onClick={() => removeFromCart(item.productId)} className="shrink-0 rounded-full p-1 text-muted-foreground hover:bg-transparent">
                         <X size={14} />
                       </button>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => updateQuantity(item.productId, -1)} className="w-6 h-6 rounded border border-border flex items-center justify-center hover:bg-orange-50 dark:hover:bg-orange-950/30 text-foreground"><Minus size={12} /></button>
-                        <span className="w-7 text-center text-sm font-bold text-foreground">{item.quantity}</span>
-                        <button onClick={() => updateQuantity(item.productId, 1)} className="w-6 h-6 rounded border border-border flex items-center justify-center hover:bg-orange-50 dark:hover:bg-orange-950/30 text-foreground"><Plus size={12} /></button>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <button onClick={() => updateQuantity(item.productId, -1)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-background text-foreground transition-colors hover:bg-orange-50 hover:text-orange-600 dark:hover:bg-orange-950/30">
+                          <Minus size={14} />
+                        </button>
+                        <span className="w-8 text-center text-sm font-bold text-foreground">{item.quantity}</span>
+                        <button onClick={() => updateQuantity(item.productId, 1)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-background text-foreground transition-colors hover:bg-orange-50 hover:text-orange-600 dark:hover:bg-orange-950/30">
+                          <Plus size={14} />
+                        </button>
                       </div>
                       <div className="flex items-center gap-2">
-                        {/* Per-item discount */}
                         {editingDiscount === item.productId ? (
                           <div className="flex items-center gap-1">
                             <Input
@@ -475,7 +480,7 @@ export function POS() {
                                 }
                                 if (e.key === 'Escape') setEditingDiscount(null);
                               }}
-                              className="w-14 h-6 text-xs text-center p-1"
+                              className="w-14 h-7 text-xs text-center p-1"
                               autoFocus
                               min={0} max={100}
                               placeholder="0"
@@ -485,12 +490,12 @@ export function POS() {
                         ) : (
                           <button
                             onClick={() => { setEditingDiscount(item.productId); setDiscountInput(String(item.discount)); }}
-                            className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 hover:bg-amber-200"
+                            className="text-[10px] px-2 py-1 rounded-md bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 font-medium transition-colors hover:bg-amber-200"
                           >
                             {item.discount > 0 ? `-${item.discount}%` : 'Dto.'}
                           </button>
                         )}
-                        <span className="text-sm font-bold text-orange-600">{money(itemSubtotal(item))}</span>
+                        <span className="text-sm font-bold text-orange-600 min-w-[64px] text-right">{money(itemSubtotal(item))}</span>
                       </div>
                     </div>
                   </div>
@@ -632,26 +637,30 @@ export function POS() {
 
           {receiptData && (
             <div className="space-y-4">
-              <div className="border-2 border-dashed border-border rounded-xl p-5 bg-white dark:bg-card font-mono text-sm">
-                <div className="text-center mb-3">
-                  <p className="font-bold text-base text-foreground">{config?.name || 'Manager Stock Pro'}</p>
-                  <p className="text-xs text-muted-foreground">{new Date(receiptData.date).toLocaleString('es-CO')}</p>
-                  <p className="text-xs text-muted-foreground">Factura: {receiptData.invoiceNumber}</p>
+              <div className="relative overflow-hidden rounded-2xl border-2 border-dashed border-gray-300 bg-white p-5 font-mono text-sm text-gray-900 shadow-[0_8px_30px_rgba(0,0,0,0.08)]">
+                <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-orange-400 via-amber-400 to-orange-500" />
+                <div className="text-center mb-4 pt-1">
+                  <div className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-orange-100 text-orange-600">
+                    <Check size={18} />
+                  </div>
+                  <p className="font-bold text-base text-gray-900">{config?.name || 'Manager Stock Pro'}</p>
+                  <p className="text-[11px] text-gray-500">{new Date(receiptData.date).toLocaleString('es-CO')}</p>
+                  <p className="text-xs text-gray-500">Factura: {receiptData.invoiceNumber}</p>
                   {receiptData.customer !== 'Cliente general' && (
-                    <p className="text-xs font-medium text-foreground mt-1">Cliente: {receiptData.customer}</p>
+                    <p className="text-xs font-medium text-gray-900 mt-1">Cliente: {receiptData.customer}</p>
                   )}
                 </div>
 
-                <Separator className="my-3" />
+                <Separator className="my-3 bg-gray-200" />
 
                 <div className="space-y-1.5 mb-3">
                   {receiptData.items.map((item: CartItem) => (
                     <div key={item.productId}>
                       <div className="flex justify-between text-xs">
-                        <span className="text-foreground truncate mr-2">{item.name}</span>
-                        <span className="text-foreground flex-shrink-0">{money(itemSubtotal(item))}</span>
+                        <span className="text-gray-900 truncate mr-2">{item.name}</span>
+                        <span className="text-gray-900 flex-shrink-0">{money(itemSubtotal(item))}</span>
                       </div>
-                      <p className="text-[10px] text-muted-foreground">
+                      <p className="text-[10px] text-gray-500">
                         {item.quantity} × {money(item.price)}
                         {item.discount > 0 && ` (-${item.discount}%)`}
                       </p>
@@ -659,35 +668,45 @@ export function POS() {
                   ))}
                 </div>
 
-                <Separator className="my-2" />
+                <Separator className="my-2 bg-gray-200" />
 
                 <div className="space-y-1 text-xs">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span className="text-foreground">{money(receiptData.subtotal)}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span className="text-gray-900">{money(receiptData.subtotal)}</span></div>
                   {receiptData.discountAmount > 0 && <div className="flex justify-between text-amber-600"><span>Descuento ({receiptData.globalDiscount}%)</span><span>-{money(receiptData.discountAmount)}</span></div>}
-                  <div className="flex justify-between"><span className="text-muted-foreground">IVA</span><span className="text-foreground">{money(receiptData.tax)}</span></div>
-                  <Separator className="my-1" />
-                  <div className="flex justify-between font-bold text-base"><span className="text-foreground">Total</span><span className="text-orange-600">{money(receiptData.total)}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">IVA</span><span className="text-gray-900">{money(receiptData.tax)}</span></div>
+                  <Separator className="my-1 bg-gray-200" />
+                  <div className="flex justify-between font-bold text-lg"><span className="text-gray-900">Total</span><span className="text-orange-600">{money(receiptData.total)}</span></div>
                   {receiptData.paymentMethod === 'cash' && (
                     <>
-                      <div className="flex justify-between"><span className="text-muted-foreground">Recibido</span><span className="text-foreground">{money(receiptData.cashReceived)}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-500">Recibido</span><span className="text-gray-900">{money(receiptData.cashReceived)}</span></div>
                       <div className="flex justify-between text-green-600 font-semibold"><span>Cambio</span><span>{money(receiptData.change)}</span></div>
                     </>
                   )}
+                  {receiptData.paymentMethod !== 'cash' && (
+                    <div className="flex justify-between"><span className="text-gray-500">Método de pago</span><span className="text-gray-900 capitalize">{receiptData.paymentMethod === 'card' ? 'Tarjeta' : receiptData.paymentMethod === 'digital' ? 'Billetera digital' : receiptData.paymentMethod === 'transfer' ? 'Transferencia' : receiptData.paymentMethod === 'split' ? 'Pago dividido' : receiptData.paymentMethod}</span></div>
+                  )}
                 </div>
 
-                <div className="text-center mt-4 text-[10px] text-muted-foreground">
+                <div className="text-center mt-4 text-[10px] text-gray-500">
                   <p>¡Gracias por su compra!</p>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                <Button variant="outline" onClick={() => window.print()} className="border-border text-foreground text-xs">
+<Button variant="outline" onClick={() => window.print()} className="border-border text-foreground text-xs">
                   <Printer size={14} className="mr-1" /> Imprimir
                 </Button>
-                <Button variant="outline" onClick={() => toast.info('Enviando por WhatsApp...')} className="border-green-200 text-green-700 dark:border-green-800 dark:text-green-400 text-xs">
+                <Button variant="outline" onClick={() => {
+                  const msg = `*${config?.name || 'Manager Stock'}*\nFactura: ${receiptData.invoiceNumber}\nFecha: ${new Date(receiptData.date).toLocaleString('es-CO')}\n\n${receiptData.items.map((i: CartItem) => `${i.quantity}x ${i.name} - ${money(itemSubtotal(i))}`).join('\n')}\n\nSubtotal: ${money(receiptData.subtotal)}\nIVA: ${money(receiptData.tax)}\n*Total: ${money(receiptData.total)}*\nMétodo: ${receiptData.paymentMethod === 'cash' ? 'Efectivo' : receiptData.paymentMethod === 'card' ? 'Tarjeta' : receiptData.paymentMethod === 'digital' ? 'Billetera digital' : receiptData.paymentMethod === 'transfer' ? 'Transferencia' : receiptData.paymentMethod === 'split' ? 'Pago dividido' : receiptData.paymentMethod}`;
+                  window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+                }} className="border-green-200 text-green-700 dark:border-green-800 dark:text-green-400 text-xs">
                   <MessageCircle size={14} className="mr-1" /> WhatsApp
                 </Button>
-                <Button variant="outline" onClick={() => toast.info('Enviando por email...')} className="border-blue-200 text-blue-700 dark:border-blue-800 dark:text-blue-400 text-xs col-span-2">
+                <Button variant="outline" onClick={() => {
+                  const subject = encodeURIComponent(`Recibo ${receiptData.invoiceNumber} - ${config?.name || 'Manager Stock'}`);
+                  const body = encodeURIComponent(`Factura: ${receiptData.invoiceNumber}\nFecha: ${new Date(receiptData.date).toLocaleString('es-CO')}\n\n${receiptData.items.map((i: CartItem) => `${i.quantity}x ${i.name} - ${money(itemSubtotal(i))}`).join('\n')}\n\nSubtotal: ${money(receiptData.subtotal)}\nIVA: ${money(receiptData.tax)}\nTotal: ${money(receiptData.total)}\nMétodo: ${receiptData.paymentMethod}`);
+                  window.location.href = `mailto:?subject=${subject}&body=${body}`;
+                }} className="border-blue-200 text-blue-700 dark:border-blue-800 dark:text-blue-400 text-xs col-span-2">
                   <Mail size={14} className="mr-1" /> Enviar por correo
                 </Button>
               </div>

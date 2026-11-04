@@ -112,7 +112,7 @@ function animateThemeReveal(origin: { x: number; y: number }) {
     { radius: 0.85, wobble: 0.06, tendril: 0.2, spin: 0.3 },
     { radius: 1, wobble: 0.02, tendril: 0.1, spin: 0.4 },
   ];
-  const duration = 500;
+  const duration = 750;
   const clipPath = beats.map(beat => ({
     clipPath: venomBlob(origin.x, origin.y, reach * beat.radius, beat),
   }));
@@ -654,6 +654,7 @@ function LayoutShell({ children }: LayoutProps) {
             <span>{config?.name || 'Negocio principal'}</span>
           </div>
 
+          {/* Foto del dueño (solo interfaz). */}
           {/* Appearance controls are business-wide and therefore owner-only. */}
           {user?.role === 'owner' && <button
             onClick={handleThemeToggle}

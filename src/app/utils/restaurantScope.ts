@@ -13,6 +13,12 @@ export function useRestaurantScope(): string {
   return normalizeScope(config?.id || user?.businessId || config?.name || 'default');
 }
 
+export function useRestaurantBusinessId(): string {
+  const { config } = useBusiness();
+  const { user } = useAuth();
+  return config?.id || user?.businessId || config?.name || 'default';
+}
+
 export function useRestaurantCurrency(): string {
   const { config } = useBusiness();
   return config?.currency || 'COP';

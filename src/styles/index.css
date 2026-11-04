@@ -249,3 +249,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .to-yellow-500, .to-amber-500, .to-orange-600, .to-orange-700 { --tw-gradient-to: var(--brand-secondary) var(--tw-gradient-to-position) !important; }
 .from-orange-50 { --tw-gradient-from: var(--brand-soft) var(--tw-gradient-from-position) !important; }
 .border-orange-200, .border-orange-300 { border-color: color-mix(in srgb, var(--brand-primary) 22%, white) !important; }
+
+/* Transición suave al cambiar de tema claro/oscuro. */
+html.theme-transitioning,
+html.theme-transitioning * {
+  transition: background-color 0.7s ease, color 0.7s ease, border-color 0.7s ease, box-shadow 0.7s ease !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  html.theme-transitioning, html.theme-transitioning * { transition: none !important; }
+}

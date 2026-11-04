@@ -1,0 +1,115 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------------------
+    // Helpers de identidad.
+    //
+    // `businessId` y `role` llegan como custom claims del token de Firebase
+    // Auth. La fuente de verdad de la membresía sigue siendo
+    // `businesses/{businessId}/members/{uid}`; los claims son una caché para
+    // que las reglas no tengan que leer otro documento en cada operación.
+    // ---------------------------------------------------------------------
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function claimBusinessId() {
+      return request.auth.token.businessId;
+    }
+
+    function claimRole() {
+      return request.auth.token.role;
+    }
+
+    function inBusiness(businessId) {
+      return signedIn()
+        && claimBusinessId() is string
+        && claimBusinessId() == businessId;
+    }
+
+    function hasAnyRole(roles) {
+      return claimRole() is string && roles.hasAny([claimRole()]);
+    }
+
+    function isAdmin(businessId) {
+      return inBusiness(businessId)
+        && hasAnyRole(['owner', 'business_admin']);
+    }
+
+    function isKitchen(businessId) {
+      return inBusiness(businessId)
+        && hasAnyRole(['owner', 'business_admin', 'kitchen']);
+    }
+
+    function isWaiter(businessId) {
+      return inBusiness(businessId)
+        && hasAnyRole(['owner', 'business_admin', 'waiter']);
+    }
+
+    // ---------------------------------------------------------------------
+    // Negocio y configuración.
+    // ---------------------------------------------------------------------
+
+    match /businesses/{businessId} {
+      allow read: if inBusiness(businessId);
+      allow write: if false; // solo Admin SDK / Cloud Functions
+
+      match /members/{uid} {
+        allow read: if inBusiness(businessId);
+        allow write: if false; // los claims se actualizan desde Cloud Functions
+      }
+
+      match /staff/{staffId} {
+        allow read: if inBusiness(businessId);
+        allow write: if isAdmin(businessId);
+      }
+
+      match /tables/{tableId} {
+        allow read: if inBusiness(businessId);
+        allow write: if isAdmin(businessId);
+      }
+
+      match /settings/{docId} {
+        allow read: if inBusiness(businessId);
+        allow write: if isAdmin(businessId);
+      }
+
+      match /catalogOverrides/{productId} {
+        allow read: if inBusiness(businessId);
+        allow write: if isAdmin(businessId);
+      }
+
+      match /products/{productId} {
+        allow read: if inBusiness(businessId);
+        allow write: if isAdmin(businessId);
+      }
+
+      // El contador de numeración por jornada solo lo mueve Cloud Functions.
+      match /counters/{jornada} {
+        allow read: if inBusiness(businessId);
+        allow write: if false;
+      }
+
+      // -------------------------------------------------------------------
+      // Pedidos.
+      //
+      // El cliente NUNCA escribe pedidos directamente. Crear, tomar,
+      // finalizar, entregar y cancelar pasan por Cloud Functions, que
+      // validan membresía, estado y numeración en una transacción.
+      // -------------------------------------------------------------------
+
+      match /orders/{orderId} {
+        allow read: if inBusiness(businessId);
+        allow create, update, delete: if false;
+
+        match /events/{eventId} {
+          allow read: if inBusiness(businessId);
+          allow write: if false;
+        }
+      }
+    }
+  }
+}
