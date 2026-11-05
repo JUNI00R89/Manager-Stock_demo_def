@@ -27,10 +27,19 @@ import { Rooms } from './pages/hotel/Rooms';
 import { Availability } from './pages/hotel/Availability';
 import { Housekeeping } from './pages/hotel/Housekeeping';
 import { Locations } from './pages/warehouse/Locations';
+import { WarehouseOverview } from './pages/warehouse/Overview';
+import { WarehouseEntries } from './pages/warehouse/Entries';
+import { WarehouseExits } from './pages/warehouse/Exits';
+import { WarehouseAdjustments } from './pages/warehouse/Adjustments';
+import { WarehouseLots } from './pages/warehouse/Lots';
+import { WarehousePurchaseOrders } from './pages/warehouse/PurchaseOrders';
+import { WarehouseCounts } from './pages/warehouse/Counts';
+import { WarehouseTransfers } from './pages/warehouse/Transfers';
+import { WarehouseReports } from './pages/warehouse/Reports';
+import { WarehouseSettings } from './pages/warehouse/Settings';
+import { Recipes } from './pages/restaurant/Recipes';
 import { Appointments } from './pages/services/Appointments';
 import { Services } from './pages/services/Services';
-import { Transfers } from './pages/inventory/Transfers';
-import { PhysicalCount } from './pages/inventory/PhysicalCount';
 import { Movements } from './pages/inventory/Movements';
 import { UsersRoles } from './pages/UsersRoles';
 import { Reports } from './pages/Reports';
@@ -132,19 +141,32 @@ export const router = createBrowserRouter([
       { path: 'products/:id/edit', element: <NewProduct /> },
       { path: 'suppliers', element: <Suppliers /> },
       { path: 'suppliers/new', element: <NewSupplier /> },
-      { path: 'inventory/transfers', element: <Transfers /> },
-      { path: 'inventory/physical-count', element: <PhysicalCount /> },
-      { path: 'inventory/movements', element: <Movements /> },
+      { path: 'inventory/transfers', element: <Navigate to="/warehouse/transfers" replace /> },
+      { path: 'inventory/physical-count', element: <Navigate to="/warehouse/counts" replace /> },
+      { path: 'inventory/movements', element: <Navigate to="/warehouse/movements" replace /> },
+      { path: 'warehouse', element: <WarehouseOverview /> },
+      { path: 'warehouse/entries', element: <WarehouseEntries /> },
+      { path: 'warehouse/exits', element: <WarehouseExits mode="exit" /> },
+      { path: 'warehouse/waste', element: <WarehouseExits mode="waste" /> },
+      { path: 'warehouse/adjustments', element: <WarehouseAdjustments /> },
+      { path: 'warehouse/lots', element: <WarehouseLots /> },
+      { path: 'warehouse/purchase-orders', element: <WarehousePurchaseOrders /> },
+      { path: 'warehouse/counts', element: <WarehouseCounts /> },
+      { path: 'warehouse/transfers', element: <WarehouseTransfers /> },
+      { path: 'warehouse/locations', element: <Locations /> },
+      { path: 'warehouse/movements', element: <Movements /> },
+      { path: 'warehouse/reports', element: <WarehouseReports /> },
+      { path: 'warehouse/settings', element: <WarehouseSettings /> },
       { path: 'restaurant/tables', element: <Tables /> },
       { path: 'restaurant/kitchen', element: <Kitchen /> },
       { path: 'restaurant/waiter', element: <Waiter /> },
       { path: 'restaurant/orders', element: <Orders /> },
       { path: 'restaurant/catalog', element: <RestaurantCatalog /> },
+      { path: 'restaurant/recipes', element: <Recipes /> },
       { path: 'restaurant/settings', element: <RestaurantSettingsPage /> },
       { path: 'hotel/rooms', element: <Rooms /> },
       { path: 'hotel/availability', element: <Availability /> },
       { path: 'hotel/housekeeping', element: <Housekeeping /> },
-      { path: 'warehouse/locations', element: <Locations /> },
       { path: 'services', element: <Services /> },
       { path: 'services/appointments', element: <Appointments /> },
       { path: 'notifications', element: <Notifications /> },

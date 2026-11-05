@@ -26,6 +26,11 @@ export interface Product {
   cost?: number;
   productType?: 'sale_item' | 'ingredient' | 'supplies';
   unit?: string;
+  supplierId?: string | null;
+  supplierName?: string | null;
+  barcode?: string;
+  trackLots?: boolean;
+  defaultLocationId?: string | null;
   variantesIds?: string[];
   codigosBarras?: string[];
 }

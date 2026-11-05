@@ -80,7 +80,7 @@ export interface RecipeInput {
   productId: string;
   yieldQuantity: number;
   instructions?: string;
-  ingredients: { ingredientId: string; quantity: number }[];
+  ingredients: { ingredientId: string; quantity: number; unit?: string }[];
 }
 
 export type OrderChannel = 'counter' | 'takeaway' | 'delivery' | 'table';
@@ -158,7 +158,7 @@ export interface AuditLogRecord {
   createdAt: string;
 }
 
-export type InventoryMovementType = 'opening' | 'purchase' | 'sale' | 'sale_cancelled' | 'adjustment' | 'transfer_in' | 'transfer_out' | 'waste';
+export type InventoryMovementType = 'opening' | 'purchase' | 'customer_return' | 'donation' | 'sale' | 'sale_cancelled' | 'recipe_consumption' | 'consumption' | 'adjustment' | 'transfer_in' | 'transfer_out' | 'waste' | 'count_adjustment' | 'production';
 export interface InventoryMovementRecord {
   id: number | string;
   productId: string;
@@ -170,6 +170,160 @@ export interface InventoryMovementRecord {
   stockAfter: number;
   note: string;
   createdAt: string;
+  sku?: string;
+  productUnit?: string;
+  reason?: string;
+  createdByName?: string;
+  lotId?: string | null;
+  locationId?: string | null;
+  locationCode?: string | null;
+  referenceType?: string;
+  referenceId?: string;
+  unitCost?: number;
+}
+
+export interface InventoryLocationRecord {
+  id: string; code: string; name: string; zone: string; aisle: string; rack: string;
+  level: number; capacity: number; active: boolean; productCount: number; lotUnits: number;
+  label: string; createdAt: string;
+}
+
+export interface InventoryLotRecord {
+  id: string; productId: string; productName: string; sku: string; productUnit: string;
+  lotCode: string; quantity: number; expiryDate: string | null; daysLeft: number | null;
+  status: 'vencido' | 'por_vencer' | 'vigente' | 'sin_vencimiento';
+  unitCost: number; locationId: string | null; locationCode: string | null;
+  locationName: string | null; receivedAt: string; value: number;
+}
+
+export interface InventoryAlertRecord {
+  type: 'low_stock' | 'out_of_stock' | 'negative_stock' | 'expired_lot' | 'expiring_lot';
+  severity: 'high' | 'medium' | 'low'; productId: string; productName: string; sku: string;
+  stock?: number; minStock?: number; unit?: string; lotCode?: string;
+  expiryDate?: string | null; daysLeft?: number | null; quantity?: number; message: string;
+}
+
+export interface InventoryOperationRecord {
+  id: string; operationType: string; supplierId: string | null; reference: string;
+  reason: string; reasonCode: string; invoiceRef: string; attachmentUrl: string;
+  notes: string; createdBy: string | null; createdByName: string; createdAt: string;
+  items: Array<{
+    movementId: number; productId: string; productName: string; productUnit: string;
+    movementType: InventoryMovementType; quantity: number; stockBefore: number;
+    stockAfter: number; unitCost: number; lotId: string | null;
+    locationId: string | null; locationCode: string | null; reason: string;
+  }>;
+  reasonLabel?: string;
+}
+
+export interface InventoryOverviewRecord {
+  totalValue: number; totalRetailValue: number; totalUnits: number; productCount: number;
+  lowStockCount: number; outOfStockCount: number; negativeStockCount: number;
+  expiringCount: number; expiredCount: number; wasteCost: number;
+  lowStockProducts: Product[]; expiringLots: InventoryLotRecord[];
+  recentMovements: InventoryMovementRecord[]; generatedAt: string;
+  settings: InventorySettingsRecord;
+}
+
+export interface InventorySettingsRecord {
+  allowNegativeStock: boolean; expiryAlertDays: number; lowStockAlerts: boolean;
+  defaultLocationId: string | null; defaultLocationName?: string | null;
+  negativeStockPermission?: boolean;
+}
+
+export interface EntryItemInput {
+  productId: string; quantity: number; unit?: string; unitCost?: number;
+  lotCode?: string; expiryDate?: string | null; locationId?: string | null;
+}
+export interface EntryInput {
+  entryType: 'purchase' | 'customer_return' | 'donation' | 'opening';
+  supplierId?: string | null; reference?: string; invoiceRef?: string;
+  notes?: string; attachmentUrl?: string; items: EntryItemInput[];
+}
+export interface ExitInput {
+  exitType: 'consumption' | 'direct_sale' | 'other'; reason?: string; notes?: string;
+  items: Array<{ productId: string; quantity: number; unit?: string; lotId?: string | null }>;
+}
+export interface WasteInput {
+  reasonCode: string; reason: string; notes?: string;
+  items: Array<{ productId: string; quantity: number; unit?: string; lotId?: string | null }>;
+}
+export interface AdjustmentInput {
+  reason: string; notes?: string;
+  items: Array<{ productId: string; quantityDelta: number; unit?: string; lotId?: string | null }>;
+}
+
+export interface PurchaseOrderItemRecord {
+  id: number; productId: string; productName: string; sku: string;
+  productUnit: string; unit: string; quantityOrdered: number; quantityReceived: number;
+  pendingQuantity: number; unitCost: number; lineTotal: number;
+}
+export interface PurchaseOrderRecord {
+  id: string; supplierId: string; supplierName: string; supplierContact: string;
+  status: 'draft' | 'sent' | 'partial' | 'received' | 'cancelled';
+  expectedDate: string | null; notes: string; createdBy: string | null; createdByName: string;
+  approvedBy: string | null; approvedAt: string | null; createdAt: string; updatedAt: string;
+  total: number; items: PurchaseOrderItemRecord[]; pendingLines: number; operationId?: string;
+}
+export interface PurchaseOrderInput {
+  supplierId: string; expectedDate?: string | null; notes?: string;
+  items: Array<{ productId: string; quantity: number; unitCost: number; unit?: string }>;
+}
+export interface ReceivePurchaseOrderInput {
+  invoiceRef?: string; notes?: string;
+  items: Array<{ itemId: number; quantity: number; unit?: string; unitCost?: number | null; lotCode?: string; expiryDate?: string | null; locationId?: string | null }>;
+}
+
+export interface PhysicalCountRecord {
+  id: string; status: 'open' | 'closed' | 'cancelled'; notes: string;
+  createdBy: string | null; createdByName: string; createdAt: string; closedAt: string | null;
+  items: Array<{
+    id: number; productId: string; productName: string; sku: string; productUnit: string;
+    systemQuantity: number; countedQuantity: number; difference: number; adjustmentMovementId: number | null;
+  }>;
+  differenceCount: number; totalDifference: number; operationId?: string;
+}
+
+export interface TransferRecord {
+  id: string; status: 'draft' | 'pending' | 'in_transit' | 'received' | 'cancelled';
+  notes: string; originLocationId: string | null; originCode: string | null; originName: string | null;
+  destinationLocationId: string | null; destinationCode: string | null; destinationName: string | null;
+  createdBy: string | null; createdByName: string; createdAt: string;
+  sentAt: string | null; receivedAt: string | null;
+  items: Array<{
+    id: number; productId: string; productName: string; sku: string; productUnit: string;
+    quantity: number; lotId: string | null; lotCode: string; expiryDate: string | null; unitCost: number;
+    allocations: Array<{ id: number; lotCode: string; expiryDate: string | null; quantity: number; unitCost: number }>;
+  }>;
+  totalUnits: number; totalCost: number; operationId?: string;
+}
+
+export interface SupplierPriceHistoryRecord {
+  id: number; productId: string; productName: string; sku: string; productUnit: string;
+  supplierId: string | null; supplierName: string | null; unitCost: number; source: string;
+  referenceType: string; referenceId: string; createdBy: string | null; createdAt: string;
+}
+
+export interface InventoryReportsRecord {
+  totalValue: number; totalUnits: number; productCount: number;
+  criticalStock: Product[]; criticalStockCount: number;
+  expiringItems: InventoryLotRecord[]; expiringCount: number;
+  wasteCost: number; wasteByReason: Array<{ reasonCode: string; reasonLabel: string; quantity: number; cost: number }>;
+  rotation: Array<{ productId: string; productName: string; sku: string; unit: string; quantity: number; cost: number; movements: number }>;
+  noMovement: Array<{ productId: string; productName: string; sku: string; stock: number; unit: string; lastMovementAt: string | null }>;
+  countDifferences: Array<{ countId: string; productId: string; productName: string; systemQuantity: number; countedQuantity: number; difference: number; unit: string; createdAt: string }>;
+  periodDays: number; noMovementDays: number; generatedAt: string;
+}
+
+export interface DishCostingRecord {
+  recipeId: string; productId: string; productName: string; yieldQuantity: number;
+  cost: number; price: number; margin: number; marginPercent: number;
+  ingredients: Array<{ ingredientId: string; name: string; quantity: number; unit: string; baseQuantity: number; productUnit: string; unitCost: number; cost: number }>;
+}
+
+export interface ProductSubstitutionRecord {
+  productId: string; productName: string; substituteId: string; substituteName: string;
+  substituteStock: number; substituteUnit: string; priority: number; notes: string;
 }
 
 interface LocalDatabase {
@@ -861,7 +1015,7 @@ export const dataService = {
   },
   async saveRecipe(input: RecipeInput): Promise<RecipeRecord> {
     try {
-      const data = await api<RecipeRecord>('/recipes', { method: 'POST', body: JSON.stringify(input) });
+      const data = await api<RecipeRecord>('/recipes', { method: 'POST', body: JSON.stringify({ ...input, ingredients: input.ingredients.map(item => ({ ingredientId: item.ingredientId, quantity: item.quantity, unit: item.unit || '' })) }) });
       const db = readLocal(); db.recipes = [...db.recipes.filter(r => r.productId !== data.productId), data]; writeLocal(db); return data;
     } catch (error) {
       if (!canFallbackToLocal(error)) throw error;
@@ -872,7 +1026,7 @@ export const dataService = {
       if (new Set(input.ingredients.map(i => i.ingredientId)).size !== input.ingredients.length) throw new Error('No repitas el mismo ingrediente.');
       const ingredients = input.ingredients.map(item => {
         const p = db.products.find(productRow => productRow.id === item.ingredientId)!;
-        return { ingredientId: p.id, name: p.name, quantity: item.quantity, unit: p.unit || 'unidad', stock: p.stock };
+        return { ingredientId: p.id, name: p.name, quantity: item.quantity, unit: item.unit || p.unit || 'unidad', stock: p.stock };
       });
       const existing = db.recipes.find(r => r.productId === input.productId);
       const record: RecipeRecord = { id: existing?.id || uniqueId('REC'), productId: product.id, productName: product.name, yieldQuantity: input.yieldQuantity, instructions: input.instructions, ingredients };
@@ -1017,7 +1171,7 @@ export const dataService = {
     catch (error) { if (!canFallbackToLocal(error)) throw error; }
     const db = readLocal(); const order = db.orders.find(o => o.id === id); if (order) order.status = status; writeLocal(db);
   },
-  async getInventoryMovements(limit = 10000, productId?: string): Promise<InventoryMovementRecord[]> {
+  async getInventoryMovements(limit = 10000, productId?: string, filters?: { types?: string; search?: string; dateFrom?: string; dateTo?: string; locationId?: string }): Promise<InventoryMovementRecord[]> {
     try {
       const pageSize = 500;
       const rows: any[] = [];
@@ -1025,17 +1179,165 @@ export const dataService = {
       while (rows.length < limit) {
         const params = new URLSearchParams({ limit: String(Math.min(pageSize, limit - rows.length)), offset: String(offset) });
         if (productId) params.set('productId', productId);
+        if (filters?.types) params.set('movementType', filters.types);
+        if (filters?.search) params.set('search', filters.search);
+        if (filters?.dateFrom) params.set('dateFrom', filters.dateFrom);
+        if (filters?.dateTo) params.set('dateTo', filters.dateTo);
+        if (filters?.locationId) params.set('locationId', filters.locationId);
         const page = await api<any[]>(`/inventory/movements?${params.toString()}`);
         rows.push(...page);
         if (page.length < Math.min(pageSize, limit - (rows.length - page.length))) break;
         offset += page.length;
       }
-      const normalized: InventoryMovementRecord[] = rows.map(row => ({ id: row.id, productId: row.product_id, productName: row.product_name, saleId: row.sale_id, movementType: row.movement_type, quantityDelta: row.quantity_delta, stockBefore: row.stock_before, stockAfter: row.stock_after, note: row.note, createdAt: row.created_at }));
+      const normalized: InventoryMovementRecord[] = rows.map(row => ({
+        id: row.id, productId: row.product_id, productName: row.product_name, saleId: row.sale_id,
+        movementType: row.movement_type, quantityDelta: row.quantity_delta, stockBefore: row.stock_before,
+        stockAfter: row.stock_after, note: row.note, createdAt: row.created_at, sku: row.sku,
+        productUnit: row.product_unit, reason: row.reason, createdByName: row.created_by_name,
+        lotId: row.lot_id, locationId: row.location_id, locationCode: row.location_code,
+        referenceType: row.reference_type, referenceId: row.reference_id, unitCost: row.unit_cost,
+      }));
       const db = readLocal(); db.movements = normalized; writeLocal(db); return normalized;
     } catch (error) {
       if (!canFallbackToLocal(error)) throw error;
       return readLocal().movements.filter(row => !productId || row.productId === productId).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
     }
+  },
+  async getInventoryOverview(): Promise<InventoryOverviewRecord> {
+    try { return await api<InventoryOverviewRecord>('/inventory/overview'); }
+    catch (error) {
+      if (!canFallbackToLocal(error)) throw error;
+      const products = readLocal().products;
+      const lowStock = products.filter(product => product.stock <= product.minStock);
+      return { totalValue: products.reduce((sum, p) => sum + p.stock * (p.cost || 0), 0), totalRetailValue: products.reduce((sum, p) => sum + p.stock * p.price, 0), totalUnits: products.reduce((sum, p) => sum + p.stock, 0), productCount: products.length, lowStockCount: lowStock.length, outOfStockCount: products.filter(p => p.stock <= 0).length, negativeStockCount: products.filter(p => p.stock < 0).length, expiringCount: 0, expiredCount: 0, wasteCost: 0, lowStockProducts: lowStock, expiringLots: [], recentMovements: [], generatedAt: new Date().toISOString(), settings: { allowNegativeStock: false, expiryAlertDays: 30, lowStockAlerts: true, defaultLocationId: null } };
+    }
+  },
+  async getInventoryAlerts(): Promise<{ generatedAt: string; alerts: InventoryAlertRecord[] }> {
+    try { return await api<{ generatedAt: string; alerts: InventoryAlertRecord[] }>('/inventory/alerts'); }
+    catch (error) { if (!canFallbackToLocal(error)) throw error; return { generatedAt: new Date().toISOString(), alerts: [] }; }
+  },
+  async getInventorySettings(): Promise<InventorySettingsRecord> {
+    try { return await api<InventorySettingsRecord>('/inventory/settings'); }
+    catch (error) { if (!canFallbackToLocal(error)) throw error; return { allowNegativeStock: false, expiryAlertDays: 30, lowStockAlerts: true, defaultLocationId: null }; }
+  },
+  async updateInventorySettings(input: InventorySettingsRecord): Promise<InventorySettingsRecord> {
+    return api<InventorySettingsRecord>('/inventory/settings', { method: 'PUT', body: JSON.stringify(input) });
+  },
+  async getInventoryLocations(includeInactive = false): Promise<InventoryLocationRecord[]> {
+    try { return await api<InventoryLocationRecord[]>(`/inventory/locations?includeInactive=${includeInactive ? 'true' : 'false'}`); }
+    catch (error) { if (!canFallbackToLocal(error)) throw error; return []; }
+  },
+  async createInventoryLocation(input: Omit<InventoryLocationRecord, 'id' | 'productCount' | 'lotUnits' | 'label' | 'createdAt'>): Promise<InventoryLocationRecord> {
+    return api<InventoryLocationRecord>('/inventory/locations', { method: 'POST', body: JSON.stringify(input) });
+  },
+  async updateInventoryLocation(id: string, input: Omit<InventoryLocationRecord, 'id' | 'productCount' | 'lotUnits' | 'label' | 'createdAt'>): Promise<InventoryLocationRecord> {
+    return api<InventoryLocationRecord>(`/inventory/locations/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) });
+  },
+  async deleteInventoryLocation(id: string): Promise<void> {
+    await api(`/inventory/locations/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  },
+  async getInventoryLots(filters?: { productId?: string; locationId?: string; status?: string; search?: string; includeEmpty?: boolean }): Promise<InventoryLotRecord[]> {
+    const params = new URLSearchParams();
+    if (filters?.productId) params.set('productId', filters.productId);
+    if (filters?.locationId) params.set('locationId', filters.locationId);
+    if (filters?.status) params.set('status', filters.status);
+    if (filters?.search) params.set('search', filters.search);
+    if (filters?.includeEmpty) params.set('includeEmpty', 'true');
+    try { return await api<InventoryLotRecord[]>(`/inventory/lots?${params.toString()}`); }
+    catch (error) { if (!canFallbackToLocal(error)) throw error; return []; }
+  },
+  async lookupInventoryBarcode(code: string): Promise<{ products: Product[]; lots: InventoryLotRecord[] }> {
+    return api<{ products: Product[]; lots: InventoryLotRecord[] }>(`/inventory/barcode/${encodeURIComponent(code)}`);
+  },
+  async createInventoryEntry(input: EntryInput): Promise<InventoryOperationRecord> {
+    return api<InventoryOperationRecord>('/inventory/entries', { method: 'POST', body: JSON.stringify(input) });
+  },
+  async createInventoryExit(input: ExitInput): Promise<InventoryOperationRecord> {
+    return api<InventoryOperationRecord>('/inventory/exits', { method: 'POST', body: JSON.stringify(input) });
+  },
+  async createInventoryWaste(input: WasteInput): Promise<InventoryOperationRecord> {
+    return api<InventoryOperationRecord>('/inventory/waste', { method: 'POST', body: JSON.stringify(input) });
+  },
+  async createInventoryAdjustment(input: AdjustmentInput): Promise<InventoryOperationRecord> {
+    return api<InventoryOperationRecord>('/inventory/adjustments', { method: 'POST', body: JSON.stringify(input) });
+  },
+  async getPurchaseOrders(filters?: { status?: string; supplierId?: string; search?: string }): Promise<PurchaseOrderRecord[]> {
+    const params = new URLSearchParams();
+    if (filters?.status) params.set('status', filters.status);
+    if (filters?.supplierId) params.set('supplierId', filters.supplierId);
+    if (filters?.search) params.set('search', filters.search);
+    try { return await api<PurchaseOrderRecord[]>(`/inventory/purchase-orders?${params.toString()}`); }
+    catch (error) { if (!canFallbackToLocal(error)) throw error; return []; }
+  },
+  async createPurchaseOrder(input: PurchaseOrderInput): Promise<PurchaseOrderRecord> {
+    return api<PurchaseOrderRecord>('/inventory/purchase-orders', { method: 'POST', body: JSON.stringify(input) });
+  },
+  async approvePurchaseOrder(id: string): Promise<PurchaseOrderRecord> {
+    return api<PurchaseOrderRecord>(`/inventory/purchase-orders/${encodeURIComponent(id)}/approve`, { method: 'POST' });
+  },
+  async sendPurchaseOrder(id: string): Promise<PurchaseOrderRecord> {
+    return api<PurchaseOrderRecord>(`/inventory/purchase-orders/${encodeURIComponent(id)}/send`, { method: 'POST' });
+  },
+  async receivePurchaseOrder(id: string, input: ReceivePurchaseOrderInput): Promise<PurchaseOrderRecord> {
+    return api<PurchaseOrderRecord>(`/inventory/purchase-orders/${encodeURIComponent(id)}/receive`, { method: 'POST', body: JSON.stringify(input) });
+  },
+  async cancelPurchaseOrder(id: string): Promise<PurchaseOrderRecord> {
+    return api<PurchaseOrderRecord>(`/inventory/purchase-orders/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
+  },
+  async getPhysicalCounts(limit = 50): Promise<PhysicalCountRecord[]> {
+    try { return await api<PhysicalCountRecord[]>(`/inventory/counts?limit=${limit}`); }
+    catch (error) { if (!canFallbackToLocal(error)) throw error; return []; }
+  },
+  async createPhysicalCount(input: { notes?: string; items: Array<{ productId: string; countedQuantity: number }> }): Promise<PhysicalCountRecord> {
+    return api<PhysicalCountRecord>('/inventory/counts', { method: 'POST', body: JSON.stringify(input) });
+  },
+  async getTransfers(status?: string): Promise<TransferRecord[]> {
+    const params = status ? `?status=${encodeURIComponent(status)}` : '';
+    try { return await api<TransferRecord[]>(`/inventory/transfers${params}`); }
+    catch (error) { if (!canFallbackToLocal(error)) throw error; return []; }
+  },
+  async createTransfer(input: { originLocationId: string; destinationLocationId: string; notes?: string; items: Array<{ productId: string; quantity: number; unit?: string; lotId?: string | null }> }): Promise<TransferRecord> {
+    return api<TransferRecord>('/inventory/transfers', { method: 'POST', body: JSON.stringify(input) });
+  },
+  async sendTransfer(id: string): Promise<TransferRecord> {
+    return api<TransferRecord>(`/inventory/transfers/${encodeURIComponent(id)}/send`, { method: 'POST' });
+  },
+  async receiveTransfer(id: string): Promise<TransferRecord> {
+    return api<TransferRecord>(`/inventory/transfers/${encodeURIComponent(id)}/receive`, { method: 'POST' });
+  },
+  async cancelTransfer(id: string): Promise<TransferRecord> {
+    return api<TransferRecord>(`/inventory/transfers/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
+  },
+  async getPriceHistory(filters?: { productId?: string; supplierId?: string; limit?: number }): Promise<SupplierPriceHistoryRecord[]> {
+    const params = new URLSearchParams();
+    if (filters?.productId) params.set('productId', filters.productId);
+    if (filters?.supplierId) params.set('supplierId', filters.supplierId);
+    if (filters?.limit) params.set('limit', String(filters.limit));
+    try { return await api<SupplierPriceHistoryRecord[]>(`/inventory/price-history?${params.toString()}`); }
+    catch (error) { if (!canFallbackToLocal(error)) throw error; return []; }
+  },
+  async getInventoryReports(days = 30, noMovementDays = 60): Promise<InventoryReportsRecord> {
+    try { return await api<InventoryReportsRecord>(`/inventory/reports?days=${days}&noMovementDays=${noMovementDays}`); }
+    catch (error) { if (!canFallbackToLocal(error)) throw error; return { totalValue: 0, totalUnits: 0, productCount: 0, criticalStock: [], criticalStockCount: 0, expiringItems: [], expiringCount: 0, wasteCost: 0, wasteByReason: [], rotation: [], noMovement: [], countDifferences: [], periodDays: days, noMovementDays, generatedAt: new Date().toISOString() }; }
+  },
+  async getReplenishment(): Promise<Array<Product & { suggestedQuantity: number; lastCost: number; estimatedCost: number }>> {
+    try { return await api<Array<Product & { suggestedQuantity: number; lastCost: number; estimatedCost: number }>>('/inventory/replenishment'); }
+    catch (error) { if (!canFallbackToLocal(error)) throw error; return []; }
+  },
+  async getDishCosting(): Promise<DishCostingRecord[]> {
+    try { return await api<DishCostingRecord[]>('/inventory/dish-costing'); }
+    catch (error) { if (!canFallbackToLocal(error)) throw error; return []; }
+  },
+  async getSubstitutions(productId?: string): Promise<ProductSubstitutionRecord[]> {
+    const params = productId ? `?productId=${encodeURIComponent(productId)}` : '';
+    try { return await api<ProductSubstitutionRecord[]>(`/inventory/substitutions${params}`); }
+    catch (error) { if (!canFallbackToLocal(error)) throw error; return []; }
+  },
+  async saveSubstitution(input: { productId: string; substituteId: string; priority?: number; notes?: string }): Promise<{ ok: boolean }> {
+    return api<{ ok: boolean }>('/inventory/substitutions', { method: 'POST', body: JSON.stringify(input) });
+  },
+  async deleteSubstitution(productId: string, substituteId: string): Promise<void> {
+    await api(`/inventory/substitutions/${encodeURIComponent(productId)}/${encodeURIComponent(substituteId)}`, { method: 'DELETE' });
   },
   async getAuditLog(limit = 300): Promise<AuditLogRecord[]> {
     try {

@@ -60,7 +60,8 @@ def run() -> None:
         invalid_theme_config = {**config, "theme": {**config["theme"], "primary":"red; color: lime"}}
         assert client.put("/api/business/config", headers=auth, json=invalid_theme_config).status_code == 422
         recipes = client.get("/api/recipes", headers=auth)
-        assert recipes.status_code == 404, recipes.text
+        assert recipes.status_code == 200, recipes.text
+        assert recipes.json() == []
 
         def create_product(name: str, sku: str, price: float, cost: float, stock: float):
             response = client.post("/api/products", headers=auth, json={
@@ -119,6 +120,7 @@ def run() -> None:
         after_cancel = {product["id"]: product for product in client.get("/api/products", headers=auth).json()}
         assert after_cancel[burger["id"]]["stock"] == before_burger
         assert after_cancel[empanada["id"]]["stock"] == before_empanada
+
         events = client.get("/api/audit", headers=auth).json()
         assert events and events[0]["createdAt"].endswith("+00:00"), events[:1]
         assert any(event["action"] == "create" and event["entityId"] == sale["id"] for event in events)
@@ -153,7 +155,7 @@ def run() -> None:
         restored_type = client.post(f"/api/business/type-transitions/{active_transition['id']}/restore", headers=auth)
         assert restored_type.status_code == 200, restored_type.text
         assert client.get("/api/business/config", headers=auth).json()["type"] == "restaurant"
-        assert client.get("/api/recipes", headers=auth).status_code == 404
+        assert client.get("/api/recipes", headers=auth).status_code == 200
 
         # Tax is authoritative on the server; ignore a manipulated taxRate in the sale body.
         tax_config = {**config, "taxRate": 0.19}
@@ -240,9 +242,21 @@ def run() -> None:
         global_events = client.get("/api/platform/audit", headers=super_headers)
         assert global_events.status_code == 200 and len(global_events.json()) >= 2, global_events.text
 
-        # Food businesses do not allow ingredient records because recipes are not part of this workflow.
-        ingredient_rejected = client.post("/api/products", headers=auth, json={"name":"Ingrediente demo","sku":"ING-TEST","category":"Ingredientes","price":0,"cost":100,"stock":5,"minStock":1,"productType":"ingredient"})
-        assert ingredient_rejected.status_code == 422, ingredient_rejected.text
+        # Food businesses manage recipes and ingredients; recipe-based sales deduct the registered ingredients.
+        ingredient_created = client.post("/api/products", headers=auth, json={"name":"Harina de trigo","sku":"ING-FLOUR","category":"Comidas rapidas","price":0,"cost":3000,"stock":1000,"minStock":10,"productType":"ingredient","unit":"kg"})
+        assert ingredient_created.status_code == 201, ingredient_created.text
+        burger_recipe = client.post("/api/recipes", headers=auth, json={"productId": burger["id"], "yieldQuantity": 1, "instructions": "Cocinar la hamburguesa", "ingredients": [{"ingredientId": ingredient_created.json()["id"], "quantity": 2, "unit": "kg"}]})
+        assert burger_recipe.status_code == 201, burger_recipe.text
+        ingredient_id = ingredient_created.json()["id"]
+        ingredient_before_recipe_sale = next(p for p in client.get("/api/products", headers=auth).json() if p["id"] == ingredient_id)["stock"]
+        recipe_sale = client.post("/api/sales", headers=auth, json={"idempotencyKey":"recipe-sale-001","items":[{"productId": burger["id"], "quantity": 2, "discountPercent": 0}],"customer":"Cliente de receta","paymentMethod":"cash","taxRate":0})
+        assert recipe_sale.status_code == 201, recipe_sale.text
+        refreshed_recipe_products = {product["id"]: product for product in client.get("/api/products", headers=auth).json()}
+        assert refreshed_recipe_products[burger["id"]]["stock"] == before_burger, refreshed_recipe_products[burger["id"]]
+        assert refreshed_recipe_products[ingredient_id]["stock"] < ingredient_before_recipe_sale, refreshed_recipe_products[ingredient_id]
+        recipe_cancel = client.post(f"/api/sales/{recipe_sale.json()['id']}/cancel", headers=auth)
+        assert recipe_cancel.status_code == 200, recipe_cancel.text
+        assert recipe_cancel.json()["status"] == "cancelled"
         # Split payment must have a complete payment breakdown to avoid paid totals with no recorded payment.
         invalid_split = client.post("/api/sales", headers=auth, json={"idempotencyKey":"split-without-payments-001","items":[{"productId":burger["id"],"quantity":1}],"paymentMethod":"split","taxRate":0})
         assert invalid_split.status_code == 422, invalid_split.text

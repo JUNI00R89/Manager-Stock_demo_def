@@ -12,7 +12,7 @@ import re
 import unicodedata
 from contextvars import ContextVar
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Literal
@@ -137,11 +137,36 @@ def public_user(row: sqlite3.Row, conn: sqlite3.Connection | None = None) -> dic
 
 DELEGABLE_PERMISSIONS = {
     "dashboard.view", "catalog.view", "catalog.create", "catalog.edit",
-    "inventory.view", "inventory.edit", "suppliers.view", "suppliers.manage",
+    "inventory.view", "inventory.edit", "inventory.entry", "inventory.adjust",
+    "inventory.delete", "inventory.negative", "purchases.approve",
+    "suppliers.view", "suppliers.manage",
     "sales.view", "sales.create", "sales.cancel", "cash.view", "cash.manage",
     "orders.view", "orders.manage", "reports.view", "activity.view",
     "hotel.view", "hotel.manage", "services.view", "services.manage",
 }
+
+
+def custom_permissions(identity: dict | None = None) -> set[str]:
+    """Effective delegated permissions for the signed-in custom role."""
+    identity = identity or current_identity()
+    if not identity.get("custom_role_id"):
+        return set()
+    with connection() as conn:
+        row = conn.execute(
+            "SELECT permissions_json FROM custom_roles WHERE id=? AND business_id=?",
+            (identity["custom_role_id"], identity.get("business_id")),
+        ).fetchone()
+    try:
+        return set(json.loads(row["permissions_json"] or "[]")) if row else set()
+    except json.JSONDecodeError:
+        return set()
+
+
+def has_permission(permission: str) -> bool:
+    identity = current_identity()
+    if identity["role"] in {"owner", "business_admin"}:
+        return True
+    return permission in custom_permissions(identity)
 
 
 def required_permission_for_request(path: str, method: str) -> str | None:
@@ -157,8 +182,32 @@ def required_permission_for_request(path: str, method: str) -> str | None:
         return "catalog.view" if method == "GET" else "catalog.edit"
     if path == "/api/suppliers":
         return "suppliers.view" if method == "GET" else "suppliers.manage"
-    if path.startswith("/api/suppliers/") or path.startswith("/api/inventory/"):
-        return "inventory.view" if method == "GET" else "inventory.edit"
+    if path.startswith("/api/suppliers/"):
+        return "suppliers.view" if method == "GET" else "suppliers.manage"
+    if path == "/api/recipes":
+        return "catalog.view" if method == "GET" else "catalog.edit"
+    if path.startswith("/api/recipes/"):
+        return "catalog.view" if method == "GET" else "catalog.edit"
+    if path.startswith("/api/inventory/"):
+        if path.startswith("/api/inventory/purchase-orders"):
+            if method == "GET":
+                return "inventory.view"
+            if "/receive" in path:
+                return "inventory.entry"
+            if "/approve" in path or "/send" in path or "/cancel" in path:
+                return "purchases.approve"
+            return "inventory.entry"
+        if method == "GET":
+            return "inventory.view"
+        if method == "DELETE":
+            return "inventory.delete"
+        if path.startswith("/api/inventory/adjustments") or path.startswith("/api/inventory/counts"):
+            return "inventory.adjust"
+        if path == "/api/inventory/settings":
+            return "inventory.edit"
+        if path.startswith("/api/inventory/locations"):
+            return "inventory.edit"
+        return "inventory.entry"
     if path == "/api/sales":
         return "sales.view" if method == "GET" else "sales.create"
     if path.startswith("/api/sales/") and path.endswith("/cancel"):
@@ -244,7 +293,7 @@ async def authenticate_and_authorize(request: Request, call_next):
     # A hidden frontend route alone is not authorization.
     if role != "superadmin":
         module = None
-        if path.startswith("/api/products") or path.startswith("/api/product-categories"):
+        if path.startswith("/api/products") or path.startswith("/api/product-categories") or path.startswith("/api/recipes"):
             module = "catalog_read" if request.method == "GET" else "catalog_write"
         elif path.startswith("/api/hotel/"):
             module = "hotel"
@@ -397,10 +446,16 @@ def ensure_product_category(conn: sqlite3.Connection, business_id: str, category
 
 
 def product_out(row: sqlite3.Row) -> dict:
+    keys = set(row.keys())
     return {
         "id": row["id"], "name": row["name"], "sku": row["sku"], "category": row["category"],
         "price": row["price"], "cost": row["cost"], "stock": row["stock"], "minStock": row["min_stock"],
         "description": row["description"], "image": row["image"], "productType": row["product_type"], "unit": row["unit"],
+        "supplierId": row["supplier_id"] if "supplier_id" in keys else None,
+        "supplierName": row["supplier_name"] if "supplier_name" in keys else None,
+        "barcode": row["barcode"] if "barcode" in keys else "",
+        "trackLots": bool(row["track_lots"]) if "track_lots" in keys else False,
+        "defaultLocationId": row["default_location_id"] if "default_location_id" in keys else None,
     }
 
 
@@ -412,6 +467,410 @@ def table_has_column(conn: sqlite3.Connection, table: str, column: str) -> bool:
     if not table_exists(conn, table):
         return False
     return column in {row["name"] for row in conn.execute(f'PRAGMA table_info("{table}")').fetchall()}
+
+
+INVENTORY_MOVEMENTS_V2 = """
+CREATE TABLE IF NOT EXISTS inventory_movements (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  business_id TEXT NOT NULL REFERENCES businesses(id),
+  product_id TEXT NOT NULL REFERENCES products(id),
+  sale_id TEXT REFERENCES sales(id),
+  order_id TEXT REFERENCES orders(id),
+  operation_id TEXT REFERENCES inventory_operations(id),
+  lot_id TEXT REFERENCES product_lots(id),
+  location_id TEXT REFERENCES warehouse_locations(id),
+  movement_type TEXT NOT NULL CHECK(movement_type IN ('opening','purchase','customer_return','donation','sale','sale_cancelled','recipe_consumption','consumption','adjustment','transfer_in','transfer_out','waste','count_adjustment','production')),
+  quantity_delta REAL NOT NULL,
+  stock_before REAL NOT NULL,
+  stock_after REAL NOT NULL,
+  unit_cost REAL NOT NULL DEFAULT 0,
+  note TEXT NOT NULL DEFAULT '',
+  reason TEXT NOT NULL DEFAULT '',
+  created_by TEXT,
+  created_by_name TEXT NOT NULL DEFAULT '',
+  reference_type TEXT NOT NULL DEFAULT '',
+  reference_id TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_movements_product_date ON inventory_movements(product_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_inventory_movements_business_date ON inventory_movements(business_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_inventory_movements_type ON inventory_movements(business_id, movement_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_inventory_movements_sale ON inventory_movements(sale_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_movements_reference ON inventory_movements(business_id, reference_type, reference_id);
+"""
+
+
+def migrate_inventory_schema(conn: sqlite3.Connection) -> None:
+    """Non-destructive migration for local databases created by earlier versions."""
+    for column, definition in {
+        "supplier_id": "TEXT REFERENCES suppliers(id)",
+        "barcode": "TEXT NOT NULL DEFAULT ''",
+        "track_lots": "INTEGER NOT NULL DEFAULT 0 CHECK(track_lots IN (0,1))",
+        "default_location_id": "TEXT REFERENCES warehouse_locations(id)",
+    }.items():
+        if not table_has_column(conn, "products", column):
+            conn.execute(f"ALTER TABLE products ADD COLUMN {column} {definition}")
+    if not table_has_column(conn, "orders", "stock_consumed"):
+        conn.execute("ALTER TABLE orders ADD COLUMN stock_consumed INTEGER NOT NULL DEFAULT 0")
+    if not table_has_column(conn, "recipe_items", "unit"):
+        conn.execute("ALTER TABLE recipe_items ADD COLUMN unit TEXT NOT NULL DEFAULT ''")
+    products_sql_row = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='products'").fetchone()
+    if products_sql_row and "CHECK(stock >= 0)" in (products_sql_row["sql"] or ""):
+        # Negative stock is a tenant-configurable policy; remove the old hard check.
+        conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute("""CREATE TABLE products_new (
+            id TEXT PRIMARY KEY, business_id TEXT NOT NULL REFERENCES businesses(id), name TEXT NOT NULL,
+            sku TEXT NOT NULL, category TEXT NOT NULL, price REAL NOT NULL CHECK(price >= 0),
+            cost REAL NOT NULL DEFAULT 0 CHECK(cost >= 0), stock REAL NOT NULL DEFAULT 0,
+            min_stock REAL NOT NULL DEFAULT 0 CHECK(min_stock >= 0), description TEXT NOT NULL DEFAULT '',
+            image TEXT NOT NULL DEFAULT '', product_type TEXT NOT NULL DEFAULT 'sale_item' CHECK(product_type IN ('sale_item','ingredient','supplies')),
+            unit TEXT NOT NULL DEFAULT 'unidad', supplier_id TEXT REFERENCES suppliers(id), barcode TEXT NOT NULL DEFAULT '',
+            track_lots INTEGER NOT NULL DEFAULT 0 CHECK(track_lots IN (0,1)), default_location_id TEXT REFERENCES warehouse_locations(id),
+            active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(business_id, sku))""")
+        conn.execute("""INSERT INTO products_new
+            (id,business_id,name,sku,category,price,cost,stock,min_stock,description,image,product_type,unit,
+             supplier_id,barcode,track_lots,default_location_id,active,created_at,updated_at)
+            SELECT id,business_id,name,sku,category,price,cost,stock,min_stock,description,image,product_type,unit,
+             supplier_id,barcode,track_lots,default_location_id,active,created_at,updated_at FROM products""")
+        conn.execute("DROP TABLE products")
+        conn.execute("ALTER TABLE products_new RENAME TO products")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_products_business_active ON products(business_id, active)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(business_id,barcode)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_products_supplier ON products(business_id,supplier_id)")
+        conn.execute("PRAGMA foreign_keys = ON")
+    movement_sql = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='inventory_movements'").fetchone()
+    needs_rebuild = bool(movement_sql) and ("operation_id" not in (movement_sql["sql"] or "") or "customer_return" not in (movement_sql["sql"] or ""))
+    if needs_rebuild:
+        # SQLite cannot alter a CHECK constraint, so rebuild the movement journal while
+        # preserving every historical row. No table references inventory_movements.
+        conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute("DROP INDEX IF EXISTS idx_inventory_movements_product_date")
+        conn.execute("ALTER TABLE inventory_movements RENAME TO inventory_movements_legacy")
+        conn.executescript(INVENTORY_MOVEMENTS_V2)
+        conn.execute("""INSERT INTO inventory_movements
+            (id,business_id,product_id,sale_id,movement_type,quantity_delta,stock_before,stock_after,note,created_at)
+            SELECT id,business_id,product_id,sale_id,movement_type,quantity_delta,stock_before,stock_after,note,created_at
+            FROM inventory_movements_legacy""")
+        conn.execute("DROP TABLE inventory_movements_legacy")
+        conn.execute("PRAGMA foreign_keys = ON")
+
+
+UNIT_ALIASES = {
+    "unidad": ("unit", 1.0), "unidades": ("unit", 1.0), "un": ("unit", 1.0), "u": ("unit", 1.0),
+    "pieza": ("unit", 1.0), "piezas": ("unit", 1.0), "pza": ("unit", 1.0), "paquete": ("unit", 1.0),
+    "caja": ("unit", 1.0), "docena": ("unit", 12.0), "botella": ("unit", 1.0), "lata": ("unit", 1.0),
+    "porcion": ("unit", 1.0), "porción": ("unit", 1.0), "servicio": ("unit", 1.0),
+    "g": ("mass", 1.0), "gr": ("mass", 1.0), "gramo": ("mass", 1.0), "gramos": ("mass", 1.0),
+    "kg": ("mass", 1000.0), "kilo": ("mass", 1000.0), "kilos": ("mass", 1000.0), "kilogramo": ("mass", 1000.0), "kilogramos": ("mass", 1000.0),
+    "mg": ("mass", 0.001), "lb": ("mass", 453.59237), "libra": ("mass", 453.59237), "libras": ("mass", 453.59237),
+    "oz": ("mass", 28.349523), "onza": ("mass", 28.349523), "onzas": ("mass", 28.349523),
+    "ml": ("volume", 1.0), "mililitro": ("volume", 1.0), "mililitros": ("volume", 1.0),
+    "l": ("volume", 1000.0), "lt": ("volume", 1000.0), "litro": ("volume", 1000.0), "litros": ("volume", 1000.0),
+    "gal": ("volume", 3785.411784), "galon": ("volume", 3785.411784), "galón": ("volume", 3785.411784),
+}
+
+def normalize_unit(value: str | None) -> str:
+    return unicodedata.normalize("NFKD", (value or "unidad").strip().lower()).encode("ascii", "ignore").decode("ascii")
+
+def unit_factor(from_unit: str | None, to_unit: str | None) -> float:
+    source = UNIT_ALIASES.get(normalize_unit(from_unit))
+    target = UNIT_ALIASES.get(normalize_unit(to_unit))
+    if not source or not target:
+        return 1.0
+    if source[0] != target[0]:
+        return 1.0
+    return source[1] / target[1]
+
+def convert_quantity(quantity: float, from_unit: str | None, to_unit: str | None) -> float:
+    return round(float(quantity) * unit_factor(from_unit, to_unit), 6)
+
+
+def normalize_date(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(str(value)[:10]).isoformat()
+    except ValueError as exc:
+        raise HTTPException(422, "La fecha debe tener el formato AAAA-MM-DD.") from exc
+
+
+def days_until(value: str | None) -> int | None:
+    if not value:
+        return None
+    try:
+        return (date.fromisoformat(str(value)[:10]) - date.today()).days
+    except ValueError:
+        return None
+
+
+def inventory_settings(conn: sqlite3.Connection) -> dict:
+    row = conn.execute("SELECT settings_json FROM businesses WHERE id=?", (current_business_id(),)).fetchone()
+    try:
+        settings = json.loads(row["settings_json"] or "{}") if row else {}
+    except (json.JSONDecodeError, TypeError):
+        settings = {}
+    raw = settings.get("inventoryConfig") if isinstance(settings, dict) and isinstance(settings.get("inventoryConfig"), dict) else {}
+    return {
+        "allowNegativeStock": bool(raw.get("allowNegativeStock", False)),
+        "expiryAlertDays": int(raw.get("expiryAlertDays", 30) or 30),
+        "lowStockAlerts": bool(raw.get("lowStockAlerts", True)),
+        "defaultLocationId": raw.get("defaultLocationId") or None,
+    }
+
+
+def allows_negative_stock(conn: sqlite3.Connection) -> bool:
+    if inventory_settings(conn).get("allowNegativeStock"):
+        return True
+    return has_permission("inventory.negative")
+
+
+def current_operator() -> tuple[str | None, str]:
+    identity = current_identity()
+    return identity.get("id"), identity.get("name") or "Usuario"
+
+
+def new_inventory_operation(
+    conn: sqlite3.Connection, operation_type: str, *, supplier_id: str | None = None,
+    reference: str = "", reason: str = "", reason_code: str = "", invoice_ref: str = "",
+    attachment_url: str = "", notes: str = "",
+) -> str:
+    operation_id = f"OP-{uuid.uuid4().hex[:12].upper()}"
+    user_id, user_name = current_operator()
+    conn.execute(
+        """INSERT INTO inventory_operations
+           (id,business_id,operation_type,supplier_id,reference,reason,reason_code,invoice_ref,attachment_url,notes,created_by,created_by_name)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (operation_id, current_business_id(), operation_type, supplier_id, reference, reason, reason_code,
+         invoice_ref, attachment_url, notes, user_id, user_name),
+    )
+    return operation_id
+
+
+def get_or_create_lot(
+    conn: sqlite3.Connection, product: sqlite3.Row, lot_code: str, expiry_date: str | None,
+    unit_cost: float, location_id: str | None,
+) -> str:
+    code = (lot_code or "").strip() or f"LOTE-{datetime.now().strftime('%Y%m%d')}"
+    existing = conn.execute(
+        "SELECT id,quantity FROM product_lots WHERE business_id=? AND product_id=? AND lot_code=?",
+        (current_business_id(), product["id"], code),
+    ).fetchone()
+    if existing:
+        conn.execute(
+            "UPDATE product_lots SET quantity=?, expiry_date=COALESCE(?,expiry_date), unit_cost=?, location_id=COALESCE(?,location_id), updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            (round(existing["quantity"] + 0, 6), expiry_date, unit_cost, location_id, existing["id"]),
+        )
+        return existing["id"]
+    lot_id = f"LOT-{uuid.uuid4().hex[:12].upper()}"
+    conn.execute(
+        """INSERT INTO product_lots (id,business_id,product_id,lot_code,quantity,expiry_date,unit_cost,location_id)
+           VALUES (?,?,?,?,?,?,?,?)""",
+        (lot_id, current_business_id(), product["id"], code, 0, expiry_date or None, unit_cost, location_id),
+    )
+    return lot_id
+
+
+def insert_movement(
+    conn: sqlite3.Connection, *, product_id: str, movement_type: str, quantity_delta: float,
+    stock_before: float, stock_after: float, note: str = "", reason: str = "",
+    unit_cost: float = 0, sale_id: str | None = None, order_id: str | None = None,
+    operation_id: str | None = None, lot_id: str | None = None, location_id: str | None = None,
+    reference_type: str = "", reference_id: str = "",
+) -> int:
+    user_id, user_name = current_operator()
+    cursor = conn.execute(
+        """INSERT INTO inventory_movements
+           (business_id,product_id,sale_id,order_id,operation_id,lot_id,location_id,movement_type,
+            quantity_delta,stock_before,stock_after,unit_cost,note,reason,created_by,created_by_name,reference_type,reference_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (current_business_id(), product_id, sale_id, order_id, operation_id, lot_id, location_id,
+         movement_type, round(quantity_delta, 6), round(stock_before, 6), round(stock_after, 6),
+         round(unit_cost or 0, 4), note, reason, user_id, user_name, reference_type, reference_id),
+    )
+    return int(cursor.lastrowid)
+
+
+def add_product_stock(
+    conn: sqlite3.Connection, product: sqlite3.Row, quantity: float, *, movement_type: str,
+    note: str = "", reason: str = "", unit_cost: float = 0, lot_code: str = "",
+    expiry_date: str | None = None, location_id: str | None = None, operation_id: str | None = None,
+    sale_id: str | None = None, order_id: str | None = None, reference_type: str = "",
+    reference_id: str = "",
+) -> dict:
+    before = float(product["stock"] or 0)
+    after = round(before + quantity, 6)
+    conn.execute("UPDATE products SET stock=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (after, product["id"]))
+    lot_id = None
+    should_track_lot = bool(product["track_lots"]) if "track_lots" in set(product.keys()) else False
+    if should_track_lot or lot_code or expiry_date:
+        lot_id = get_or_create_lot(conn, product, lot_code, expiry_date, unit_cost or float(product["cost"] or 0), location_id or inventory_settings(conn).get("defaultLocationId"))
+        if lot_id:
+            conn.execute("UPDATE product_lots SET quantity=quantity+?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (quantity, lot_id))
+    movement_id = insert_movement(
+        conn, product_id=product["id"], movement_type=movement_type, quantity_delta=quantity,
+        stock_before=before, stock_after=after, note=note, reason=reason, unit_cost=unit_cost,
+        sale_id=sale_id, order_id=order_id, operation_id=operation_id, lot_id=lot_id,
+        location_id=location_id, reference_type=reference_type, reference_id=reference_id,
+    )
+    return {"movementId": movement_id, "lotId": lot_id, "stockBefore": before, "stockAfter": after}
+
+
+def consume_product_stock(
+    conn: sqlite3.Connection, product: sqlite3.Row, quantity: float, *, movement_type: str,
+    note: str = "", reason: str = "", operation_id: str | None = None, sale_id: str | None = None,
+    order_id: str | None = None, reference_type: str = "", reference_id: str = "",
+    lot_id: str | None = None, allow_negative: bool = False, location_id: str | None = None,
+) -> list[dict]:
+    """Deducts stock using FEFO lots when available. Returns one movement per lot/portion."""
+    before = float(product["stock"] or 0)
+    if quantity <= 0:
+        raise HTTPException(422, "La cantidad debe ser mayor que cero.")
+    if before < quantity and not allow_negative:
+        raise HTTPException(409, f"Stock insuficiente para {product['name']}. Disponible: {before:g}; solicitado: {quantity:g}.")
+    remaining = round(quantity, 6)
+    movements: list[dict] = []
+    running = before
+    lots = []
+    if lot_id:
+        lots = conn.execute(
+            "SELECT * FROM product_lots WHERE id=? AND business_id=? AND product_id=? AND quantity>0",
+            (lot_id, current_business_id(), product["id"]),
+        ).fetchall()
+        if not lots:
+            raise HTTPException(422, "El lote seleccionado no tiene existencias disponibles.")
+        if location_id and lots[0]["location_id"] and lots[0]["location_id"] != location_id:
+            raise HTTPException(422, "El lote seleccionado no pertenece a la ubicación de origen.")
+    elif table_exists(conn, "product_lots"):
+        query = """SELECT * FROM product_lots WHERE business_id=? AND product_id=? AND quantity>0"""
+        params: list = [current_business_id(), product["id"]]
+        if location_id:
+            query += " AND (location_id=? OR location_id IS NULL)"
+            params.append(location_id)
+        query += " ORDER BY CASE WHEN expiry_date IS NULL THEN 1 ELSE 0 END, expiry_date, received_at, id"
+        lots = conn.execute(query, params).fetchall()
+    for lot in lots:
+        if remaining <= 0:
+            break
+        take = min(float(lot["quantity"] or 0), remaining)
+        if take <= 0:
+            continue
+        conn.execute("UPDATE product_lots SET quantity=quantity-?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (take, lot["id"]))
+        after = round(running - take, 6)
+        movement_id = insert_movement(
+            conn, product_id=product["id"], movement_type=movement_type, quantity_delta=-take,
+            stock_before=running, stock_after=after, note=note, reason=reason,
+            unit_cost=float(lot["unit_cost"] or product["cost"] or 0), sale_id=sale_id, order_id=order_id,
+            operation_id=operation_id, lot_id=lot["id"], location_id=lot["location_id"] or location_id,
+            reference_type=reference_type, reference_id=reference_id,
+        )
+        movements.append({"movementId": movement_id, "lotId": lot["id"], "lotCode": lot["lot_code"], "expiryDate": lot["expiry_date"], "quantity": -take, "stockBefore": running, "stockAfter": after})
+        running = after
+        remaining = round(remaining - take, 6)
+    if remaining > 0:
+        after = round(running - remaining, 6)
+        movement_id = insert_movement(
+            conn, product_id=product["id"], movement_type=movement_type, quantity_delta=-remaining,
+            stock_before=running, stock_after=after, note=note, reason=reason,
+            unit_cost=float(product["cost"] or 0), sale_id=sale_id, order_id=order_id,
+            operation_id=operation_id, location_id=location_id, reference_type=reference_type,
+            reference_id=reference_id,
+        )
+        movements.append({"movementId": movement_id, "lotId": None, "lotCode": "", "expiryDate": None, "quantity": -remaining, "stockBefore": running, "stockAfter": after})
+        running = after
+    conn.execute("UPDATE products SET stock=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (round(running, 6), product["id"]))
+    return movements
+
+
+def reverse_movements(conn: sqlite3.Connection, movements: list[sqlite3.Row], note: str, movement_type: str = "sale_cancelled") -> None:
+    for movement in movements:
+        product = conn.execute("SELECT * FROM products WHERE id=? AND business_id=?", (movement["product_id"], current_business_id())).fetchone()
+        if not product:
+            continue
+        quantity = -float(movement["quantity_delta"])
+        if quantity <= 0:
+            continue
+        before = float(product["stock"] or 0)
+        after = round(before + quantity, 6)
+        conn.execute("UPDATE products SET stock=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (after, product["id"]))
+        lot_id = movement["lot_id"] if "lot_id" in set(movement.keys()) else None
+        if lot_id:
+            lot = conn.execute("SELECT id FROM product_lots WHERE id=? AND business_id=?", (lot_id, current_business_id())).fetchone()
+            if lot:
+                conn.execute("UPDATE product_lots SET quantity=quantity+?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (quantity, lot_id))
+        insert_movement(
+            conn, product_id=movement["product_id"], movement_type=movement_type, quantity_delta=quantity,
+            stock_before=before, stock_after=after, note=note,
+            reason=movement["reason"] if "reason" in set(movement.keys()) else "",
+            unit_cost=movement["unit_cost"] if "unit_cost" in set(movement.keys()) else 0,
+            sale_id=movement["sale_id"] if "sale_id" in set(movement.keys()) else None,
+            order_id=movement["order_id"] if "order_id" in set(movement.keys()) else None,
+            operation_id=movement["operation_id"] if "operation_id" in set(movement.keys()) else None,
+            lot_id=lot_id,
+            reference_type=movement["reference_type"] if "reference_type" in set(movement.keys()) else "",
+            reference_id=movement["reference_id"] if "reference_id" in set(movement.keys()) else "",
+        )
+
+
+def recipe_ingredient_usage(conn: sqlite3.Connection, product_id: str, quantity: float) -> dict[str, float]:
+    """Returns ingredient base-quantity usage for a sold/prepared product, converting recipe units."""
+    recipe = conn.execute("SELECT * FROM recipes WHERE business_id=? AND product_id=?", (current_business_id(), product_id)).fetchone()
+    if not recipe:
+        return {}
+    yield_quantity = float(recipe["yield_quantity"] or 1)
+    usage: dict[str, float] = {}
+    rows = conn.execute(
+        """SELECT ri.ingredient_id,ri.quantity,ri.unit,p.unit AS product_unit
+           FROM recipe_items ri JOIN products p ON p.id=ri.ingredient_id WHERE ri.recipe_id=?""",
+        (recipe["id"],),
+    ).fetchall()
+    for item in rows:
+        recipe_quantity = convert_quantity(float(item["quantity"] or 0), item["unit"], item["product_unit"]) if item["unit"] else float(item["quantity"] or 0)
+        usage[item["ingredient_id"]] = usage.get(item["ingredient_id"], 0.0) + recipe_quantity * quantity / yield_quantity
+    return {key: round(value, 6) for key, value in usage.items()}
+
+
+def recipe_unit_cost(conn: sqlite3.Connection, product_id: str) -> float | None:
+    recipe = conn.execute("SELECT * FROM recipes WHERE business_id=? AND product_id=?", (current_business_id(), product_id)).fetchone()
+    if not recipe:
+        return None
+    yield_quantity = float(recipe["yield_quantity"] or 1)
+    total = 0.0
+    rows = conn.execute(
+        """SELECT ri.quantity,ri.unit,p.cost,p.unit AS product_unit
+           FROM recipe_items ri JOIN products p ON p.id=ri.ingredient_id WHERE ri.recipe_id=?""",
+        (recipe["id"],),
+    ).fetchall()
+    for item in rows:
+        recipe_quantity = convert_quantity(float(item["quantity"] or 0), item["unit"], item["product_unit"]) if item["unit"] else float(item["quantity"] or 0)
+        total += recipe_quantity * float(item["cost"] or 0)
+    return round(total / yield_quantity, 4) if yield_quantity else 0.0
+
+
+def resolve_kitchen_requirements(conn: sqlite3.Connection, quantities: dict[str, float]) -> tuple[dict[str, float], dict[str, float]]:
+    """Splits ordered quantities into direct product stock and recipe ingredient stock."""
+    direct: dict[str, float] = {}
+    ingredients: dict[str, float] = {}
+    for product_id, quantity in quantities.items():
+        recipe = conn.execute("SELECT id FROM recipes WHERE business_id=? AND product_id=?", (current_business_id(), product_id)).fetchone()
+        if recipe:
+            for ingredient_id, usage_quantity in recipe_ingredient_usage(conn, product_id, quantity).items():
+                ingredients[ingredient_id] = round(ingredients.get(ingredient_id, 0.0) + usage_quantity, 6)
+        else:
+            direct[product_id] = round(direct.get(product_id, 0.0) + quantity, 6)
+    return direct, ingredients
+
+
+def validate_stock_requirements(conn: sqlite3.Connection, requirements: dict[str, float]) -> None:
+    if not requirements or allows_negative_stock(conn):
+        return
+    for product_id, required_quantity in requirements.items():
+        product = conn.execute("SELECT * FROM products WHERE id=? AND business_id=?", (product_id, current_business_id())).fetchone()
+        if not product:
+            raise HTTPException(404, f"No se encontró el producto {product_id}.")
+        available = float(product["stock"] or 0)
+        if available + 1e-9 < required_quantity:
+            raise HTTPException(409, f"Stock insuficiente para {product['name']}. Disponible: {available:g}; solicitado: {required_quantity:g}.")
 
 
 def delete_business_type_data(conn: sqlite3.Connection, business_id: str, old_type: str) -> list[str]:
@@ -524,6 +983,7 @@ def get_sale(conn: sqlite3.Connection, sale_id: str) -> dict | None:
 async def startup():
     with connection() as conn:
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        migrate_inventory_schema(conn)
         business_columns = {row["name"] for row in conn.execute("PRAGMA table_info(businesses)").fetchall()}
         if "settings_json" not in business_columns:
             conn.execute("ALTER TABLE businesses ADD COLUMN settings_json TEXT NOT NULL DEFAULT '{}' ")
@@ -701,6 +1161,10 @@ class ProductPayload(BaseModel):
     cost: float = Field(default=0, ge=0)
     productType: Literal["sale_item", "ingredient", "supplies"] = "sale_item"
     unit: str = Field(default="unidad", max_length=32)
+    supplierId: str | None = Field(default=None, max_length=80)
+    barcode: str = Field(default="", max_length=120)
+    trackLots: bool = False
+    defaultLocationId: str | None = Field(default=None, max_length=80)
 
     @field_validator("sku")
     @classmethod
@@ -892,6 +1356,7 @@ class BusinessConfigPayload(BaseModel):
     features: dict[str, bool]
     foodConfig: dict | None = None
     theme: dict | None = None
+    inventoryConfig: dict | None = None
 
     @field_validator("theme")
     @classmethod
@@ -1168,6 +1633,11 @@ def create_custom_role(payload: CustomRolePayload):
         "catalog.create": {"catalog.view"},
         "catalog.edit": {"catalog.view"},
         "inventory.edit": {"inventory.view"},
+        "inventory.entry": {"inventory.view", "catalog.view"},
+        "inventory.adjust": {"inventory.view", "catalog.view"},
+        "inventory.delete": {"inventory.view"},
+        "inventory.negative": {"inventory.view"},
+        "purchases.approve": {"inventory.view", "suppliers.view", "catalog.view"},
         "suppliers.manage": {"suppliers.view"},
         "cash.manage": {"cash.view"},
         # Staff assigned custom roles use the least-privilege cashier base identity.
@@ -1676,22 +2146,19 @@ def create_product_category(payload: ProductCategoryPayload):
 
 @app.get("/api/products")
 def list_products(search: str = Query(default="", max_length=120), active: bool = True, productType: str | None = None):
-    query = "SELECT * FROM products WHERE business_id = ? AND active = ?"
+    query = """SELECT p.*, s.company AS supplier_name FROM products p
+               LEFT JOIN suppliers s ON s.id=p.supplier_id AND s.business_id=p.business_id
+               WHERE p.business_id = ? AND p.active = ?"""
     params: list = [current_business_id(), 1 if active else 0]
     if search:
-        query += " AND (lower(name) LIKE ? OR lower(sku) LIKE ? OR lower(category) LIKE ?)"
+        query += " AND (lower(p.name) LIKE ? OR lower(p.sku) LIKE ? OR lower(p.category) LIKE ? OR lower(p.barcode) LIKE ?)"
         term = f"%{search.lower()}%"
-        params.extend([term, term, term])
+        params.extend([term, term, term, term])
     if productType:
-        query += " AND product_type = ?"
+        query += " AND p.product_type = ?"
         params.append(productType)
     with connection() as conn:
-        business = conn.execute("SELECT business_type FROM businesses WHERE id=?", (current_business_id(),)).fetchone()
-        if business and business["business_type"] == "food" and productType != "ingredient":
-            query += " AND product_type != 'ingredient'"
-        elif business and business["business_type"] == "food" and productType == "ingredient":
-            return []
-        return [product_out(r) for r in conn.execute(query + " ORDER BY name COLLATE NOCASE", params).fetchall()]
+        return [product_out(r) for r in conn.execute(query + " ORDER BY p.name COLLATE NOCASE", params).fetchall()]
 
 
 @app.post("/api/products", status_code=201)
@@ -1704,21 +2171,34 @@ def create_product(payload: ProductPayload):
         product_count = conn.execute("SELECT count(*) FROM products WHERE business_id=? AND active=1", (current_business_id(),)).fetchone()[0]
         if product_count >= subscription["plan"]["maxProducts"]:
             raise HTTPException(409, f"El plan {subscription['plan']['name']} permite hasta {subscription['plan']['maxProducts']} productos activos. Cambia de plan para añadir más.")
-        if business and business["business_type"] == "food" and payload.productType == "ingredient":
-            raise HTTPException(422, "Negocio de comidas controla los platos como productos individuales; no requiere ingredientes ni recetas.")
+        if payload.supplierId:
+            supplier = conn.execute("SELECT id FROM suppliers WHERE id=? AND business_id=? AND active=1", (payload.supplierId, current_business_id())).fetchone()
+            if not supplier:
+                raise HTTPException(422, "El proveedor principal seleccionado no está activo en este negocio.")
+        if payload.defaultLocationId:
+            location = conn.execute("SELECT id FROM warehouse_locations WHERE id=? AND business_id=? AND active=1", (payload.defaultLocationId, current_business_id())).fetchone()
+            if not location:
+                raise HTTPException(422, "La ubicación seleccionada no pertenece a este negocio.")
         try:
             conn.execute("BEGIN IMMEDIATE")
             conn.execute(
-                """INSERT INTO products (id,business_id,name,sku,category,price,cost,stock,min_stock,description,image,product_type,unit)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                """INSERT INTO products (id,business_id,name,sku,category,price,cost,stock,min_stock,description,image,product_type,unit,
+                   supplier_id,barcode,track_lots,default_location_id)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (product_id, current_business_id(), payload.name.strip(), payload.sku, payload.category.strip(), payload.price,
                  payload.cost, payload.stock, payload.minStock, payload.description.strip(), payload.image,
-                 payload.productType, payload.unit),
+                 payload.productType, payload.unit, payload.supplierId, payload.barcode.strip(), 1 if payload.trackLots else 0,
+                 payload.defaultLocationId),
             )
             if payload.stock > 0:
-                conn.execute(
-                    "INSERT INTO inventory_movements (business_id,product_id,movement_type,quantity_delta,stock_before,stock_after,note) VALUES (?,?,?,?,?,?,?)",
-                    (current_business_id(), product_id, "opening", payload.stock, 0, payload.stock, "Existencias iniciales del producto"),
+                lot_id = None
+                if payload.trackLots:
+                    lot_id = get_or_create_lot(conn, conn.execute("SELECT * FROM products WHERE id=?", (product_id,)).fetchone(), f"INICIAL-{product_id[-6:]}", None, payload.cost, payload.defaultLocationId)
+                    conn.execute("UPDATE product_lots SET quantity=? WHERE id=?", (payload.stock, lot_id))
+                insert_movement(
+                    conn, product_id=product_id, movement_type="opening", quantity_delta=payload.stock,
+                    stock_before=0, stock_after=payload.stock, note="Existencias iniciales del producto",
+                    unit_cost=payload.cost, lot_id=lot_id, location_id=payload.defaultLocationId,
                 )
             audit(conn, "create", "product", product_id, {"sku": payload.sku})
             conn.commit()
@@ -1732,26 +2212,34 @@ def create_product(payload: ProductPayload):
 def update_product(product_id: str, payload: ProductPayload):
     with connection() as conn:
         business = conn.execute("SELECT business_type FROM businesses WHERE id=?", (current_business_id(),)).fetchone()
-        if business and business["business_type"] == "food" and payload.productType == "ingredient":
-            raise HTTPException(422, "Negocio de comidas no utiliza ingredientes en el catálogo de venta.")
+        if payload.supplierId:
+            supplier = conn.execute("SELECT id FROM suppliers WHERE id=? AND business_id=? AND active=1", (payload.supplierId, current_business_id())).fetchone()
+            if not supplier:
+                raise HTTPException(422, "El proveedor principal seleccionado no está activo en este negocio.")
+        if payload.defaultLocationId:
+            location = conn.execute("SELECT id FROM warehouse_locations WHERE id=? AND business_id=? AND active=1", (payload.defaultLocationId, current_business_id())).fetchone()
+            if not location:
+                raise HTTPException(422, "La ubicación seleccionada no pertenece a este negocio.")
         try:
             conn.execute("BEGIN IMMEDIATE")
             old = conn.execute("SELECT * FROM products WHERE id=? AND business_id=? AND active=1", (product_id, current_business_id())).fetchone()
             if not old:
                 raise HTTPException(404, "Producto no encontrado.")
             ensure_product_category(conn, current_business_id(), payload.category, allow_existing=(payload.category == old["category"]))
-            delta = payload.stock - old["stock"]
+            delta = round(payload.stock - float(old["stock"] or 0), 6)
             conn.execute(
-                """UPDATE products SET name=?,sku=?,category=?,price=?,cost=?,stock=?,min_stock=?,description=?,image=?,product_type=?,unit=?,updated_at=CURRENT_TIMESTAMP
+                """UPDATE products SET name=?,sku=?,category=?,price=?,cost=?,min_stock=?,description=?,image=?,product_type=?,unit=?,
+                   supplier_id=?,barcode=?,track_lots=?,default_location_id=?,updated_at=CURRENT_TIMESTAMP
                    WHERE id=? AND business_id=?""",
-                (payload.name.strip(), payload.sku, payload.category.strip(), payload.price, payload.cost, payload.stock,
-                 payload.minStock, payload.description.strip(), payload.image, payload.productType, payload.unit, product_id, current_business_id()),
+                (payload.name.strip(), payload.sku, payload.category.strip(), payload.price, payload.cost,
+                 payload.minStock, payload.description.strip(), payload.image, payload.productType, payload.unit,
+                 payload.supplierId, payload.barcode.strip(), 1 if payload.trackLots else 0, payload.defaultLocationId,
+                 product_id, current_business_id()),
             )
-            if delta:
-                conn.execute(
-                    "INSERT INTO inventory_movements (business_id,product_id,movement_type,quantity_delta,stock_before,stock_after,note) VALUES (?,?,?,?,?,?,?)",
-                    (current_business_id(), product_id, "adjustment", delta, old["stock"], payload.stock, "Ajuste desde edición de producto"),
-                )
+            if delta > 0:
+                add_product_stock(conn, old, delta, movement_type="adjustment", note="Ajuste desde edición de producto", reason="Edición de producto", unit_cost=payload.cost)
+            elif delta < 0:
+                consume_product_stock(conn, old, abs(delta), movement_type="adjustment", note="Ajuste desde edición de producto", reason="Edición de producto", allow_negative=allows_negative_stock(conn))
             audit(conn, "update", "product", product_id, {"stockDelta": delta})
             conn.commit()
         except sqlite3.IntegrityError as exc:
@@ -1851,6 +2339,8 @@ def create_sale(payload: SalePayload):
         quantities_by_product: dict[str, float] = {}
         for item in payload.items:
             quantities_by_product[item.productId] = quantities_by_product.get(item.productId, 0.0) + item.quantity
+        direct_requirements: dict[str, float] = {}
+        ingredient_requirements: dict[str, float] = {}
         for product_id, requested_quantity in quantities_by_product.items():
             product = conn.execute("SELECT * FROM products WHERE id=? AND business_id=? AND active=1", (product_id, current_business_id())).fetchone()
             if not product:
@@ -1859,13 +2349,35 @@ def create_sale(payload: SalePayload):
             if product["product_type"] != "sale_item":
                 conn.rollback()
                 raise HTTPException(400, f"{product['name']} está marcado como ingrediente y no se puede vender directamente.")
-            if product["stock"] < requested_quantity:
-                conn.rollback()
-                raise HTTPException(409, f"Stock insuficiente para {product['name']}. Disponible: {product['stock']:g}; solicitado: {requested_quantity:g}.")
             product_rows[product_id] = product
+            recipe = conn.execute("SELECT id FROM recipes WHERE business_id=? AND product_id=?", (current_business_id(), product_id)).fetchone()
+            if recipe:
+                for ingredient_id, usage_quantity in recipe_ingredient_usage(conn, product_id, requested_quantity).items():
+                    ingredient_requirements[ingredient_id] = round(ingredient_requirements.get(ingredient_id, 0.0) + usage_quantity, 6)
+            else:
+                direct_requirements[product_id] = round(direct_requirements.get(product_id, 0.0) + requested_quantity, 6)
 
-        # Products are sold as individual stock items. Food businesses do not require recipes.
-        ingredient_usage: dict[str, dict] = {}
+        # Validate the combined physical requirement (direct sales + recipe ingredients) before writing anything.
+        allow_negative = allows_negative_stock(conn)
+        if not allow_negative:
+            combined_requirements: dict[str, float] = {}
+            for product_id, quantity in {**direct_requirements}.items():
+                combined_requirements[product_id] = round(combined_requirements.get(product_id, 0.0) + quantity, 6)
+            for product_id, quantity in ingredient_requirements.items():
+                combined_requirements[product_id] = round(combined_requirements.get(product_id, 0.0) + quantity, 6)
+            for product_id, required_quantity in combined_requirements.items():
+                product = product_rows.get(product_id)
+                if not product:
+                    product = conn.execute("SELECT * FROM products WHERE id=? AND business_id=?", (product_id, current_business_id())).fetchone()
+                    if product:
+                        product_rows[product_id] = product
+                if not product:
+                    conn.rollback()
+                    raise HTTPException(404, f"No se encontró el producto {product_id}.")
+                available = float(product["stock"] or 0)
+                if available + 1e-9 < required_quantity:
+                    conn.rollback()
+                    raise HTTPException(409, f"Stock insuficiente para {product['name']}. Disponible: {available:g}; solicitado: {required_quantity:g}.")
 
         subtotal = 0.0
         line_discount = 0.0
@@ -1904,24 +2416,33 @@ def create_sale(payload: SalePayload):
         )
         for part in payment_parts:
             conn.execute("INSERT INTO sale_payments (sale_id,method,amount) VALUES (?,?,?)", (sale_id, part.method, part.amount))
+        recipe_costs = {product_id: recipe_unit_cost(conn, product_id) for product_id in quantities_by_product}
         for item, product, gross, disc, line_total in resolved_items:
             # Preserve unit cost at transaction time; later catalog edits must not rewrite past margins.
-            unit_cost = float(product["cost"] or 0)
+            # Recipe-based products snapshot the cost of their ingredients instead of the sale item's own cost.
+            recipe_cost = recipe_costs.get(item.productId)
+            unit_cost = float(recipe_cost if recipe_cost is not None else (product["cost"] or 0))
             conn.execute(
                 """INSERT INTO sale_items (sale_id,product_id,product_name,sku_snapshot,quantity,unit_price,unit_cost_snapshot,discount_percent,line_total)
                    VALUES (?,?,?,?,?,?,?,?,?)""",
                 (sale_id, item.productId, product["name"], product["sku"], item.quantity, product["price"], round(unit_cost, 4), item.discountPercent, line_total),
             )
-        # Deduct each physical product once, using the aggregated quantity. This handles duplicate lines correctly.
-        for product_id, product in product_rows.items():
-            quantity = quantities_by_product[product_id]
-            old_stock = product["stock"]
-            new_stock = round(old_stock - quantity, 4)
-            conn.execute("UPDATE products SET stock=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (new_stock, product_id))
-            conn.execute(
-                "INSERT INTO inventory_movements (business_id,product_id,sale_id,movement_type,quantity_delta,stock_before,stock_after,note) VALUES (?,?,?,?,?,?,?,?)",
-                (current_business_id(), product_id, sale_id, "sale", -quantity, old_stock, new_stock, f"Venta {sale_id}"),
-            )
+        # Deduct physical stock once per product. Recipe products consume their ingredients instead of the product itself.
+        for product_id, quantity in direct_requirements.items():
+            product = conn.execute("SELECT * FROM products WHERE id=? AND business_id=?", (product_id, current_business_id())).fetchone()
+            if product:
+                consume_product_stock(
+                    conn, product, quantity, movement_type="sale", note=f"Venta {sale_id}",
+                    sale_id=sale_id, reference_type="sale", reference_id=sale_id, allow_negative=allow_negative,
+                )
+        for product_id, quantity in ingredient_requirements.items():
+            product = conn.execute("SELECT * FROM products WHERE id=? AND business_id=?", (product_id, current_business_id())).fetchone()
+            if product:
+                consume_product_stock(
+                    conn, product, quantity, movement_type="recipe_consumption",
+                    note=f"Consumo de receta · venta {sale_id}", sale_id=sale_id,
+                    reference_type="sale", reference_id=sale_id, allow_negative=allow_negative,
+                )
 
         audit(conn, "create", "sale", sale_id, {"total": total, "items": len(resolved_items), "taxRate": sale_tax_rate, "paymentMethod": payload.paymentMethod})
         conn.commit()
@@ -1939,18 +2460,11 @@ def cancel_sale(sale_id: str):
         if sale["status"] == "cancelled":
             conn.commit()
             return get_sale(conn, sale_id)
-        movements = conn.execute("SELECT * FROM inventory_movements WHERE sale_id=? AND movement_type='sale' ORDER BY id", (sale_id,)).fetchall()
-        for movement in movements:
-            product = conn.execute("SELECT stock FROM products WHERE id=?", (movement["product_id"],)).fetchone()
-            if product:
-                restored_quantity = -movement["quantity_delta"]
-                before = product["stock"]
-                after = round(before + restored_quantity, 4)
-                conn.execute("UPDATE products SET stock=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (after, movement["product_id"]))
-                conn.execute(
-                    "INSERT INTO inventory_movements (business_id,product_id,sale_id,movement_type,quantity_delta,stock_before,stock_after,note) VALUES (?,?,?,?,?,?,?,?)",
-                    (current_business_id(), movement["product_id"], sale_id, "sale_cancelled", restored_quantity, before, after, f"Reversión de movimiento {movement['id']} · venta {sale_id}"),
-                )
+        movements = conn.execute(
+            "SELECT * FROM inventory_movements WHERE sale_id=? AND movement_type IN ('sale','recipe_consumption') ORDER BY id",
+            (sale_id,),
+        ).fetchall()
+        reverse_movements(conn, movements, f"Reversión de venta {sale_id}", "sale_cancelled")
         conn.execute("UPDATE sales SET status='cancelled' WHERE id=?", (sale_id,))
         audit(conn, "cancel", "sale", sale_id, {"restoredMovements": len(movements)})
         conn.commit()
@@ -2078,19 +2592,1536 @@ def list_audit(limit: int = Query(default=150, ge=1, le=500), offset: int = Quer
 
 
 @app.get("/api/inventory/movements")
-def inventory_movements(limit: int = Query(default=100, ge=1, le=500), productId: str | None = None, offset: int = Query(default=0, ge=0)):
+def inventory_movements(
+    limit: int = Query(default=100, ge=1, le=500), productId: str | None = None,
+    movementType: str | None = None, locationId: str | None = None, lotId: str | None = None,
+    search: str = "", dateFrom: str | None = None, dateTo: str | None = None,
+    offset: int = Query(default=0, ge=0),
+):
     with connection() as conn:
-        query = """SELECT m.*, p.name AS product_name FROM inventory_movements m JOIN products p ON p.id=m.product_id WHERE m.business_id=?"""
+        query = """SELECT m.*, p.name AS product_name, p.sku, p.unit AS product_unit,
+                   l.code AS location_code, l.name AS location_name
+                   FROM inventory_movements m JOIN products p ON p.id=m.product_id
+                   LEFT JOIN warehouse_locations l ON l.id=m.location_id
+                   WHERE m.business_id=?"""
         params: list = [current_business_id()]
         if productId:
             query += " AND m.product_id=?"
             params.append(productId)
+        if movementType:
+            types = [value.strip() for value in movementType.split(",") if value.strip()]
+            if types:
+                query += f" AND m.movement_type IN ({','.join('?' for _ in types)})"
+                params.extend(types)
+        if locationId:
+            query += " AND m.location_id=?"
+            params.append(locationId)
+        if lotId:
+            query += " AND m.lot_id=?"
+            params.append(lotId)
+        if search:
+            term = f"%{search.lower()}%"
+            query += " AND (lower(p.name) LIKE ? OR lower(p.sku) LIKE ? OR lower(m.note) LIKE ? OR lower(m.reason) LIKE ? OR lower(m.reference_id) LIKE ?)"
+            params.extend([term, term, term, term, term])
+        if dateFrom:
+            query += " AND date(m.created_at) >= date(?)"
+            params.append(normalize_date(dateFrom))
+        if dateTo:
+            query += " AND date(m.created_at) <= date(?)"
+            params.append(normalize_date(dateTo))
         query += " ORDER BY m.created_at DESC, m.id DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
         result = [dict(row) for row in conn.execute(query, params).fetchall()]
         for row in result:
             row["created_at"] = timestamp_iso(row.get("created_at"))
         return result
+
+
+# ---------------------------------------------------------------------------
+# Warehouse and inventory module
+# ---------------------------------------------------------------------------
+
+def inventory_product_out(row: sqlite3.Row, alert_days: int = 30) -> dict:
+    stock = float(row["stock"] or 0)
+    min_stock = float(row["min_stock"] or 0)
+    status = "ok"
+    if stock < 0:
+        status = "negative"
+    elif stock <= 0:
+        status = "out"
+    elif stock <= min_stock:
+        status = "low"
+    return {
+        "id": row["id"], "name": row["name"], "sku": row["sku"], "category": row["category"],
+        "price": row["price"], "cost": row["cost"], "stock": stock, "minStock": min_stock,
+        "productType": row["product_type"], "unit": row["unit"], "barcode": row["barcode"] if "barcode" in set(row.keys()) else "",
+        "trackLots": bool(row["track_lots"]) if "track_lots" in set(row.keys()) else False,
+        "supplierId": row["supplier_id"] if "supplier_id" in set(row.keys()) else None,
+        "supplierName": row["supplier_name"] if "supplier_name" in set(row.keys()) else None,
+        "defaultLocationId": row["default_location_id"] if "default_location_id" in set(row.keys()) else None,
+        "stockValue": round(stock * float(row["cost"] or 0), 2),
+        "retailValue": round(stock * float(row["price"] or 0), 2),
+        "stockStatus": status,
+    }
+
+
+def inventory_location_out(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
+    product_count = conn.execute(
+        "SELECT COUNT(*) FROM products WHERE business_id=? AND default_location_id=? AND active=1",
+        (current_business_id(), row["id"]),
+    ).fetchone()[0]
+    lot_units = conn.execute(
+        "SELECT COALESCE(SUM(quantity),0) FROM product_lots WHERE business_id=? AND location_id=?",
+        (current_business_id(), row["id"]),
+    ).fetchone()[0]
+    return {
+        "id": row["id"], "code": row["code"], "name": row["name"], "zone": row["zone"],
+        "aisle": row["aisle"], "rack": row["rack"], "level": int(row["level"] or 0),
+        "capacity": float(row["capacity"] or 0), "active": bool(row["active"]),
+        "productCount": int(product_count or 0), "lotUnits": float(lot_units or 0),
+        "label": " · ".join(part for part in [row["zone"], row["aisle"], row["rack"], f"Nivel {row['level']}"] if part),
+        "createdAt": timestamp_iso(row["created_at"]),
+    }
+
+
+def inventory_operation_out(conn: sqlite3.Connection, operation_id: str) -> dict:
+    row = conn.execute(
+        "SELECT * FROM inventory_operations WHERE id=? AND business_id=?", (operation_id, current_business_id())
+    ).fetchone()
+    if not row:
+        raise HTTPException(404, "Operación de inventario no encontrada.")
+    movements = conn.execute(
+        """SELECT m.*, p.name AS product_name, p.unit AS product_unit, l.code AS location_code
+           FROM inventory_movements m JOIN products p ON p.id=m.product_id
+           LEFT JOIN warehouse_locations l ON l.id=m.location_id
+           WHERE m.business_id=? AND m.operation_id=? ORDER BY m.id""",
+        (current_business_id(), operation_id),
+    ).fetchall()
+    return {
+        "id": row["id"], "operationType": row["operation_type"], "supplierId": row["supplier_id"],
+        "reference": row["reference"], "reason": row["reason"], "reasonCode": row["reason_code"],
+        "invoiceRef": row["invoice_ref"], "attachmentUrl": row["attachment_url"], "notes": row["notes"],
+        "createdBy": row["created_by"], "createdByName": row["created_by_name"],
+        "createdAt": timestamp_iso(row["created_at"]),
+        "items": [{
+            "movementId": item["id"], "productId": item["product_id"], "productName": item["product_name"],
+            "productUnit": item["product_unit"], "movementType": item["movement_type"],
+            "quantity": item["quantity_delta"], "stockBefore": item["stock_before"], "stockAfter": item["stock_after"],
+            "unitCost": item["unit_cost"], "lotId": item["lot_id"], "locationId": item["location_id"],
+            "locationCode": item["location_code"], "reason": item["reason"],
+        } for item in movements],
+    }
+
+
+def fetch_inventory_product(conn: sqlite3.Connection, product_id: str) -> sqlite3.Row:
+    product = conn.execute(
+        "SELECT * FROM products WHERE id=? AND business_id=? AND active=1", (product_id, current_business_id())
+    ).fetchone()
+    if not product:
+        raise HTTPException(404, f"No se encontró el producto {product_id}.")
+    return product
+
+
+def require_inventory_location(conn: sqlite3.Connection, location_id: str | None, *, allow_empty: bool = True) -> sqlite3.Row | None:
+    if not location_id:
+        if allow_empty:
+            return None
+        raise HTTPException(422, "Selecciona una ubicación.")
+    row = conn.execute(
+        "SELECT * FROM warehouse_locations WHERE id=? AND business_id=? AND active=1",
+        (location_id, current_business_id()),
+    ).fetchone()
+    if not row:
+        raise HTTPException(422, "La ubicación seleccionada no está activa en este negocio.")
+    return row
+
+
+def normalize_waste_reason(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", (value or "").strip().lower()).encode("ascii", "ignore").decode("ascii")
+    normalized = normalized.replace(" ", "_")
+    mapping = {
+        "vencido": "vencido", "vencida": "vencido", "caducado": "vencido", "caducada": "vencido",
+        "danado": "danado", "danada": "danado", "dano": "danado", "averiado": "danado",
+        "error_preparacion": "error_preparacion", "error_de_preparacion": "error_preparacion",
+        "error": "error_preparacion", "otro": "otro", "otra": "otro",
+    }
+    return mapping.get(normalized, "otro")
+
+
+WASTE_REASON_LABELS = {
+    "vencido": "Vencido", "danado": "Dañado",
+    "error_preparacion": "Error de preparación", "otro": "Otro",
+}
+
+
+class InventoryLocationPayload(BaseModel):
+    code: str = Field(min_length=1, max_length=40)
+    name: str = Field(default="", max_length=120)
+    zone: str = Field(default="", max_length=80)
+    aisle: str = Field(default="", max_length=40)
+    rack: str = Field(default="", max_length=40)
+    level: int = Field(default=1, ge=0, le=999)
+    capacity: float = Field(default=0, ge=0, le=100000000)
+    active: bool = True
+
+
+class InventorySettingsPayload(BaseModel):
+    allowNegativeStock: bool = False
+    expiryAlertDays: int = Field(default=30, ge=0, le=3650)
+    lowStockAlerts: bool = True
+    defaultLocationId: str | None = None
+
+
+@app.get("/api/inventory/settings")
+def get_inventory_settings():
+    with connection() as conn:
+        settings = inventory_settings(conn)
+        location = None
+        if settings.get("defaultLocationId"):
+            location = conn.execute(
+                "SELECT * FROM warehouse_locations WHERE id=? AND business_id=?",
+                (settings["defaultLocationId"], current_business_id()),
+            ).fetchone()
+        settings["defaultLocationName"] = location["name"] if location else None
+        settings["negativeStockPermission"] = has_permission("inventory.negative")
+        return settings
+
+
+@app.put("/api/inventory/settings")
+def update_inventory_settings(payload: InventorySettingsPayload):
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        if payload.defaultLocationId:
+            require_inventory_location(conn, payload.defaultLocationId, allow_empty=False)
+        row = conn.execute("SELECT settings_json FROM businesses WHERE id=?", (current_business_id(),)).fetchone()
+        try:
+            settings = json.loads(row["settings_json"] or "{}") if row else {}
+        except (json.JSONDecodeError, TypeError):
+            settings = {}
+        if not isinstance(settings, dict):
+            settings = {}
+        settings["inventoryConfig"] = {
+            "allowNegativeStock": payload.allowNegativeStock,
+            "expiryAlertDays": payload.expiryAlertDays,
+            "lowStockAlerts": payload.lowStockAlerts,
+            "defaultLocationId": payload.defaultLocationId,
+        }
+        conn.execute(
+            "UPDATE businesses SET settings_json=? WHERE id=?",
+            (json.dumps(settings, ensure_ascii=False), current_business_id()),
+        )
+        audit(conn, "update", "inventory_settings", current_business_id(), settings["inventoryConfig"])
+        conn.commit()
+        return get_inventory_settings()
+
+
+@app.get("/api/inventory/locations")
+def list_inventory_locations(includeInactive: bool = False):
+    with connection() as conn:
+        query = "SELECT * FROM warehouse_locations WHERE business_id=?"
+        params: list = [current_business_id()]
+        if not includeInactive:
+            query += " AND active=1"
+        rows = conn.execute(query + " ORDER BY zone, aisle, rack, level, code", params).fetchall()
+        return [inventory_location_out(conn, row) for row in rows]
+
+
+@app.post("/api/inventory/locations", status_code=201)
+def create_inventory_location(payload: InventoryLocationPayload):
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        location_id = f"UBI-{uuid.uuid4().hex[:10].upper()}"
+        try:
+            conn.execute(
+                """INSERT INTO warehouse_locations (id,business_id,code,name,zone,aisle,rack,level,capacity,active)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (location_id, current_business_id(), payload.code.strip().upper(), payload.name.strip(),
+                 payload.zone.strip(), payload.aisle.strip(), payload.rack.strip(), payload.level,
+                 payload.capacity, 1 if payload.active else 0),
+            )
+        except sqlite3.IntegrityError as exc:
+            conn.rollback()
+            raise HTTPException(409, "Ya existe una ubicación con ese código.") from exc
+        audit(conn, "create", "warehouse_location", location_id, {"code": payload.code})
+        conn.commit()
+        row = conn.execute("SELECT * FROM warehouse_locations WHERE id=?", (location_id,)).fetchone()
+        return inventory_location_out(conn, row)
+
+
+@app.patch("/api/inventory/locations/{location_id}")
+def update_inventory_location(location_id: str, payload: InventoryLocationPayload):
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT * FROM warehouse_locations WHERE id=? AND business_id=?", (location_id, current_business_id())
+        ).fetchone()
+        if not row:
+            conn.rollback()
+            raise HTTPException(404, "Ubicación no encontrada.")
+        try:
+            conn.execute(
+                """UPDATE warehouse_locations SET code=?,name=?,zone=?,aisle=?,rack=?,level=?,capacity=?,active=?,updated_at=CURRENT_TIMESTAMP
+                   WHERE id=? AND business_id=?""",
+                (payload.code.strip().upper(), payload.name.strip(), payload.zone.strip(), payload.aisle.strip(),
+                 payload.rack.strip(), payload.level, payload.capacity, 1 if payload.active else 0,
+                 location_id, current_business_id()),
+            )
+        except sqlite3.IntegrityError as exc:
+            conn.rollback()
+            raise HTTPException(409, "Ya existe una ubicación con ese código.") from exc
+        audit(conn, "update", "warehouse_location", location_id, {"code": payload.code})
+        conn.commit()
+        row = conn.execute("SELECT * FROM warehouse_locations WHERE id=?", (location_id,)).fetchone()
+        return inventory_location_out(conn, row)
+
+
+@app.delete("/api/inventory/locations/{location_id}")
+def delete_inventory_location(location_id: str):
+    with connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM warehouse_locations WHERE id=? AND business_id=?", (location_id, current_business_id())
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Ubicación no encontrada.")
+        stocked = conn.execute(
+            "SELECT COUNT(*) FROM product_lots WHERE business_id=? AND location_id=? AND quantity>0",
+            (current_business_id(), location_id),
+        ).fetchone()[0]
+        if stocked:
+            raise HTTPException(409, "No puedes desactivar una ubicación con existencias. Transfiere o ajusta primero.")
+        conn.execute("UPDATE warehouse_locations SET active=0, updated_at=CURRENT_TIMESTAMP WHERE id=?", (location_id,))
+        audit(conn, "archive", "warehouse_location", location_id)
+        return {"ok": True, "id": location_id}
+
+
+@app.get("/api/inventory/lots")
+def list_inventory_lots(
+    productId: str | None = None, locationId: str | None = None, status: str | None = None,
+    search: str = "", includeEmpty: bool = False,
+):
+    with connection() as conn:
+        alert_days = int(inventory_settings(conn)["expiryAlertDays"])
+        query = """SELECT l.*, p.name AS product_name, p.sku, p.unit AS product_unit,
+                   w.code AS location_code, w.name AS location_name
+                   FROM product_lots l JOIN products p ON p.id=l.product_id
+                   LEFT JOIN warehouse_locations w ON w.id=l.location_id
+                   WHERE l.business_id=?"""
+        params: list = [current_business_id()]
+        if not includeEmpty:
+            query += " AND l.quantity>0"
+        if productId:
+            query += " AND l.product_id=?"
+            params.append(productId)
+        if locationId:
+            query += " AND l.location_id=?"
+            params.append(locationId)
+        if search:
+            term = f"%{search.lower()}%"
+            query += " AND (lower(p.name) LIKE ? OR lower(p.sku) LIKE ? OR lower(l.lot_code) LIKE ?)"
+            params.extend([term, term, term])
+        query += " ORDER BY CASE WHEN l.expiry_date IS NULL THEN 1 ELSE 0 END, l.expiry_date, l.received_at"
+        result = []
+        for row in conn.execute(query, params).fetchall():
+            days = days_until(row["expiry_date"])
+            lot_status = "sin_vencimiento" if days is None else ("vencido" if days < 0 else ("por_vencer" if days <= alert_days else "vigente"))
+            if status and lot_status != status:
+                continue
+            result.append({
+                "id": row["id"], "productId": row["product_id"], "productName": row["product_name"],
+                "sku": row["sku"], "productUnit": row["product_unit"], "lotCode": row["lot_code"],
+                "quantity": float(row["quantity"] or 0), "expiryDate": row["expiry_date"],
+                "daysLeft": days, "status": lot_status, "unitCost": float(row["unit_cost"] or 0),
+                "locationId": row["location_id"], "locationCode": row["location_code"],
+                "locationName": row["location_name"], "receivedAt": timestamp_iso(row["received_at"]),
+                "value": round(float(row["quantity"] or 0) * float(row["unit_cost"] or 0), 2),
+            })
+        return result
+
+
+@app.get("/api/inventory/barcode/{barcode}")
+def lookup_inventory_barcode(barcode: str):
+    with connection() as conn:
+        code = barcode.strip()
+        rows = conn.execute(
+            """SELECT p.*, s.company AS supplier_name FROM products p
+               LEFT JOIN suppliers s ON s.id=p.supplier_id
+               WHERE p.business_id=? AND p.active=1 AND (p.barcode=? OR p.sku=?)""",
+            (current_business_id(), code, code),
+        ).fetchall()
+        if not rows:
+            raise HTTPException(404, "No se encontró un producto con ese código de barras o SKU.")
+        return {
+            "products": [inventory_product_out(row) for row in rows],
+            "lots": list_inventory_lots(productId=rows[0]["id"]) if len(rows) == 1 else [],
+        }
+
+
+class InventoryEntryItemPayload(BaseModel):
+    productId: str
+    quantity: float = Field(gt=0, le=100000000)
+    unit: str = Field(default="", max_length=32)
+    unitCost: float = Field(default=0, ge=0, le=100000000)
+    lotCode: str = Field(default="", max_length=80)
+    expiryDate: str | None = None
+    locationId: str | None = None
+
+
+class InventoryEntryPayload(BaseModel):
+    entryType: Literal["purchase", "customer_return", "donation", "opening"] = "purchase"
+    supplierId: str | None = None
+    reference: str = Field(default="", max_length=120)
+    invoiceRef: str = Field(default="", max_length=120)
+    notes: str = Field(default="", max_length=1000)
+    attachmentUrl: str = Field(default="", max_length=500)
+    items: list[InventoryEntryItemPayload] = Field(min_length=1, max_length=200)
+
+
+ENTRY_MOVEMENT_TYPES = {
+    "purchase": "purchase", "customer_return": "customer_return",
+    "donation": "donation", "opening": "opening",
+}
+
+
+@app.post("/api/inventory/entries", status_code=201)
+def create_inventory_entry(payload: InventoryEntryPayload):
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            if payload.supplierId:
+                supplier = conn.execute(
+                    "SELECT id FROM suppliers WHERE id=? AND business_id=? AND active=1",
+                    (payload.supplierId, current_business_id()),
+                ).fetchone()
+                if not supplier:
+                    raise HTTPException(422, "El proveedor seleccionado no está activo en este negocio.")
+            operation_id = new_inventory_operation(
+                conn, payload.entryType, supplier_id=payload.supplierId, reference=payload.reference.strip(),
+                invoice_ref=payload.invoiceRef.strip(), attachment_url=payload.attachmentUrl.strip(),
+                notes=payload.notes.strip(), reason="Entrada de inventario",
+            )
+            for item in payload.items:
+                product = fetch_inventory_product(conn, item.productId)
+                location_id = item.locationId or product["default_location_id"] or inventory_settings(conn).get("defaultLocationId")
+                if location_id:
+                    require_inventory_location(conn, location_id)
+                quantity = convert_quantity(item.quantity, item.unit or product["unit"], product["unit"])
+                if quantity <= 0:
+                    raise HTTPException(422, "La cantidad convertida debe ser mayor que cero.")
+                effective_cost = float(item.unitCost or product["cost"] or 0)
+                add_product_stock(
+                    conn, product, quantity, movement_type=ENTRY_MOVEMENT_TYPES[payload.entryType],
+                    note=f"Entrada {operation_id}", reason="Entrada de inventario", unit_cost=effective_cost,
+                    lot_code=item.lotCode.strip(), expiry_date=normalize_date(item.expiryDate),
+                    location_id=location_id, operation_id=operation_id, reference_type="inventory_operation",
+                    reference_id=operation_id,
+                )
+                if item.unitCost > 0:
+                    conn.execute(
+                        "UPDATE products SET cost=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                        (item.unitCost, product["id"]),
+                    )
+                    conn.execute(
+                        """INSERT INTO supplier_price_history
+                           (business_id,supplier_id,product_id,unit_cost,source,reference_type,reference_id,created_by)
+                           VALUES (?,?,?,?,?,?,?,?)""",
+                        (current_business_id(), payload.supplierId, product["id"], item.unitCost,
+                         "entry", "inventory_operation", operation_id, current_identity()["id"]),
+                    )
+            audit(conn, "create", "inventory_entry", operation_id, {"entryType": payload.entryType, "items": len(payload.items)})
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        return inventory_operation_out(conn, operation_id)
+
+
+class InventoryExitItemPayload(BaseModel):
+    productId: str
+    quantity: float = Field(gt=0, le=100000000)
+    unit: str = Field(default="", max_length=32)
+    lotId: str | None = None
+
+
+class InventoryExitPayload(BaseModel):
+    exitType: Literal["consumption", "direct_sale", "other"] = "consumption"
+    reason: str = Field(default="", max_length=300)
+    notes: str = Field(default="", max_length=1000)
+    items: list[InventoryExitItemPayload] = Field(min_length=1, max_length=200)
+
+
+DEFAULT_EXIT_REASONS = {
+    "consumption": "Consumo interno", "direct_sale": "Venta directa", "other": "Salida de inventario",
+}
+
+
+@app.post("/api/inventory/exits", status_code=201)
+def create_inventory_exit(payload: InventoryExitPayload):
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            reason = payload.reason.strip() or DEFAULT_EXIT_REASONS[payload.exitType]
+            operation_id = new_inventory_operation(
+                conn, "consumption", reason=reason, notes=payload.notes.strip(), reference=payload.exitType,
+            )
+            allow_negative = allows_negative_stock(conn)
+            for item in payload.items:
+                product = fetch_inventory_product(conn, item.productId)
+                quantity = convert_quantity(item.quantity, item.unit or product["unit"], product["unit"])
+                if quantity <= 0:
+                    raise HTTPException(422, "La cantidad convertida debe ser mayor que cero.")
+                consume_product_stock(
+                    conn, product, quantity, movement_type="consumption", note=f"Salida {operation_id}",
+                    reason=reason, operation_id=operation_id, reference_type="inventory_operation",
+                    reference_id=operation_id, lot_id=item.lotId, allow_negative=allow_negative,
+                )
+            audit(conn, "create", "inventory_exit", operation_id, {"exitType": payload.exitType, "items": len(payload.items)})
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        return inventory_operation_out(conn, operation_id)
+
+
+class InventoryWasteItemPayload(BaseModel):
+    productId: str
+    quantity: float = Field(gt=0, le=100000000)
+    unit: str = Field(default="", max_length=32)
+    lotId: str | None = None
+
+
+class InventoryWastePayload(BaseModel):
+    reasonCode: str = Field(default="otro", max_length=60)
+    reason: str = Field(min_length=3, max_length=300)
+    notes: str = Field(default="", max_length=1000)
+    items: list[InventoryWasteItemPayload] = Field(min_length=1, max_length=200)
+
+
+@app.post("/api/inventory/waste", status_code=201)
+def create_inventory_waste(payload: InventoryWastePayload):
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            reason_code = normalize_waste_reason(payload.reasonCode)
+            reason = payload.reason.strip()
+            if len(reason) < 3:
+                raise HTTPException(422, "El motivo de la merma es obligatorio.")
+            operation_id = new_inventory_operation(
+                conn, "waste", reason=reason, reason_code=reason_code, notes=payload.notes.strip(),
+                reference=WASTE_REASON_LABELS[reason_code],
+            )
+            allow_negative = allows_negative_stock(conn)
+            for item in payload.items:
+                product = fetch_inventory_product(conn, item.productId)
+                quantity = convert_quantity(item.quantity, item.unit or product["unit"], product["unit"])
+                if quantity <= 0:
+                    raise HTTPException(422, "La cantidad convertida debe ser mayor que cero.")
+                consume_product_stock(
+                    conn, product, quantity, movement_type="waste", note=f"Merma {operation_id}",
+                    reason=reason, operation_id=operation_id, reference_type="inventory_operation",
+                    reference_id=operation_id, lot_id=item.lotId, allow_negative=allow_negative,
+                )
+            audit(conn, "create", "inventory_waste", operation_id, {"reasonCode": reason_code, "items": len(payload.items)})
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        result = inventory_operation_out(conn, operation_id)
+        result["reasonCode"] = reason_code
+        result["reasonLabel"] = WASTE_REASON_LABELS[reason_code]
+        return result
+
+
+class InventoryAdjustmentItemPayload(BaseModel):
+    productId: str
+    quantityDelta: float = Field(le=100000000)
+    unit: str = Field(default="", max_length=32)
+    lotId: str | None = None
+
+
+class InventoryAdjustmentPayload(BaseModel):
+    reason: str = Field(min_length=3, max_length=300)
+    notes: str = Field(default="", max_length=1000)
+    items: list[InventoryAdjustmentItemPayload] = Field(min_length=1, max_length=200)
+
+
+@app.post("/api/inventory/adjustments", status_code=201)
+def create_inventory_adjustment(payload: InventoryAdjustmentPayload):
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            reason = payload.reason.strip()
+            if len(reason) < 3:
+                raise HTTPException(422, "El motivo del ajuste es obligatorio.")
+            operation_id = new_inventory_operation(conn, "adjustment", reason=reason, notes=payload.notes.strip())
+            allow_negative = allows_negative_stock(conn)
+            for item in payload.items:
+                product = fetch_inventory_product(conn, item.productId)
+                delta = convert_quantity(item.quantityDelta, item.unit or product["unit"], product["unit"])
+                if abs(delta) < 1e-9:
+                    continue
+                if delta > 0:
+                    add_product_stock(
+                        conn, product, delta, movement_type="adjustment", note=f"Ajuste {operation_id}",
+                        reason=reason, operation_id=operation_id, reference_type="inventory_operation",
+                        reference_id=operation_id,
+                    )
+                else:
+                    consume_product_stock(
+                        conn, product, abs(delta), movement_type="adjustment", note=f"Ajuste {operation_id}",
+                        reason=reason, operation_id=operation_id, reference_type="inventory_operation",
+                        reference_id=operation_id, lot_id=item.lotId, allow_negative=allow_negative,
+                    )
+            audit(conn, "create", "inventory_adjustment", operation_id, {"items": len(payload.items)})
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        return inventory_operation_out(conn, operation_id)
+
+
+def purchase_order_out(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
+    supplier = conn.execute(
+        "SELECT * FROM suppliers WHERE id=? AND business_id=?", (row["supplier_id"], current_business_id())
+    ).fetchone()
+    items = []
+    total = 0.0
+    for item in conn.execute(
+        """SELECT poi.*, p.name AS product_name, p.sku, p.unit AS product_unit
+           FROM purchase_order_items poi JOIN products p ON p.id=poi.product_id
+           WHERE poi.purchase_order_id=? ORDER BY poi.id""",
+        (row["id"],),
+    ).fetchall():
+        pending = max(0.0, round(float(item["quantity_ordered"] or 0) - float(item["quantity_received"] or 0), 6))
+        total += float(item["quantity_ordered"] or 0) * float(item["unit_cost"] or 0)
+        items.append({
+            "id": item["id"], "productId": item["product_id"], "productName": item["product_name"],
+            "sku": item["sku"], "productUnit": item["product_unit"], "unit": item["unit"] or item["product_unit"],
+            "quantityOrdered": float(item["quantity_ordered"] or 0),
+            "quantityReceived": float(item["quantity_received"] or 0),
+            "pendingQuantity": pending, "unitCost": float(item["unit_cost"] or 0),
+            "lineTotal": round(float(item["quantity_ordered"] or 0) * float(item["unit_cost"] or 0), 2),
+        })
+    return {
+        "id": row["id"], "supplierId": row["supplier_id"],
+        "supplierName": supplier["company"] if supplier else "", "supplierContact": supplier["name"] if supplier else "",
+        "status": row["status"], "expectedDate": row["expected_date"], "notes": row["notes"],
+        "createdBy": row["created_by"], "createdByName": row["created_by_name"],
+        "approvedBy": row["approved_by"], "approvedAt": timestamp_iso(row["approved_at"]),
+        "createdAt": timestamp_iso(row["created_at"]), "updatedAt": timestamp_iso(row["updated_at"]),
+        "total": round(total, 2), "items": items,
+        "pendingLines": len([item for item in items if item["pendingQuantity"] > 0]),
+    }
+
+
+class PurchaseOrderItemPayload(BaseModel):
+    productId: str
+    quantity: float = Field(gt=0, le=100000000)
+    unitCost: float = Field(default=0, ge=0, le=100000000)
+    unit: str = Field(default="", max_length=32)
+
+
+class PurchaseOrderPayload(BaseModel):
+    supplierId: str
+    expectedDate: str | None = None
+    notes: str = Field(default="", max_length=1000)
+    items: list[PurchaseOrderItemPayload] = Field(min_length=1, max_length=200)
+
+
+class PurchaseOrderReceiveItemPayload(BaseModel):
+    itemId: int
+    quantity: float = Field(gt=0, le=100000000)
+    unit: str = Field(default="", max_length=32)
+    unitCost: float | None = Field(default=None, ge=0, le=100000000)
+    lotCode: str = Field(default="", max_length=80)
+    expiryDate: str | None = None
+    locationId: str | None = None
+
+
+class PurchaseOrderReceivePayload(BaseModel):
+    invoiceRef: str = Field(default="", max_length=120)
+    notes: str = Field(default="", max_length=1000)
+    items: list[PurchaseOrderReceiveItemPayload] = Field(min_length=1, max_length=200)
+
+
+@app.get("/api/inventory/purchase-orders")
+def list_purchase_orders(status: str | None = None, supplierId: str | None = None, search: str = ""):
+    with connection() as conn:
+        query = """SELECT po.* FROM purchase_orders po
+                   LEFT JOIN suppliers s ON s.id=po.supplier_id
+                   WHERE po.business_id=?"""
+        params: list = [current_business_id()]
+        if status:
+            query += " AND po.status=?"
+            params.append(status)
+        if supplierId:
+            query += " AND po.supplier_id=?"
+            params.append(supplierId)
+        if search:
+            term = f"%{search.lower()}%"
+            query += " AND (lower(po.id) LIKE ? OR lower(s.company) LIKE ? OR lower(po.notes) LIKE ?)"
+            params.extend([term, term, term])
+        rows = conn.execute(query + " ORDER BY po.created_at DESC, po.id DESC", params).fetchall()
+        return [purchase_order_out(conn, row) for row in rows]
+
+
+@app.post("/api/inventory/purchase-orders", status_code=201)
+def create_purchase_order(payload: PurchaseOrderPayload):
+    order_id = f"OC-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            supplier = conn.execute(
+                "SELECT id FROM suppliers WHERE id=? AND business_id=? AND active=1",
+                (payload.supplierId, current_business_id()),
+            ).fetchone()
+            if not supplier:
+                raise HTTPException(422, "El proveedor seleccionado no está activo en este negocio.")
+            products: dict[str, sqlite3.Row] = {}
+            for item in payload.items:
+                product = fetch_inventory_product(conn, item.productId)
+                products[item.productId] = product
+            user_id, user_name = current_operator()
+            conn.execute(
+                """INSERT INTO purchase_orders (id,business_id,supplier_id,status,expected_date,notes,created_by,created_by_name)
+                   VALUES (?,?,?,'draft',?,?,?,?)""",
+                (order_id, current_business_id(), payload.supplierId, normalize_date(payload.expectedDate),
+                 payload.notes.strip(), user_id, user_name),
+            )
+            for item in payload.items:
+                product = products[item.productId]
+                conn.execute(
+                    """INSERT INTO purchase_order_items (purchase_order_id,product_id,quantity_ordered,unit_cost,unit)
+                       VALUES (?,?,?,?,?)""",
+                    (order_id, item.productId, item.quantity, item.unitCost, item.unit or product["unit"]),
+                )
+            audit(conn, "create", "purchase_order", order_id, {"supplierId": payload.supplierId, "items": len(payload.items)})
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        row = conn.execute("SELECT * FROM purchase_orders WHERE id=?", (order_id,)).fetchone()
+        return purchase_order_out(conn, row)
+
+
+@app.post("/api/inventory/purchase-orders/{order_id}/approve")
+def approve_purchase_order(order_id: str):
+    with connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM purchase_orders WHERE id=? AND business_id=?", (order_id, current_business_id())
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Orden de compra no encontrada.")
+        if row["status"] in ("received", "cancelled"):
+            raise HTTPException(409, "La orden ya está cerrada.")
+        _, user_name = current_operator()
+        conn.execute(
+            "UPDATE purchase_orders SET approved_by=?, approved_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            (user_name, order_id),
+        )
+        audit(conn, "approve", "purchase_order", order_id)
+        row = conn.execute("SELECT * FROM purchase_orders WHERE id=?", (order_id,)).fetchone()
+        return purchase_order_out(conn, row)
+
+
+@app.post("/api/inventory/purchase-orders/{order_id}/send")
+def send_purchase_order(order_id: str):
+    with connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM purchase_orders WHERE id=? AND business_id=?", (order_id, current_business_id())
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Orden de compra no encontrada.")
+        if row["status"] in ("received", "cancelled"):
+            raise HTTPException(409, "La orden ya está cerrada.")
+        conn.execute(
+            "UPDATE purchase_orders SET status='sent', updated_at=CURRENT_TIMESTAMP WHERE id=?", (order_id,)
+        )
+        audit(conn, "send", "purchase_order", order_id)
+        row = conn.execute("SELECT * FROM purchase_orders WHERE id=?", (order_id,)).fetchone()
+        return purchase_order_out(conn, row)
+
+
+@app.post("/api/inventory/purchase-orders/{order_id}/receive")
+def receive_purchase_order(order_id: str, payload: PurchaseOrderReceivePayload):
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            row = conn.execute(
+                "SELECT * FROM purchase_orders WHERE id=? AND business_id=?", (order_id, current_business_id())
+            ).fetchone()
+            if not row:
+                raise HTTPException(404, "Orden de compra no encontrada.")
+            if row["status"] not in ("sent", "partial"):
+                raise HTTPException(409, "Solo puedes recibir una orden enviada o parcialmente recibida.")
+            operation_id = new_inventory_operation(
+                conn, "purchase", supplier_id=row["supplier_id"], reference=order_id,
+                invoice_ref=payload.invoiceRef.strip(), notes=payload.notes.strip(), reason="Recepción de orden de compra",
+            )
+            for entry in payload.items:
+                item = conn.execute(
+                    "SELECT * FROM purchase_order_items WHERE id=? AND purchase_order_id=?",
+                    (entry.itemId, order_id),
+                ).fetchone()
+                if not item:
+                    raise HTTPException(404, f"No se encontró la línea {entry.itemId} en la orden.")
+                product = fetch_inventory_product(conn, item["product_id"])
+                quantity = convert_quantity(entry.quantity, entry.unit or item["unit"] or product["unit"], product["unit"])
+                if quantity <= 0:
+                    raise HTTPException(422, "La cantidad recibida debe ser mayor que cero.")
+                remaining = round(float(item["quantity_ordered"] or 0) - float(item["quantity_received"] or 0), 6)
+                if quantity > remaining + 1e-9:
+                    raise HTTPException(422, f"La cantidad recibida de {product['name']} supera lo pendiente ({remaining:g}).")
+                unit_cost = float(entry.unitCost if entry.unitCost is not None else item["unit_cost"] or product["cost"] or 0)
+                location_id = entry.locationId or product["default_location_id"] or inventory_settings(conn).get("defaultLocationId")
+                if location_id:
+                    require_inventory_location(conn, location_id)
+                add_product_stock(
+                    conn, product, quantity, movement_type="purchase", note=f"Recepción {order_id}",
+                    reason="Recepción de orden de compra", unit_cost=unit_cost,
+                    lot_code=entry.lotCode.strip(), expiry_date=normalize_date(entry.expiryDate),
+                    location_id=location_id, operation_id=operation_id, reference_type="purchase_order",
+                    reference_id=order_id,
+                )
+                conn.execute(
+                    "UPDATE purchase_order_items SET quantity_received=quantity_received+?, unit_cost=? WHERE id=?",
+                    (quantity, unit_cost, item["id"]),
+                )
+                if unit_cost > 0:
+                    conn.execute(
+                        "UPDATE products SET cost=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                        (unit_cost, product["id"]),
+                    )
+                    conn.execute(
+                        """INSERT INTO supplier_price_history
+                           (business_id,supplier_id,product_id,unit_cost,source,reference_type,reference_id,created_by)
+                           VALUES (?,?,?,?,?,?,?,?)""",
+                        (current_business_id(), row["supplier_id"], product["id"], unit_cost,
+                         "purchase_order", "purchase_order", order_id, current_identity()["id"]),
+                    )
+            totals = conn.execute(
+                """SELECT COALESCE(SUM(quantity_ordered),0) AS ordered, COALESCE(SUM(quantity_received),0) AS received
+                   FROM purchase_order_items WHERE purchase_order_id=?""",
+                (order_id,),
+            ).fetchone()
+            status = "received" if float(totals["received"] or 0) + 1e-9 >= float(totals["ordered"] or 0) else "partial"
+            conn.execute(
+                "UPDATE purchase_orders SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (status, order_id)
+            )
+            audit(conn, "receive", "purchase_order", order_id, {"status": status, "items": len(payload.items), "operationId": operation_id})
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        row = conn.execute("SELECT * FROM purchase_orders WHERE id=?", (order_id,)).fetchone()
+        result = purchase_order_out(conn, row)
+        result["operationId"] = operation_id
+        return result
+
+
+@app.post("/api/inventory/purchase-orders/{order_id}/cancel")
+def cancel_purchase_order(order_id: str):
+    with connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM purchase_orders WHERE id=? AND business_id=?", (order_id, current_business_id())
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Orden de compra no encontrada.")
+        if row["status"] in ("received", "partial"):
+            raise HTTPException(409, "No puedes cancelar una orden con mercancía recibida.")
+        conn.execute(
+            "UPDATE purchase_orders SET status='cancelled', updated_at=CURRENT_TIMESTAMP WHERE id=?", (order_id,)
+        )
+        audit(conn, "cancel", "purchase_order", order_id)
+        row = conn.execute("SELECT * FROM purchase_orders WHERE id=?", (order_id,)).fetchone()
+        return purchase_order_out(conn, row)
+
+
+def physical_count_out(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
+    items = conn.execute(
+        """SELECT pci.*, p.name AS product_name, p.sku, p.unit AS product_unit
+           FROM physical_count_items pci JOIN products p ON p.id=pci.product_id
+           WHERE pci.count_id=? ORDER BY pci.id""",
+        (row["id"],),
+    ).fetchall()
+    return {
+        "id": row["id"], "status": row["status"], "notes": row["notes"],
+        "createdBy": row["created_by"], "createdByName": row["created_by_name"],
+        "createdAt": timestamp_iso(row["created_at"]), "closedAt": timestamp_iso(row["closed_at"]),
+        "items": [{
+            "id": item["id"], "productId": item["product_id"], "productName": item["product_name"],
+            "sku": item["sku"], "productUnit": item["product_unit"],
+            "systemQuantity": float(item["system_quantity"] or 0),
+            "countedQuantity": float(item["counted_quantity"] or 0),
+            "difference": float(item["difference"] or 0),
+            "adjustmentMovementId": item["adjustment_movement_id"],
+        } for item in items],
+        "differenceCount": len([item for item in items if abs(float(item["difference"] or 0)) > 1e-9]),
+        "totalDifference": round(sum(float(item["difference"] or 0) for item in items), 6),
+    }
+
+
+class PhysicalCountItemPayload(BaseModel):
+    productId: str
+    countedQuantity: float = Field(ge=0, le=100000000)
+
+
+class PhysicalCountPayload(BaseModel):
+    notes: str = Field(default="", max_length=1000)
+    items: list[PhysicalCountItemPayload] = Field(min_length=1, max_length=1000)
+
+
+@app.get("/api/inventory/counts")
+def list_physical_counts(limit: int = Query(default=50, ge=1, le=500)):
+    with connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM physical_counts WHERE business_id=? ORDER BY created_at DESC, id DESC LIMIT ?",
+            (current_business_id(), limit),
+        ).fetchall()
+        return [physical_count_out(conn, row) for row in rows]
+
+
+@app.post("/api/inventory/counts", status_code=201)
+def create_physical_count(payload: PhysicalCountPayload):
+    count_id = f"CON-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            operation_id = new_inventory_operation(
+                conn, "count", reason="Conteo físico", notes=payload.notes.strip(), reference=count_id
+            )
+            user_id, user_name = current_operator()
+            conn.execute(
+                """INSERT INTO physical_counts (id,business_id,status,notes,created_by,created_by_name,closed_at)
+                   VALUES (?,?,'closed',?,?,?,CURRENT_TIMESTAMP)""",
+                (count_id, current_business_id(), payload.notes.strip(), user_id, user_name),
+            )
+            seen: set[str] = set()
+            for item in payload.items:
+                if item.productId in seen:
+                    raise HTTPException(422, "No repitas el mismo producto en un conteo.")
+                seen.add(item.productId)
+                product = fetch_inventory_product(conn, item.productId)
+                system_quantity = float(product["stock"] or 0)
+                counted_quantity = float(item.countedQuantity)
+                difference = round(counted_quantity - system_quantity, 6)
+                adjustment_movement_id = None
+                if difference > 0:
+                    result = add_product_stock(
+                        conn, product, difference, movement_type="count_adjustment",
+                        note=f"Conteo físico {count_id}", reason="Conteo físico", operation_id=operation_id,
+                        reference_type="physical_count", reference_id=count_id,
+                    )
+                    adjustment_movement_id = result["movementId"]
+                elif difference < 0:
+                    results = consume_product_stock(
+                        conn, product, abs(difference), movement_type="count_adjustment",
+                        note=f"Conteo físico {count_id}", reason="Conteo físico", operation_id=operation_id,
+                        reference_type="physical_count", reference_id=count_id, allow_negative=True,
+                    )
+                    adjustment_movement_id = results[0]["movementId"] if results else None
+                conn.execute(
+                    """INSERT INTO physical_count_items
+                       (count_id,product_id,system_quantity,counted_quantity,difference,adjustment_movement_id)
+                       VALUES (?,?,?,?,?,?)""",
+                    (count_id, item.productId, system_quantity, counted_quantity, difference, adjustment_movement_id),
+                )
+            audit(conn, "create", "physical_count", count_id, {"items": len(payload.items)})
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        row = conn.execute("SELECT * FROM physical_counts WHERE id=?", (count_id,)).fetchone()
+        result = physical_count_out(conn, row)
+        result["operationId"] = operation_id
+        return result
+
+
+def transfer_record_out(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
+    origin = conn.execute("SELECT * FROM warehouse_locations WHERE id=?", (row["origin_location_id"],)).fetchone()
+    destination = conn.execute("SELECT * FROM warehouse_locations WHERE id=?", (row["destination_location_id"],)).fetchone()
+    items = []
+    for item in conn.execute(
+        """SELECT ti.*, p.name AS product_name, p.sku, p.unit AS product_unit
+           FROM inventory_transfer_items ti JOIN products p ON p.id=ti.product_id
+           WHERE ti.transfer_id=? ORDER BY ti.id""",
+        (row["id"],),
+    ).fetchall():
+        allocations = conn.execute(
+            "SELECT * FROM inventory_transfer_allocations WHERE transfer_item_id=? ORDER BY id",
+            (item["id"],),
+        ).fetchall()
+        items.append({
+            "id": item["id"], "productId": item["product_id"], "productName": item["product_name"],
+            "sku": item["sku"], "productUnit": item["product_unit"], "quantity": float(item["quantity"] or 0),
+            "lotId": item["lot_id"], "lotCode": item["lot_code"], "expiryDate": item["expiry_date"],
+            "unitCost": float(item["unit_cost"] or 0),
+            "allocations": [{
+                "id": allocation["id"], "lotCode": allocation["lot_code"],
+                "expiryDate": allocation["expiry_date"], "quantity": float(allocation["quantity"] or 0),
+                "unitCost": float(allocation["unit_cost"] or 0),
+            } for allocation in allocations],
+        })
+    return {
+        "id": row["id"], "status": row["status"], "notes": row["notes"],
+        "originLocationId": row["origin_location_id"], "originCode": origin["code"] if origin else None,
+        "originName": origin["name"] if origin else None,
+        "destinationLocationId": row["destination_location_id"],
+        "destinationCode": destination["code"] if destination else None,
+        "destinationName": destination["name"] if destination else None,
+        "createdBy": row["created_by"], "createdByName": row["created_by_name"],
+        "createdAt": timestamp_iso(row["created_at"]), "sentAt": timestamp_iso(row["sent_at"]),
+        "receivedAt": timestamp_iso(row["received_at"]), "items": items,
+        "totalUnits": round(sum(float(item["quantity"] or 0) for item in items), 6),
+        "totalCost": round(sum(float(item["quantity"] or 0) * float(item["unit_cost"] or 0) for item in items), 2),
+    }
+
+
+class TransferItemPayload(BaseModel):
+    productId: str
+    quantity: float = Field(gt=0, le=100000000)
+    unit: str = Field(default="", max_length=32)
+    lotId: str | None = None
+
+
+class TransferPayload(BaseModel):
+    originLocationId: str
+    destinationLocationId: str
+    notes: str = Field(default="", max_length=1000)
+    items: list[TransferItemPayload] = Field(min_length=1, max_length=500)
+
+
+@app.get("/api/inventory/transfers")
+def list_inventory_transfers(status: str | None = None):
+    with connection() as conn:
+        query = "SELECT * FROM inventory_transfers WHERE business_id=?"
+        params: list = [current_business_id()]
+        if status:
+            query += " AND status=?"
+            params.append(status)
+        rows = conn.execute(query + " ORDER BY created_at DESC, id DESC", params).fetchall()
+        return [transfer_record_out(conn, row) for row in rows]
+
+
+@app.post("/api/inventory/transfers", status_code=201)
+def create_inventory_transfer(payload: TransferPayload):
+    transfer_id = f"TRF-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            origin = require_inventory_location(conn, payload.originLocationId, allow_empty=False)
+            destination = require_inventory_location(conn, payload.destinationLocationId, allow_empty=False)
+            if origin["id"] == destination["id"]:
+                raise HTTPException(422, "La ubicación de origen y destino deben ser diferentes.")
+            user_id, user_name = current_operator()
+            conn.execute(
+                """INSERT INTO inventory_transfers (id,business_id,origin_location_id,destination_location_id,status,notes,created_by,created_by_name)
+                   VALUES (?,?,?,?,'draft',?,?,?)""",
+                (transfer_id, current_business_id(), origin["id"], destination["id"], payload.notes.strip(), user_id, user_name),
+            )
+            for item in payload.items:
+                product = fetch_inventory_product(conn, item.productId)
+                quantity = convert_quantity(item.quantity, item.unit or product["unit"], product["unit"])
+                if quantity <= 0:
+                    raise HTTPException(422, "La cantidad a transferir debe ser mayor que cero.")
+                lot_code = ""
+                expiry_date = None
+                unit_cost = float(product["cost"] or 0)
+                if item.lotId:
+                    lot = conn.execute(
+                        "SELECT * FROM product_lots WHERE id=? AND business_id=? AND product_id=?",
+                        (item.lotId, current_business_id(), product["id"]),
+                    ).fetchone()
+                    if not lot:
+                        raise HTTPException(422, "El lote seleccionado no es válido para el producto.")
+                    lot_code = lot["lot_code"]
+                    expiry_date = lot["expiry_date"]
+                    unit_cost = float(lot["unit_cost"] or unit_cost)
+                conn.execute(
+                    """INSERT INTO inventory_transfer_items (transfer_id,product_id,quantity,lot_id,lot_code,expiry_date,unit_cost)
+                       VALUES (?,?,?,?,?,?,?)""",
+                    (transfer_id, product["id"], quantity, item.lotId, lot_code, expiry_date, unit_cost),
+                )
+            audit(conn, "create", "inventory_transfer", transfer_id, {"items": len(payload.items)})
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        row = conn.execute("SELECT * FROM inventory_transfers WHERE id=?", (transfer_id,)).fetchone()
+        return transfer_record_out(conn, row)
+
+
+@app.post("/api/inventory/transfers/{transfer_id}/send")
+def send_inventory_transfer(transfer_id: str):
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            row = conn.execute(
+                "SELECT * FROM inventory_transfers WHERE id=? AND business_id=?", (transfer_id, current_business_id())
+            ).fetchone()
+            if not row:
+                raise HTTPException(404, "Transferencia no encontrada.")
+            if row["status"] != "draft":
+                raise HTTPException(409, "Solo puedes enviar una transferencia en borrador.")
+            operation_id = new_inventory_operation(
+                conn, "transfer", reason="Transferencia entre ubicaciones", reference=transfer_id,
+                notes=row["notes"],
+            )
+            allow_negative = allows_negative_stock(conn)
+            for item in conn.execute("SELECT * FROM inventory_transfer_items WHERE transfer_id=? ORDER BY id", (transfer_id,)).fetchall():
+                product = fetch_inventory_product(conn, item["product_id"])
+                lot_total = float(conn.execute(
+                    "SELECT COALESCE(SUM(quantity),0) FROM product_lots WHERE business_id=? AND product_id=?",
+                    (current_business_id(), product["id"]),
+                ).fetchone()[0] or 0)
+                if lot_total > 0:
+                    origin_available = float(conn.execute(
+                        """SELECT COALESCE(SUM(quantity),0) FROM product_lots
+                           WHERE business_id=? AND product_id=? AND (location_id=? OR location_id IS NULL)""",
+                        (current_business_id(), product["id"], row["origin_location_id"]),
+                    ).fetchone()[0] or 0)
+                    if origin_available + 1e-9 < float(item["quantity"]):
+                        raise HTTPException(409, f"No hay existencias suficientes de {product['name']} en la ubicación de origen.")
+                movements = consume_product_stock(
+                    conn, product, float(item["quantity"]), movement_type="transfer_out",
+                    note=f"Transferencia {transfer_id}", reason="Transferencia entre ubicaciones",
+                    operation_id=operation_id, reference_type="inventory_transfer", reference_id=transfer_id,
+                    lot_id=item["lot_id"], allow_negative=allow_negative, location_id=row["origin_location_id"],
+                )
+                for movement in movements:
+                    conn.execute(
+                        """INSERT INTO inventory_transfer_allocations (transfer_item_id,lot_code,expiry_date,quantity,unit_cost)
+                           VALUES (?,?,?,?,?)""",
+                        (item["id"], movement.get("lotCode") or item["lot_code"] or "",
+                         movement.get("expiryDate") or item["expiry_date"], abs(float(movement["quantity"])),
+                         float(movement.get("unitCost") or item["unit_cost"] or 0)),
+                    )
+            conn.execute(
+                "UPDATE inventory_transfers SET status='in_transit', sent_at=CURRENT_TIMESTAMP WHERE id=?",
+                (transfer_id,),
+            )
+            audit(conn, "send", "inventory_transfer", transfer_id, {"operationId": operation_id})
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        row = conn.execute("SELECT * FROM inventory_transfers WHERE id=?", (transfer_id,)).fetchone()
+        return transfer_record_out(conn, row)
+
+
+@app.post("/api/inventory/transfers/{transfer_id}/receive")
+def receive_inventory_transfer(transfer_id: str):
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            row = conn.execute(
+                "SELECT * FROM inventory_transfers WHERE id=? AND business_id=?", (transfer_id, current_business_id())
+            ).fetchone()
+            if not row:
+                raise HTTPException(404, "Transferencia no encontrada.")
+            if row["status"] != "in_transit":
+                raise HTTPException(409, "Solo puedes recibir una transferencia en tránsito.")
+            operation_id = new_inventory_operation(
+                conn, "transfer", reason="Recepción de transferencia", reference=transfer_id,
+                notes=row["notes"],
+            )
+            for item in conn.execute("SELECT * FROM inventory_transfer_items WHERE transfer_id=? ORDER BY id", (transfer_id,)).fetchall():
+                product = fetch_inventory_product(conn, item["product_id"])
+                allocations = conn.execute(
+                    "SELECT * FROM inventory_transfer_allocations WHERE transfer_item_id=? ORDER BY id",
+                    (item["id"],),
+                ).fetchall()
+                if not allocations:
+                    allocations = [{"lot_code": item["lot_code"], "expiry_date": item["expiry_date"], "quantity": item["quantity"], "unit_cost": item["unit_cost"]}]
+                for allocation in allocations:
+                    add_product_stock(
+                        conn, product, float(allocation["quantity"]), movement_type="transfer_in",
+                        note=f"Recepción transferencia {transfer_id}", reason="Recepción de transferencia",
+                        unit_cost=float(allocation["unit_cost"] or 0), lot_code=allocation["lot_code"] or "",
+                        expiry_date=allocation["expiry_date"], location_id=row["destination_location_id"],
+                        operation_id=operation_id, reference_type="inventory_transfer", reference_id=transfer_id,
+                    )
+            conn.execute(
+                "UPDATE inventory_transfers SET status='received', received_at=CURRENT_TIMESTAMP WHERE id=?",
+                (transfer_id,),
+            )
+            audit(conn, "receive", "inventory_transfer", transfer_id, {"operationId": operation_id})
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        row = conn.execute("SELECT * FROM inventory_transfers WHERE id=?", (transfer_id,)).fetchone()
+        result = transfer_record_out(conn, row)
+        result["operationId"] = operation_id
+        return result
+
+
+@app.post("/api/inventory/transfers/{transfer_id}/cancel")
+def cancel_inventory_transfer(transfer_id: str):
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            row = conn.execute(
+                "SELECT * FROM inventory_transfers WHERE id=? AND business_id=?", (transfer_id, current_business_id())
+            ).fetchone()
+            if not row:
+                raise HTTPException(404, "Transferencia no encontrada.")
+            if row["status"] == "received":
+                raise HTTPException(409, "No puedes cancelar una transferencia ya recibida.")
+            if row["status"] == "cancelled":
+                conn.commit()
+                return transfer_record_out(conn, row)
+            if row["status"] == "in_transit":
+                movements = conn.execute(
+                    """SELECT * FROM inventory_movements
+                       WHERE business_id=? AND reference_type='inventory_transfer' AND reference_id=? AND movement_type='transfer_out'""",
+                    (current_business_id(), transfer_id),
+                ).fetchall()
+                reverse_movements(conn, movements, f"Cancelación transferencia {transfer_id}", "adjustment")
+            conn.execute("UPDATE inventory_transfers SET status='cancelled' WHERE id=?", (transfer_id,))
+            audit(conn, "cancel", "inventory_transfer", transfer_id)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        row = conn.execute("SELECT * FROM inventory_transfers WHERE id=?", (transfer_id,)).fetchone()
+        return transfer_record_out(conn, row)
+
+
+@app.get("/api/inventory/overview")
+def inventory_overview():
+    with connection() as conn:
+        settings = inventory_settings(conn)
+        alert_days = int(settings["expiryAlertDays"])
+        rows = conn.execute(
+            """SELECT p.*, s.company AS supplier_name FROM products p
+               LEFT JOIN suppliers s ON s.id=p.supplier_id
+               WHERE p.business_id=? AND p.active=1 ORDER BY p.name COLLATE NOCASE""",
+            (current_business_id(),),
+        ).fetchall()
+        products = [inventory_product_out(row, alert_days) for row in rows]
+        total_value = round(sum(product["stockValue"] for product in products), 2)
+        total_retail = round(sum(product["retailValue"] for product in products), 2)
+        total_units = round(sum(product["stock"] for product in products), 6)
+        low_stock = [product for product in products if product["stockStatus"] in ("low", "out", "negative")]
+        expiring = list_inventory_lots(status="por_vencer")
+        expired = list_inventory_lots(status="vencido")
+        recent = inventory_movements(limit=12)
+        return {
+            "totalValue": total_value, "totalRetailValue": total_retail, "totalUnits": total_units,
+            "productCount": len(products), "lowStockCount": len(low_stock),
+            "outOfStockCount": len([product for product in products if product["stockStatus"] == "out"]),
+            "negativeStockCount": len([product for product in products if product["stockStatus"] == "negative"]),
+            "expiringCount": len(expiring), "expiredCount": len(expired),
+            "wasteCost": _waste_cost(conn, 30),
+            "lowStockProducts": low_stock[:20], "expiringLots": expiring[:20],
+            "recentMovements": recent, "settings": settings,
+            "generatedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        }
+
+
+def _waste_cost(conn: sqlite3.Connection, days: int) -> float:
+    row = conn.execute(
+        """SELECT COALESCE(SUM(ABS(quantity_delta) * unit_cost),0) FROM inventory_movements
+           WHERE business_id=? AND movement_type='waste' AND created_at >= datetime('now', ?)""",
+        (current_business_id(), f"-{int(days)} days"),
+    ).fetchone()
+    return round(float(row[0] or 0), 2)
+
+
+@app.get("/api/inventory/alerts")
+def inventory_alerts():
+    with connection() as conn:
+        settings = inventory_settings(conn)
+        alert_days = int(settings["expiryAlertDays"])
+        alerts: list[dict] = []
+        rows = conn.execute(
+            """SELECT p.*, s.company AS supplier_name FROM products p
+               LEFT JOIN suppliers s ON s.id=p.supplier_id
+               WHERE p.business_id=? AND p.active=1""",
+            (current_business_id(),),
+        ).fetchall()
+        for row in rows:
+            product = inventory_product_out(row, alert_days)
+            if product["stock"] < 0:
+                alerts.append({
+                    "type": "negative_stock", "severity": "high", "productId": product["id"],
+                    "productName": product["name"], "sku": product["sku"], "stock": product["stock"],
+                    "minStock": product["minStock"], "unit": product["unit"],
+                    "message": f"Stock negativo en {product['name']}: {product['stock']:g} {product['unit']}.",
+                })
+            elif product["stock"] <= 0:
+                alerts.append({
+                    "type": "out_of_stock", "severity": "high", "productId": product["id"],
+                    "productName": product["name"], "sku": product["sku"], "stock": product["stock"],
+                    "minStock": product["minStock"], "unit": product["unit"],
+                    "message": f"{product['name']} está agotado.",
+                })
+            elif settings["lowStockAlerts"] and product["stock"] <= product["minStock"]:
+                alerts.append({
+                    "type": "low_stock", "severity": "medium", "productId": product["id"],
+                    "productName": product["name"], "sku": product["sku"], "stock": product["stock"],
+                    "minStock": product["minStock"], "unit": product["unit"],
+                    "message": f"Stock bajo de {product['name']}: quedan {product['stock']:g} {product['unit']} (mínimo {product['minStock']:g}).",
+                })
+        for lot in list_inventory_lots(status="vencido"):
+            alerts.append({
+                "type": "expired_lot", "severity": "high", "productId": lot["productId"],
+                "productName": lot["productName"], "sku": lot["sku"], "lotCode": lot["lotCode"],
+                "expiryDate": lot["expiryDate"], "daysLeft": lot["daysLeft"], "quantity": lot["quantity"],
+                "unit": lot["productUnit"],
+                "message": f"Lote vencido de {lot['productName']} ({lot['lotCode']}): {lot['quantity']:g} {lot['productUnit']}.",
+            })
+        for lot in list_inventory_lots(status="por_vencer"):
+            alerts.append({
+                "type": "expiring_lot", "severity": "medium", "productId": lot["productId"],
+                "productName": lot["productName"], "sku": lot["sku"], "lotCode": lot["lotCode"],
+                "expiryDate": lot["expiryDate"], "daysLeft": lot["daysLeft"], "quantity": lot["quantity"],
+                "unit": lot["productUnit"],
+                "message": f"Lote de {lot['productName']} ({lot['lotCode']}) vence en {lot['daysLeft']} días.",
+            })
+        severity_order = {"high": 0, "medium": 1, "low": 2}
+        alerts.sort(key=lambda alert: (severity_order.get(alert["severity"], 9), alert["type"], alert["productName"]))
+        return {"generatedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"), "alerts": alerts}
+
+
+@app.get("/api/inventory/price-history")
+def inventory_price_history(productId: str | None = None, supplierId: str | None = None, limit: int = Query(default=200, ge=1, le=1000)):
+    with connection() as conn:
+        query = """SELECT h.*, p.name AS product_name, p.sku, p.unit AS product_unit,
+                   s.company AS supplier_name
+                   FROM supplier_price_history h JOIN products p ON p.id=h.product_id
+                   LEFT JOIN suppliers s ON s.id=h.supplier_id
+                   WHERE h.business_id=?"""
+        params: list = [current_business_id()]
+        if productId:
+            query += " AND h.product_id=?"
+            params.append(productId)
+        if supplierId:
+            query += " AND h.supplier_id=?"
+            params.append(supplierId)
+        query += " ORDER BY h.created_at DESC, h.id DESC LIMIT ?"
+        params.append(limit)
+        return [{
+            "id": row["id"], "productId": row["product_id"], "productName": row["product_name"],
+            "sku": row["sku"], "productUnit": row["product_unit"], "supplierId": row["supplier_id"],
+            "supplierName": row["supplier_name"], "unitCost": float(row["unit_cost"] or 0),
+            "source": row["source"], "referenceType": row["reference_type"], "referenceId": row["reference_id"],
+            "createdBy": row["created_by"], "createdAt": timestamp_iso(row["created_at"]),
+        } for row in conn.execute(query, params).fetchall()]
+
+
+@app.get("/api/inventory/reports")
+def inventory_reports(days: int = Query(default=30, ge=1, le=365), noMovementDays: int = Query(default=60, ge=1, le=3650)):
+    with connection() as conn:
+        settings = inventory_settings(conn)
+        alert_days = int(settings["expiryAlertDays"])
+        rows = conn.execute(
+            """SELECT p.*, s.company AS supplier_name FROM products p
+               LEFT JOIN suppliers s ON s.id=p.supplier_id
+               WHERE p.business_id=? AND p.active=1""",
+            (current_business_id(),),
+        ).fetchall()
+        products = [inventory_product_out(row, alert_days) for row in rows]
+        total_value = round(sum(product["stockValue"] for product in products), 2)
+        critical = [product for product in products if product["stockStatus"] in ("low", "out", "negative")]
+        expiring = list_inventory_lots(status="por_vencer") + list_inventory_lots(status="vencido")
+
+        waste_row = conn.execute(
+            """SELECT COALESCE(SUM(ABS(quantity_delta) * unit_cost),0) FROM inventory_movements
+               WHERE business_id=? AND movement_type='waste' AND created_at >= datetime('now', ?)""",
+            (current_business_id(), f"-{days} days"),
+        ).fetchone()
+        waste_by_reason = [{
+            "reasonCode": row["reason_code"] or "otro",
+            "reasonLabel": WASTE_REASON_LABELS.get(row["reason_code"] or "otro", "Otro"),
+            "quantity": round(float(row["quantity"] or 0), 6),
+            "cost": round(float(row["cost"] or 0), 2),
+        } for row in conn.execute(
+            """SELECT o.reason_code, SUM(ABS(m.quantity_delta)) AS quantity,
+                      SUM(ABS(m.quantity_delta) * m.unit_cost) AS cost
+               FROM inventory_movements m LEFT JOIN inventory_operations o ON o.id=m.operation_id
+               WHERE m.business_id=? AND m.movement_type='waste' AND m.created_at >= datetime('now', ?)
+               GROUP BY o.reason_code ORDER BY cost DESC""",
+            (current_business_id(), f"-{days} days"),
+        ).fetchall()]
+
+        rotation = [{
+            "productId": row["product_id"], "productName": row["product_name"], "sku": row["sku"],
+            "unit": row["unit"], "quantity": round(float(row["quantity"] or 0), 6),
+            "cost": round(float(row["cost"] or 0), 2), "movements": int(row["movement_count"] or 0),
+        } for row in conn.execute(
+            """SELECT m.product_id, p.name AS product_name, p.sku, p.unit,
+                      SUM(ABS(m.quantity_delta)) AS quantity,
+                      SUM(ABS(m.quantity_delta) * m.unit_cost) AS cost,
+                      COUNT(*) AS movement_count
+               FROM inventory_movements m JOIN products p ON p.id=m.product_id
+               WHERE m.business_id=? AND m.quantity_delta < 0
+                 AND m.movement_type IN ('sale','recipe_consumption','consumption','waste')
+                 AND m.created_at >= datetime('now', ?)
+               GROUP BY m.product_id ORDER BY quantity DESC LIMIT 50""",
+            (current_business_id(), f"-{days} days"),
+        ).fetchall()]
+
+        cutoff = f"-{noMovementDays} days"
+        no_movement = [{
+            "productId": row["id"], "productName": row["name"], "sku": row["sku"],
+            "stock": float(row["stock"] or 0), "unit": row["unit"],
+            "lastMovementAt": timestamp_iso(row["last_movement"]),
+        } for row in conn.execute(
+            """SELECT p.id,p.name,p.sku,p.stock,p.unit,MAX(m.created_at) AS last_movement
+               FROM products p LEFT JOIN inventory_movements m ON m.product_id=p.id
+               WHERE p.business_id=? AND p.active=1
+               GROUP BY p.id
+               HAVING MAX(m.created_at) IS NULL OR MAX(m.created_at) < datetime('now', ?)
+               ORDER BY p.name COLLATE NOCASE""",
+            (current_business_id(), cutoff),
+        ).fetchall()]
+
+        count_differences = [{
+            "countId": row["count_id"], "productId": row["product_id"], "productName": row["product_name"],
+            "systemQuantity": float(row["system_quantity"] or 0),
+            "countedQuantity": float(row["counted_quantity"] or 0),
+            "difference": float(row["difference"] or 0), "unit": row["unit"],
+            "createdAt": timestamp_iso(row["created_at"]),
+        } for row in conn.execute(
+            """SELECT pci.*, p.name AS product_name, p.unit
+               FROM physical_count_items pci JOIN products p ON p.id=pci.product_id
+               JOIN physical_counts pc ON pc.id=pci.count_id
+               WHERE pc.business_id=? AND pc.created_at >= datetime('now','-90 days')
+                 AND ABS(pci.difference) > 0.000001
+               ORDER BY pc.created_at DESC, pci.id DESC LIMIT 100""",
+            (current_business_id(),),
+        ).fetchall()]
+
+        return {
+            "totalValue": total_value, "totalUnits": round(sum(product["stock"] for product in products), 6),
+            "productCount": len(products), "criticalStock": critical, "criticalStockCount": len(critical),
+            "expiringItems": expiring, "expiringCount": len(expiring),
+            "wasteCost": round(float(waste_row[0] or 0), 2), "wasteByReason": waste_by_reason,
+            "rotation": rotation, "noMovement": no_movement, "countDifferences": count_differences,
+            "periodDays": days, "noMovementDays": noMovementDays,
+            "generatedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        }
+
+
+@app.get("/api/inventory/replenishment")
+def inventory_replenishment():
+    with connection() as conn:
+        rows = conn.execute(
+            """SELECT p.*, s.company AS supplier_name,
+                      (SELECT h.unit_cost FROM supplier_price_history h WHERE h.product_id=p.id AND h.business_id=p.business_id ORDER BY h.created_at DESC, h.id DESC LIMIT 1) AS last_cost
+               FROM products p LEFT JOIN suppliers s ON s.id=p.supplier_id
+               WHERE p.business_id=? AND p.active=1 AND p.stock <= p.min_stock
+               ORDER BY (p.stock - p.min_stock) ASC, p.name COLLATE NOCASE""",
+            (current_business_id(),),
+        ).fetchall()
+        result = []
+        for row in rows:
+            stock = float(row["stock"] or 0)
+            min_stock = float(row["min_stock"] or 0)
+            suggested = max(1.0, round(min_stock * 2 - stock, 6))
+            last_cost = float(row["last_cost"] if row["last_cost"] is not None else row["cost"] or 0)
+            result.append({
+                **inventory_product_out(row),
+                "suggestedQuantity": suggested, "lastCost": last_cost,
+                "estimatedCost": round(suggested * last_cost, 2),
+            })
+        return result
+
+
+@app.get("/api/inventory/dish-costing")
+def inventory_dish_costing():
+    with connection() as conn:
+        rows = conn.execute(
+            """SELECT r.*, p.name AS product_name, p.price, p.unit AS product_unit
+               FROM recipes r JOIN products p ON p.id=r.product_id
+               WHERE r.business_id=? ORDER BY p.name COLLATE NOCASE""",
+            (current_business_id(),),
+        ).fetchall()
+        result = []
+        for row in rows:
+            cost = recipe_unit_cost(conn, row["product_id"]) or 0.0
+            price = float(row["price"] or 0)
+            ingredients = []
+            for item in conn.execute(
+                """SELECT ri.ingredient_id,ri.quantity,ri.unit,p.name,p.unit AS product_unit,p.cost
+                   FROM recipe_items ri JOIN products p ON p.id=ri.ingredient_id WHERE ri.recipe_id=?""",
+                (row["id"],),
+            ).fetchall():
+                converted = convert_quantity(float(item["quantity"] or 0), item["unit"], item["product_unit"]) if item["unit"] else float(item["quantity"] or 0)
+                ingredients.append({
+                    "ingredientId": item["ingredient_id"], "name": item["name"],
+                    "quantity": float(item["quantity"] or 0), "unit": item["unit"] or item["product_unit"],
+                    "baseQuantity": converted, "productUnit": item["product_unit"],
+                    "unitCost": float(item["cost"] or 0), "cost": round(converted * float(item["cost"] or 0), 4),
+                })
+            margin = round(price - cost, 2)
+            result.append({
+                "recipeId": row["id"], "productId": row["product_id"], "productName": row["product_name"],
+                "yieldQuantity": float(row["yield_quantity"] or 1), "cost": cost, "price": price,
+                "margin": margin, "marginPercent": round((margin / price * 100) if price else 0, 2),
+                "ingredients": ingredients,
+            })
+        return result
+
+
+class ProductSubstitutionPayload(BaseModel):
+    productId: str
+    substituteId: str
+    priority: int = Field(default=1, ge=1, le=999)
+    notes: str = Field(default="", max_length=500)
+
+
+@app.get("/api/inventory/substitutions")
+def list_product_substitutions(productId: str | None = None):
+    with connection() as conn:
+        query = """SELECT ps.*, p.name AS product_name, s.name AS substitute_name, s.stock AS substitute_stock, s.unit AS substitute_unit
+                   FROM product_substitutions ps
+                   JOIN products p ON p.id=ps.product_id
+                   JOIN products s ON s.id=ps.substitute_id
+                   WHERE ps.business_id=?"""
+        params: list = [current_business_id()]
+        if productId:
+            query += " AND ps.product_id=?"
+            params.append(productId)
+        rows = conn.execute(query + " ORDER BY ps.product_id, ps.priority, s.name", params).fetchall()
+        return [{
+            "productId": row["product_id"], "productName": row["product_name"],
+            "substituteId": row["substitute_id"], "substituteName": row["substitute_name"],
+            "substituteStock": float(row["substitute_stock"] or 0), "substituteUnit": row["substitute_unit"],
+            "priority": int(row["priority"] or 1), "notes": row["notes"],
+        } for row in rows]
+
+
+@app.post("/api/inventory/substitutions", status_code=201)
+def save_product_substitution(payload: ProductSubstitutionPayload):
+    if payload.productId == payload.substituteId:
+        raise HTTPException(422, "Un producto no puede ser sustituto de sí mismo.")
+    with connection() as conn:
+        fetch_inventory_product(conn, payload.productId)
+        fetch_inventory_product(conn, payload.substituteId)
+        conn.execute(
+            """INSERT INTO product_substitutions (business_id,product_id,substitute_id,priority,notes)
+               VALUES (?,?,?,?,?)
+               ON CONFLICT(business_id,product_id,substitute_id)
+               DO UPDATE SET priority=excluded.priority, notes=excluded.notes""",
+            (current_business_id(), payload.productId, payload.substituteId, payload.priority, payload.notes.strip()),
+        )
+        audit(conn, "upsert", "product_substitution", f"{payload.productId}:{payload.substituteId}")
+        return {"ok": True, "productId": payload.productId, "substituteId": payload.substituteId}
+
+
+@app.delete("/api/inventory/substitutions/{product_id}/{substitute_id}")
+def delete_product_substitution(product_id: str, substitute_id: str):
+    with connection() as conn:
+        cur = conn.execute(
+            "DELETE FROM product_substitutions WHERE business_id=? AND product_id=? AND substitute_id=?",
+            (current_business_id(), product_id, substitute_id),
+        )
+        if not cur.rowcount:
+            raise HTTPException(404, "Sustituto no encontrado.")
+        audit(conn, "delete", "product_substitution", f"{product_id}:{substitute_id}")
+        return {"ok": True}
 
 
 class CashSessionOpenPayload(BaseModel):
@@ -2581,16 +4612,22 @@ def create_order(payload: OrderPayload):
         conn.execute("BEGIN IMMEDIATE")
         total = 0.0
         resolved = []
+        quantities: dict[str, float] = {}
         for item in payload.items:
             product = conn.execute("SELECT * FROM products WHERE id=? AND business_id=? AND active=1 AND product_type='sale_item'", (item.productId, current_business_id())).fetchone()
             if not product:
                 conn.rollback()
                 raise HTTPException(404, f"Producto no encontrado: {item.productId}")
-            if product["stock"] < item.quantity:
-                conn.rollback()
-                raise HTTPException(409, f"Stock insuficiente para {product['name']}.")
+            quantities[item.productId] = round(quantities.get(item.productId, 0.0) + item.quantity, 6)
             total += product["price"] * item.quantity
             resolved.append((item, product))
+        direct, ingredients = resolve_kitchen_requirements(conn, quantities)
+        combined = {key: round(direct.get(key, 0.0) + ingredients.get(key, 0.0), 6) for key in set(direct) | set(ingredients)}
+        try:
+            validate_stock_requirements(conn, combined)
+        except HTTPException:
+            conn.rollback()
+            raise
         channel = "table" if payload.tableNumber else payload.channel
         conn.execute("INSERT INTO orders (id,business_id,channel,customer,phone,address,status,notes,total,table_number,waiter) VALUES (?,?,?,?,?,?,'received',?,?,?,?)",
                      (order_id, current_business_id(), channel, payload.customer, payload.phone, payload.address, payload.notes, round(total, 2), payload.tableNumber, payload.waiter.strip()))
@@ -2605,10 +4642,55 @@ def create_order(payload: OrderPayload):
 @app.patch("/api/orders/{order_id}/status")
 def update_order_status(order_id: str, status: Literal["received", "preparing", "ready", "delivered", "cancelled"]):
     with connection() as conn:
-        cur = conn.execute("UPDATE orders SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND business_id=?", (status, order_id, current_business_id()))
-        if not cur.rowcount:
+        conn.execute("BEGIN IMMEDIATE")
+        order = conn.execute("SELECT * FROM orders WHERE id=? AND business_id=?", (order_id, current_business_id())).fetchone()
+        if not order:
+            conn.rollback()
             raise HTTPException(404, "Pedido no encontrado.")
-        audit(conn, "status_change", "order", order_id, {"status": status})
+        if order["status"] == "cancelled" and status != "cancelled":
+            conn.rollback()
+            raise HTTPException(409, "Un pedido cancelado no se puede reactivar.")
+        movement_count = 0
+        if status == "cancelled" and int(order["stock_consumed"] or 0) == 1:
+            movements = conn.execute(
+                "SELECT * FROM inventory_movements WHERE order_id=? AND movement_type IN ('consumption','recipe_consumption') ORDER BY id",
+                (order_id,),
+            ).fetchall()
+            reverse_movements(conn, movements, f"Reversión de pedido {order_id}", "adjustment")
+            movement_count = len(movements)
+            conn.execute("UPDATE orders SET stock_consumed=0 WHERE id=?", (order_id,))
+        elif status in ("preparing", "ready", "delivered") and int(order["stock_consumed"] or 0) == 0:
+            quantities: dict[str, float] = {}
+            for item in conn.execute("SELECT product_id,quantity FROM order_items WHERE order_id=?", (order_id,)).fetchall():
+                quantities[item["product_id"]] = round(quantities.get(item["product_id"], 0.0) + float(item["quantity"] or 0), 6)
+            direct, ingredients = resolve_kitchen_requirements(conn, quantities)
+            combined = {key: round(direct.get(key, 0.0) + ingredients.get(key, 0.0), 6) for key in set(direct) | set(ingredients)}
+            try:
+                validate_stock_requirements(conn, combined)
+            except HTTPException:
+                conn.rollback()
+                raise
+            allow_negative = allows_negative_stock(conn)
+            for product_id, quantity in direct.items():
+                product = conn.execute("SELECT * FROM products WHERE id=? AND business_id=?", (product_id, current_business_id())).fetchone()
+                if product:
+                    consume_product_stock(
+                        conn, product, quantity, movement_type="consumption",
+                        note=f"Consumo pedido {order_id}", order_id=order_id,
+                        reference_type="order", reference_id=order_id, allow_negative=allow_negative,
+                    )
+            for product_id, quantity in ingredients.items():
+                product = conn.execute("SELECT * FROM products WHERE id=? AND business_id=?", (product_id, current_business_id())).fetchone()
+                if product:
+                    consume_product_stock(
+                        conn, product, quantity, movement_type="recipe_consumption",
+                        note=f"Consumo de receta · pedido {order_id}", order_id=order_id,
+                        reference_type="order", reference_id=order_id, allow_negative=allow_negative,
+                    )
+            conn.execute("UPDATE orders SET stock_consumed=1 WHERE id=?", (order_id,))
+        conn.execute("UPDATE orders SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND business_id=?", (status, order_id, current_business_id()))
+        audit(conn, "status_change", "order", order_id, {"status": status, "restoredMovements": movement_count})
+        conn.commit()
         return {"id": order_id, "status": status}
 
 
@@ -2647,19 +4729,49 @@ def add_order_items(order_id: str, payload: OrderItemsPayload):
             raise HTTPException(409, "Solo puedes agregar productos a una comanda abierta (recibida o en preparación).")
         total = float(order["total"] or 0)
         resolved = []
+        added_quantities: dict[str, float] = {}
         for item in payload.items:
             product = conn.execute("SELECT * FROM products WHERE id=? AND business_id=? AND active=1 AND product_type='sale_item'", (item.productId, current_business_id())).fetchone()
             if not product:
                 conn.rollback()
                 raise HTTPException(404, f"Producto no encontrado: {item.productId}")
-            if product["stock"] < item.quantity:
-                conn.rollback()
-                raise HTTPException(409, f"Stock insuficiente para {product['name']}.")
+            added_quantities[item.productId] = round(added_quantities.get(item.productId, 0.0) + item.quantity, 6)
             total += product["price"] * item.quantity
             resolved.append((item, product))
+        full_quantities: dict[str, float] = {}
+        for item in conn.execute("SELECT product_id,quantity FROM order_items WHERE order_id=?", (order_id,)).fetchall():
+            full_quantities[item["product_id"]] = round(full_quantities.get(item["product_id"], 0.0) + float(item["quantity"] or 0), 6)
+        for product_id, quantity in added_quantities.items():
+            full_quantities[product_id] = round(full_quantities.get(product_id, 0.0) + quantity, 6)
+        already_consumed = int(order["stock_consumed"] or 0) == 1
+        direct, ingredients = resolve_kitchen_requirements(conn, added_quantities if already_consumed else full_quantities)
+        combined = {key: round(direct.get(key, 0.0) + ingredients.get(key, 0.0), 6) for key in set(direct) | set(ingredients)}
+        try:
+            validate_stock_requirements(conn, combined)
+        except HTTPException:
+            conn.rollback()
+            raise
         for item, product in resolved:
             conn.execute("INSERT INTO order_items (order_id,product_id,product_name,quantity,unit_price,notes) VALUES (?,?,?,?,?,?)",
                          (order_id, item.productId, product["name"], item.quantity, product["price"], item.notes))
+        if already_consumed:
+            allow_negative = allows_negative_stock(conn)
+            for product_id, quantity in direct.items():
+                product = conn.execute("SELECT * FROM products WHERE id=? AND business_id=?", (product_id, current_business_id())).fetchone()
+                if product:
+                    consume_product_stock(
+                        conn, product, quantity, movement_type="consumption",
+                        note=f"Consumo pedido {order_id}", order_id=order_id,
+                        reference_type="order", reference_id=order_id, allow_negative=allow_negative,
+                    )
+            for product_id, quantity in ingredients.items():
+                product = conn.execute("SELECT * FROM products WHERE id=? AND business_id=?", (product_id, current_business_id())).fetchone()
+                if product:
+                    consume_product_stock(
+                        conn, product, quantity, movement_type="recipe_consumption",
+                        note=f"Consumo de receta · pedido {order_id}", order_id=order_id,
+                        reference_type="order", reference_id=order_id, allow_negative=allow_negative,
+                    )
         conn.execute("UPDATE orders SET total=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND business_id=?",
                      (round(total, 2), order_id, current_business_id()))
         audit(conn, "update", "order_items", order_id, {"added": len(resolved), "total": round(total, 2)})
@@ -2759,6 +4871,7 @@ def delete_restaurant_table(table_id: str):
 class RecipeIngredientPayload(BaseModel):
     ingredientId: str
     quantity: float = Field(gt=0, le=100000)
+    unit: str = Field(default="", max_length=32)
 
 
 class RecipePayload(BaseModel):
@@ -2771,25 +4884,19 @@ class RecipePayload(BaseModel):
 @app.get("/api/recipes")
 def list_recipes():
     with connection() as conn:
-        business = conn.execute("SELECT business_type FROM businesses WHERE id=?", (current_business_id(),)).fetchone()
-        if business and business["business_type"] == "food":
-            raise HTTPException(404, "El módulo de recetas no está disponible para Negocio de comidas.")
         rows = conn.execute("""SELECT r.*, p.name AS product_name FROM recipes r
             JOIN products p ON p.id=r.product_id WHERE r.business_id=? ORDER BY p.name COLLATE NOCASE""", (current_business_id(),)).fetchall()
         result = []
         for row in rows:
-            ingredients = conn.execute("""SELECT ri.ingredient_id, ri.quantity, p.name, p.unit, p.stock
+            ingredients = conn.execute("""SELECT ri.ingredient_id, ri.quantity, ri.unit AS recipe_unit, p.name, p.unit AS product_unit, p.stock
                 FROM recipe_items ri JOIN products p ON p.id=ri.ingredient_id WHERE ri.recipe_id=? ORDER BY p.name""", (row["id"],)).fetchall()
-            result.append({"id": row["id"], "productId": row["product_id"], "productName": row["product_name"], "yieldQuantity": row["yield_quantity"], "instructions": row["instructions"], "ingredients": [{"ingredientId": i["ingredient_id"], "name": i["name"], "quantity": i["quantity"], "unit": i["unit"], "stock": i["stock"]} for i in ingredients]})
+            result.append({"id": row["id"], "productId": row["product_id"], "productName": row["product_name"], "yieldQuantity": row["yield_quantity"], "instructions": row["instructions"], "ingredients": [{"ingredientId": i["ingredient_id"], "name": i["name"], "quantity": i["quantity"], "unit": i["recipe_unit"] or i["product_unit"], "productUnit": i["product_unit"], "stock": i["stock"]} for i in ingredients]})
         return result
 
 
 @app.post("/api/recipes", status_code=201)
 def save_recipe(payload: RecipePayload):
     with connection() as conn:
-        business = conn.execute("SELECT business_type FROM businesses WHERE id=?", (current_business_id(),)).fetchone()
-        if business and business["business_type"] == "food":
-            raise HTTPException(404, "El módulo de recetas no está disponible para Negocio de comidas.")
         conn.execute("BEGIN IMMEDIATE")
         product = conn.execute("SELECT id,name,product_type FROM products WHERE id=? AND business_id=? AND active=1", (payload.productId, current_business_id())).fetchone()
         if not product or product["product_type"] != "sale_item":
@@ -2810,7 +4917,7 @@ def save_recipe(payload: RecipePayload):
             conn.execute("DELETE FROM recipe_items WHERE recipe_id=?", (recipe_id,))
         else:
             conn.execute("INSERT INTO recipes (id,business_id,product_id,yield_quantity,instructions) VALUES (?,?,?,?,?)", (recipe_id, current_business_id(), payload.productId, payload.yieldQuantity, payload.instructions))
-        conn.executemany("INSERT INTO recipe_items (recipe_id,ingredient_id,quantity) VALUES (?,?,?)", [(recipe_id, i.ingredientId, i.quantity) for i in payload.ingredients])
+        conn.executemany("INSERT INTO recipe_items (recipe_id,ingredient_id,quantity,unit) VALUES (?,?,?,?)", [(recipe_id, i.ingredientId, i.quantity, i.unit) for i in payload.ingredients])
         audit(conn, "upsert", "recipe", recipe_id, {"productId": payload.productId, "ingredients": len(payload.ingredients)})
         conn.commit()
     return next(r for r in list_recipes() if r["id"] == recipe_id)
@@ -2819,9 +4926,6 @@ def save_recipe(payload: RecipePayload):
 @app.delete("/api/recipes/{recipe_id}")
 def delete_recipe(recipe_id: str):
     with connection() as conn:
-        business = conn.execute("SELECT business_type FROM businesses WHERE id=?", (current_business_id(),)).fetchone()
-        if business and business["business_type"] == "food":
-            raise HTTPException(404, "El módulo de recetas no está disponible para Negocio de comidas.")
         row = conn.execute("SELECT id FROM recipes WHERE id=? AND business_id=?", (recipe_id, current_business_id())).fetchone()
         if not row:
             raise HTTPException(404, "Receta no encontrada.")

@@ -8,7 +8,8 @@ import {
   Truck, Store, UtensilsCrossed, Bed, MapPin, Settings, Users, Moon,
   Sun, ChevronLeft, ChevronRight, Menu, X,
   ChefHat, CalendarDays, Building2, MoreHorizontal, Warehouse,
-  Building, TrendingUp, FileBarChart, Scissors, ClipboardList, BookOpen
+  Building, TrendingUp, FileBarChart, Scissors, ClipboardList, BookOpen,
+  ArrowDownToLine, ArrowUpFromLine, AlertTriangle, Scale, ClipboardCheck, ArrowLeftRight, Boxes
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -328,8 +329,22 @@ function LayoutShell({ children }: LayoutProps) {
       items.push({ path: '/services', icon: Scissors, label: 'Servicios', group: 'tipo' });
       items.push({ path: '/services/appointments', icon: CalendarDays, label: 'Agenda de citas', group: 'tipo' });
     }
-    if (config?.features.warehouse) {
-      items.push({ path: '/warehouse/locations', icon: MapPin, label: 'Ubicaciones', group: 'tipo' });
+    if (config?.features.inventory) {
+      items.push(
+        { path: '/warehouse', icon: Warehouse, label: 'Bodega', group: 'inventario' },
+        { path: '/warehouse/entries', icon: ArrowDownToLine, label: 'Entradas', group: 'inventario' },
+        { path: '/warehouse/exits', icon: ArrowUpFromLine, label: 'Salidas', group: 'inventario' },
+        { path: '/warehouse/waste', icon: AlertTriangle, label: 'Mermas', group: 'inventario' },
+        { path: '/warehouse/adjustments', icon: Scale, label: 'Ajustes', group: 'inventario' },
+        { path: '/warehouse/purchase-orders', icon: ShoppingCart, label: 'Compras', group: 'inventario' },
+        { path: '/warehouse/counts', icon: ClipboardCheck, label: 'Conteos', group: 'inventario' },
+        { path: '/warehouse/transfers', icon: ArrowLeftRight, label: 'Traslados', group: 'inventario' },
+        { path: '/warehouse/locations', icon: MapPin, label: 'Ubicaciones', group: 'inventario' },
+        { path: '/warehouse/lots', icon: Boxes, label: 'Lotes y vencimientos', group: 'inventario' },
+        { path: '/warehouse/movements', icon: ClipboardList, label: 'Movimientos', group: 'inventario' },
+        { path: '/warehouse/reports', icon: FileBarChart, label: 'Reportes de bodega', group: 'inventario' },
+        { path: '/warehouse/settings', icon: Settings, label: 'Configuración de bodega', group: 'inventario' },
+      );
     }
 
     const foodMenuEnabled = config?.type === 'restaurant' && (config.foodConfig?.activeModules ?? []).includes('menu');
@@ -338,6 +353,9 @@ function LayoutShell({ children }: LayoutProps) {
     }
     if (config?.features.inventory) {
       items.push({ path: '/suppliers', icon: Truck, label: 'Proveedores', group: 'inventario' });
+    }
+    if (config?.type === 'restaurant' && (config.features.inventory || foodMenuEnabled)) {
+      items.push({ path: '/restaurant/recipes', icon: BookOpen, label: 'Recetas y costos', group: 'inventario' });
     }
 
     items.push(

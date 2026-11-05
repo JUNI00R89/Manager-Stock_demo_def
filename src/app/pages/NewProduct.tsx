@@ -8,7 +8,9 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
-import { dataService, getProductCategories, createProductCategory, type ProductCategoryRecord } from '../services/dataService';
+import { Switch } from '../components/ui/switch';
+import { dataService, getProductCategories, createProductCategory, type ProductCategoryRecord, type InventoryLocationRecord } from '../services/dataService';
+import type { Product, Supplier } from '../utils/mockData';
 import { useBusiness, type BusinessType } from '../context/BusinessContext';
 
 const CATEGORY_PRESETS: Record<BusinessType, string[]> = {
@@ -19,8 +21,8 @@ const CATEGORY_PRESETS: Record<BusinessType, string[]> = {
   services: ['Servicios principales', 'Servicios complementarios', 'Productos relacionados', 'Otros'],
 };
 const DISCRETE_UNITS = new Set(['unidad', 'porción', 'porcion', 'paquete', 'tajada', 'caja', 'pieza', 'par', 'botella', 'lata', 'servicio']);
-type ProductForm = { name: string; sku: string; category: string; price: string; cost: string; stock: string; minStock: string; description: string; productType: 'sale_item' | 'ingredient' | 'supplies'; unit: string };
-const emptyForm: ProductForm = { name: '', sku: '', category: '', price: '', cost: '', stock: '0', minStock: '5', description: '', productType: 'sale_item', unit: 'unidad' };
+type ProductForm = { name: string; sku: string; category: string; price: string; cost: string; stock: string; minStock: string; description: string; productType: 'sale_item' | 'ingredient' | 'supplies'; unit: string; supplierId: string; barcode: string; trackLots: boolean; defaultLocationId: string };
+const emptyForm: ProductForm = { name: '', sku: '', category: '', price: '', cost: '', stock: '0', minStock: '5', description: '', productType: 'sale_item', unit: 'unidad', supplierId: '', barcode: '', trackLots: false, defaultLocationId: '' };
 const money = (v: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(v || 0);
 
 export function NewProduct() {
@@ -37,6 +39,8 @@ export function NewProduct() {
   const [categoryName, setCategoryName] = useState('');
   const [categoryDescription, setCategoryDescription] = useState('');
   const [savingCategory, setSavingCategory] = useState(false);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [locations, setLocations] = useState<InventoryLocationRecord[]>([]);
 
   const discreteQuantity = useMemo(() => DISCRETE_UNITS.has(formData.unit.trim().toLocaleLowerCase('es')), [formData.unit]);
 
@@ -53,12 +57,22 @@ export function NewProduct() {
   }, [config?.type]);
 
   useEffect(() => {
+    let active = true;
+    const loadReferences = async () => {
+      try { setSuppliers(await dataService.getSuppliers()); setLocations(await dataService.getInventoryLocations()); }
+      catch { /* el catálogo no debe bloquear el alta del producto */ }
+    };
+    void loadReferences();
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
     if (!id) return;
     let active = true;
     void dataService.getProduct(id).then(product => {
       if (!active) return;
       if (!product) { toast.error('El producto no existe.'); navigate('/products', { replace: true }); return; }
-      setFormData({ name: product.name, sku: product.sku, category: product.category, price: String(product.price), cost: String(product.cost || 0), stock: String(product.stock), minStock: String(product.minStock), description: product.description || '', productType: isFoodBusiness ? 'sale_item' : (product.productType || 'sale_item'), unit: product.unit || 'unidad' });
+      setFormData({ name: product.name, sku: product.sku, category: product.category, price: String(product.price), cost: String(product.cost || 0), stock: String(product.stock), minStock: String(product.minStock), description: product.description || '', productType: isFoodBusiness ? 'sale_item' : (product.productType || 'sale_item'), unit: product.unit || 'unidad', supplierId: product.supplierId || '', barcode: product.barcode || '', trackLots: Boolean(product.trackLots), defaultLocationId: product.defaultLocationId || '' });
     }).catch(error => toast.error(error instanceof Error ? error.message : 'No se pudo cargar el producto.')).finally(() => setLoading(false));
     return () => { active = false; };
   }, [id, navigate, isFoodBusiness]);
@@ -69,7 +83,7 @@ export function NewProduct() {
     }
   }, [categories, formData.category, isEditing]);
 
-  const handleChange = (field: keyof ProductForm, value: string) => setFormData(prev => ({ ...prev, [field]: value }));
+  const handleChange = (field: keyof ProductForm, value: string | boolean) => setFormData(prev => ({ ...prev, [field]: value }));
   const handleCreateCategory = async () => {
     const name = categoryName.trim();
     if (name.length < 2) { toast.error('El nombre de la categoría debe tener al menos dos caracteres.'); return; }
@@ -97,7 +111,7 @@ export function NewProduct() {
     if (!categories.some(category => category.name === formData.category) && !isEditing) { toast.error('Selecciona una categoría válida o crea una nueva.'); return; }
     setSaving(true);
     const productType = isFoodBusiness ? 'sale_item' : formData.productType;
-    const payload = { name: formData.name.trim(), sku: formData.sku.trim().toUpperCase(), category: formData.category, price, cost, stock, minStock, description: formData.description.trim(), image: productType === 'ingredient' ? 'ingredient' : 'food', productType, unit: formData.unit };
+    const payload = { name: formData.name.trim(), sku: formData.sku.trim().toUpperCase(), category: formData.category, price, cost, stock, minStock, description: formData.description.trim(), image: productType === 'ingredient' ? 'ingredient' : 'food', productType, unit: formData.unit, supplierId: formData.supplierId || undefined, barcode: formData.barcode.trim(), trackLots: formData.trackLots, defaultLocationId: formData.defaultLocationId || undefined };
     try {
       if (id) await dataService.updateProduct(id, payload);
       else await dataService.createProduct(payload);
@@ -123,6 +137,10 @@ export function NewProduct() {
           <div className="space-y-2"><Label htmlFor="category">Categoría *</Label><select id="category" value={showCategoryForm ? '__create_category__' : formData.category} onChange={e => selectCategory(e.target.value)} className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm" required={!showCategoryForm} disabled={categoryLoading}><option value="" disabled>{categoryLoading ? 'Cargando categorías…' : 'Selecciona una categoría'}</option>{categories.map(category => <option key={category.id} value={category.name}>{category.name}{category.custom ? ' · Personalizada' : ''}</option>)}{formData.category && !categories.some(category => category.name === formData.category) && <option value={formData.category}>{formData.category} · Existente</option>}<option value="__create_category__">＋ Crear nueva categoría…</option></select></div>
           {!isFoodBusiness ? <div className="space-y-2"><Label htmlFor="type">Tipo de registro</Label><select id="type" value={formData.productType} onChange={e => handleChange('productType', e.target.value as ProductForm['productType'])} className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"><option value="sale_item">Producto para vender</option><option value="ingredient">Ingrediente / materia prima</option><option value="supplies">Suministro del negocio</option></select><p className="text-xs text-muted-foreground">Los ingredientes y suministros se mantienen fuera del punto de venta.</p></div> : <div className="rounded-xl border border-[var(--brand-primary)]/20 bg-[var(--brand-soft)] p-3 text-sm text-foreground"><strong>Producto de venta</strong><p className="mt-1 text-xs leading-5 text-muted-foreground">Cada plato o bebida se maneja como producto individual. No necesitas registrar recetas ni ingredientes.</p></div>}
           <div className="space-y-2"><Label htmlFor="unit">Unidad de medida</Label><select id="unit" value={formData.unit} onChange={e => handleChange('unit', e.target.value)} className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm">{['unidad','porción','kg','g','litro','ml','paquete','tajada','caja','servicio'].map(unit => <option key={unit}>{unit}</option>)}</select><p className="text-xs text-muted-foreground">{discreteQuantity ? 'Las cantidades se ajustan de una en una.' : 'Permite cantidades fraccionarias para esta unidad.'}</p></div>
+          {!isFoodBusiness ? <div className="space-y-2"><Label htmlFor="supplier">Proveedor principal</Label><select id="supplier" value={formData.supplierId} onChange={e => handleChange('supplierId', e.target.value)} className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"><option value="">Sin proveedor</option>{suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.company || supplier.name}</option>)}</select><p className="text-xs text-muted-foreground">Se usa para compras, entradas y historial de precios.</p></div> : <div className="hidden" />}
+          <div className="space-y-2"><Label htmlFor="barcode">Código de barras / SKU externo</Label><Input id="barcode" value={formData.barcode} onChange={e => handleChange('barcode', e.target.value)} placeholder="Ej. 7501234567890" maxLength={120} className="h-11 rounded-xl"/><p className="text-xs text-muted-foreground">Permite buscar el producto al escanear en el punto de venta o en bodega.</p></div>
+          {!isFoodBusiness ? <div className="flex items-center justify-between gap-3 rounded-xl border border-border/70 p-3"><div><Label htmlFor="trackLots" className="text-sm">Trazar por lotes</Label><p className="text-xs text-muted-foreground">Registra lotes y vencimientos para ventas y salidas.</p></div><Switch id="trackLots" checked={formData.trackLots} onCheckedChange={value => handleChange('trackLots', Boolean(value))} className="data-[state=checked]:bg-orange-600"/></div> : <div className="hidden" />}
+          {locations.length > 0 ? <div className="space-y-2"><Label htmlFor="location">Ubicación por defecto</Label><select id="location" value={formData.defaultLocationId} onChange={e => handleChange('defaultLocationId', e.target.value)} className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"><option value="">Sin ubicación predeterminada</option>{locations.map(location => <option key={location.id} value={location.id}>{location.code} · {location.label}</option>)}</select></div> : <div className="hidden" />}
         </div>
         {showCategoryForm && <section className="rounded-2xl border border-[var(--brand-primary)]/30 bg-[var(--brand-soft)] p-4 sm:p-5" aria-labelledby="new-category-heading"><div className="flex items-start gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--brand-primary)] text-white"><Boxes className="h-5 w-5"/></div><div className="min-w-0 flex-1"><h3 id="new-category-heading" className="font-semibold">Crear categoría nueva</h3><p className="mt-1 text-sm text-muted-foreground">La categoría estará disponible para este negocio, según los permisos de tu cuenta.</p></div><Button type="button" variant="ghost" size="icon" aria-label="Cerrar formulario de categoría" onClick={() => setShowCategoryForm(false)}><X className="h-4 w-4"/></Button></div><div className="mt-4 grid gap-3 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="new-category-name">Nombre *</Label><Input id="new-category-name" value={categoryName} onChange={e => setCategoryName(e.target.value)} maxLength={80} placeholder="Ej. Accesorios" className="bg-card"/></div><div className="space-y-2"><Label htmlFor="new-category-description">Descripción (opcional)</Label><Input id="new-category-description" value={categoryDescription} onChange={e => setCategoryDescription(e.target.value)} maxLength={400} placeholder="Descripción breve" className="bg-card"/></div></div><div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button type="button" variant="outline" onClick={() => setShowCategoryForm(false)}><X className="h-4 w-4"/>Cancelar</Button><Button type="button" onClick={() => void handleCreateCategory()} disabled={savingCategory} className="bg-[var(--brand-primary)] text-white hover:opacity-90"><Check className="h-4 w-4"/>{savingCategory ? 'Guardando…' : 'Crear y seleccionar'}</Button></div></section>}
         <div className="border-t border-border/70 pt-6"><h2 className="font-semibold">Precios y stock</h2><div className="mt-4 grid gap-5 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="price">Precio de venta (COP) *</Label><Input id="price" type="number" min="0" step="1" value={formData.price} onChange={e => handleChange('price', e.target.value)} placeholder="18000" required className="h-11 rounded-xl"/></div><div className="space-y-2"><Label htmlFor="cost">Costo estimado (COP)</Label><Input id="cost" type="number" min="0" step="1" value={formData.cost} onChange={e => handleChange('cost', e.target.value)} placeholder="7200" className="h-11 rounded-xl"/><p className="text-xs text-muted-foreground">Sirve para estimar margen y rentabilidad.</p></div><div className="space-y-2"><Label htmlFor="stock">Existencias iniciales *</Label><Input id="stock" type="number" min="0" step={discreteQuantity ? '1' : '0.01'} value={formData.stock} onChange={e => handleChange('stock', e.target.value)} required className="h-11 rounded-xl" aria-describedby="stock-help"/><p id="stock-help" className="text-xs text-muted-foreground">{discreteQuantity ? 'Unidades enteras; las flechas incrementan de 1 en 1.' : 'Esta unidad admite cantidades fraccionarias.'}</p></div><div className="space-y-2"><Label htmlFor="minStock">Alerta de stock mínimo *</Label><Input id="minStock" type="number" min="0" step={discreteQuantity ? '1' : '0.01'} value={formData.minStock} onChange={e => handleChange('minStock', e.target.value)} required className="h-11 rounded-xl" aria-describedby="min-stock-help"/><p id="min-stock-help" className="text-xs text-muted-foreground">{discreteQuantity ? 'Número entero de unidades para activar la alerta.' : 'Se puede expresar en fracciones según la unidad.'}</p></div></div></div>

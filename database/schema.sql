@@ -200,6 +200,23 @@ CREATE TABLE IF NOT EXISTS service_appointments (
 CREATE INDEX IF NOT EXISTS idx_service_appointments_business_date ON service_appointments(business_id,appointment_date,start_time,status);
 CREATE INDEX IF NOT EXISTS idx_service_appointments_professional_slot ON service_appointments(business_id,professional_id,appointment_date,start_time,end_time,status);
 
+CREATE TABLE IF NOT EXISTS warehouse_locations (
+  id TEXT PRIMARY KEY,
+  business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  code TEXT NOT NULL,
+  name TEXT NOT NULL DEFAULT '',
+  zone TEXT NOT NULL DEFAULT '',
+  aisle TEXT NOT NULL DEFAULT '',
+  rack TEXT NOT NULL DEFAULT '',
+  level INTEGER NOT NULL DEFAULT 1 CHECK(level >= 0),
+  capacity REAL NOT NULL DEFAULT 0 CHECK(capacity >= 0),
+  active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(business_id, code)
+);
+CREATE INDEX IF NOT EXISTS idx_warehouse_locations_business ON warehouse_locations(business_id,active,zone,code);
+
 CREATE TABLE IF NOT EXISTS products (
   id TEXT PRIMARY KEY,
   business_id TEXT NOT NULL REFERENCES businesses(id),
@@ -208,17 +225,23 @@ CREATE TABLE IF NOT EXISTS products (
   category TEXT NOT NULL,
   price REAL NOT NULL CHECK(price >= 0),
   cost REAL NOT NULL DEFAULT 0 CHECK(cost >= 0),
-  stock REAL NOT NULL DEFAULT 0 CHECK(stock >= 0),
+  stock REAL NOT NULL DEFAULT 0,
   min_stock REAL NOT NULL DEFAULT 0 CHECK(min_stock >= 0),
   description TEXT NOT NULL DEFAULT '',
   image TEXT NOT NULL DEFAULT '',
   product_type TEXT NOT NULL DEFAULT 'sale_item' CHECK(product_type IN ('sale_item','ingredient','supplies')),
   unit TEXT NOT NULL DEFAULT 'unidad',
+  supplier_id TEXT REFERENCES suppliers(id),
+  barcode TEXT NOT NULL DEFAULT '',
+  track_lots INTEGER NOT NULL DEFAULT 0 CHECK(track_lots IN (0,1)),
+  default_location_id TEXT REFERENCES warehouse_locations(id),
   active INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(business_id, sku)
 );
+CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(business_id,barcode);
+CREATE INDEX IF NOT EXISTS idx_products_supplier ON products(business_id,supplier_id);
 
 CREATE TABLE IF NOT EXISTS suppliers (
   id TEXT PRIMARY KEY,
@@ -280,17 +303,178 @@ CREATE TABLE IF NOT EXISTS sale_payments (
   amount REAL NOT NULL CHECK(amount >= 0)
 );
 
+CREATE TABLE IF NOT EXISTS inventory_operations (
+  id TEXT PRIMARY KEY,
+  business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  operation_type TEXT NOT NULL CHECK(operation_type IN ('purchase','customer_return','donation','consumption','waste','adjustment','transfer','count','production','opening','other')),
+  supplier_id TEXT REFERENCES suppliers(id),
+  reference TEXT NOT NULL DEFAULT '',
+  reason TEXT NOT NULL DEFAULT '',
+  reason_code TEXT NOT NULL DEFAULT '',
+  invoice_ref TEXT NOT NULL DEFAULT '',
+  attachment_url TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  created_by TEXT,
+  created_by_name TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_operations_business ON inventory_operations(business_id,created_at DESC);
+
+CREATE TABLE IF NOT EXISTS product_lots (
+  id TEXT PRIMARY KEY,
+  business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  lot_code TEXT NOT NULL,
+  quantity REAL NOT NULL DEFAULT 0 CHECK(quantity >= 0),
+  expiry_date TEXT,
+  unit_cost REAL NOT NULL DEFAULT 0 CHECK(unit_cost >= 0),
+  location_id TEXT REFERENCES warehouse_locations(id),
+  received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(business_id, product_id, lot_code)
+);
+CREATE INDEX IF NOT EXISTS idx_product_lots_fefo ON product_lots(business_id,product_id,expiry_date,received_at);
+CREATE INDEX IF NOT EXISTS idx_product_lots_expiry ON product_lots(business_id,expiry_date);
+CREATE INDEX IF NOT EXISTS idx_product_lots_location ON product_lots(business_id,location_id);
+
 CREATE TABLE IF NOT EXISTS inventory_movements (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   business_id TEXT NOT NULL REFERENCES businesses(id),
   product_id TEXT NOT NULL REFERENCES products(id),
   sale_id TEXT REFERENCES sales(id),
-  movement_type TEXT NOT NULL CHECK(movement_type IN ('opening','purchase','sale','sale_cancelled','adjustment','transfer_in','transfer_out','waste')),
+  order_id TEXT REFERENCES orders(id),
+  operation_id TEXT REFERENCES inventory_operations(id),
+  lot_id TEXT REFERENCES product_lots(id),
+  location_id TEXT REFERENCES warehouse_locations(id),
+  movement_type TEXT NOT NULL CHECK(movement_type IN ('opening','purchase','customer_return','donation','sale','sale_cancelled','recipe_consumption','consumption','adjustment','transfer_in','transfer_out','waste','count_adjustment','production')),
   quantity_delta REAL NOT NULL,
   stock_before REAL NOT NULL,
   stock_after REAL NOT NULL,
+  unit_cost REAL NOT NULL DEFAULT 0,
   note TEXT NOT NULL DEFAULT '',
+  reason TEXT NOT NULL DEFAULT '',
+  created_by TEXT,
+  created_by_name TEXT NOT NULL DEFAULT '',
+  reference_type TEXT NOT NULL DEFAULT '',
+  reference_id TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_movements_product_date ON inventory_movements(product_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_inventory_movements_business_date ON inventory_movements(business_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_inventory_movements_type ON inventory_movements(business_id, movement_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_inventory_movements_sale ON inventory_movements(sale_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_movements_reference ON inventory_movements(business_id, reference_type, reference_id);
+
+CREATE TABLE IF NOT EXISTS purchase_orders (
+  id TEXT PRIMARY KEY,
+  business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  supplier_id TEXT NOT NULL REFERENCES suppliers(id),
+  status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','sent','partial','received','cancelled')),
+  expected_date TEXT,
+  notes TEXT NOT NULL DEFAULT '',
+  created_by TEXT,
+  created_by_name TEXT NOT NULL DEFAULT '',
+  approved_by TEXT,
+  approved_at TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_purchase_orders_business ON purchase_orders(business_id,status,created_at DESC);
+
+CREATE TABLE IF NOT EXISTS purchase_order_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  purchase_order_id TEXT NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+  product_id TEXT NOT NULL REFERENCES products(id),
+  quantity_ordered REAL NOT NULL CHECK(quantity_ordered > 0),
+  quantity_received REAL NOT NULL DEFAULT 0 CHECK(quantity_received >= 0),
+  unit_cost REAL NOT NULL DEFAULT 0 CHECK(unit_cost >= 0),
+  unit TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_purchase_order_items_order ON purchase_order_items(purchase_order_id);
+
+CREATE TABLE IF NOT EXISTS physical_counts (
+  id TEXT PRIMARY KEY,
+  business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'closed' CHECK(status IN ('open','closed','cancelled')),
+  notes TEXT NOT NULL DEFAULT '',
+  created_by TEXT,
+  created_by_name TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  closed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_physical_counts_business ON physical_counts(business_id,created_at DESC);
+
+CREATE TABLE IF NOT EXISTS physical_count_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  count_id TEXT NOT NULL REFERENCES physical_counts(id) ON DELETE CASCADE,
+  product_id TEXT NOT NULL REFERENCES products(id),
+  system_quantity REAL NOT NULL,
+  counted_quantity REAL NOT NULL,
+  difference REAL NOT NULL,
+  adjustment_movement_id INTEGER REFERENCES inventory_movements(id),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_physical_count_items_count ON physical_count_items(count_id);
+
+CREATE TABLE IF NOT EXISTS inventory_transfers (
+  id TEXT PRIMARY KEY,
+  business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  origin_location_id TEXT REFERENCES warehouse_locations(id),
+  destination_location_id TEXT REFERENCES warehouse_locations(id),
+  status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','pending','in_transit','received','cancelled')),
+  notes TEXT NOT NULL DEFAULT '',
+  created_by TEXT,
+  created_by_name TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  sent_at TEXT,
+  received_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_transfers_business ON inventory_transfers(business_id,status,created_at DESC);
+
+CREATE TABLE IF NOT EXISTS inventory_transfer_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  transfer_id TEXT NOT NULL REFERENCES inventory_transfers(id) ON DELETE CASCADE,
+  product_id TEXT NOT NULL REFERENCES products(id),
+  quantity REAL NOT NULL CHECK(quantity > 0),
+  lot_id TEXT REFERENCES product_lots(id),
+  lot_code TEXT NOT NULL DEFAULT '',
+  expiry_date TEXT,
+  unit_cost REAL NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_transfer_items_transfer ON inventory_transfer_items(transfer_id);
+
+CREATE TABLE IF NOT EXISTS inventory_transfer_allocations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  transfer_item_id INTEGER NOT NULL REFERENCES inventory_transfer_items(id) ON DELETE CASCADE,
+  lot_code TEXT NOT NULL DEFAULT '',
+  expiry_date TEXT,
+  quantity REAL NOT NULL CHECK(quantity > 0),
+  unit_cost REAL NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_transfer_allocations_item ON inventory_transfer_allocations(transfer_item_id);
+
+CREATE TABLE IF NOT EXISTS supplier_price_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  supplier_id TEXT REFERENCES suppliers(id),
+  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  unit_cost REAL NOT NULL CHECK(unit_cost >= 0),
+  source TEXT NOT NULL DEFAULT '',
+  reference_type TEXT NOT NULL DEFAULT '',
+  reference_id TEXT NOT NULL DEFAULT '',
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_supplier_price_history_product ON supplier_price_history(business_id,product_id,created_at DESC);
+
+CREATE TABLE IF NOT EXISTS product_substitutions (
+  business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  substitute_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  priority INTEGER NOT NULL DEFAULT 1,
+  notes TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY(business_id, product_id, substitute_id)
 );
 
 CREATE TABLE IF NOT EXISTS cash_sessions (
@@ -319,6 +503,7 @@ CREATE TABLE IF NOT EXISTS orders (
   total REAL NOT NULL DEFAULT 0,
   table_number INTEGER,
   waiter TEXT NOT NULL DEFAULT '',
+  stock_consumed INTEGER NOT NULL DEFAULT 0 CHECK(stock_consumed IN (0,1)),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -359,6 +544,7 @@ CREATE TABLE IF NOT EXISTS recipe_items (
   recipe_id TEXT NOT NULL REFERENCES recipes(id),
   ingredient_id TEXT NOT NULL REFERENCES products(id),
   quantity REAL NOT NULL CHECK(quantity > 0),
+  unit TEXT NOT NULL DEFAULT '',
   PRIMARY KEY(recipe_id, ingredient_id)
 );
 

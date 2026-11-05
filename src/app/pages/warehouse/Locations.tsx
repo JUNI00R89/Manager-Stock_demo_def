@@ -1,397 +1,101 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { MapPin, Package, Pencil, Plus, RefreshCw, Save, Trash2, Warehouse } from 'lucide-react';
+import { toast } from 'sonner';
 import { Layout } from '../../components/Layout';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { Badge } from '../../components/ui/badge';
 import { Input } from '../../components/ui/input';
-import {
-  Warehouse as WarehouseIcon,
-  Package,
-  MapPin,
-  TrendingUp,
-  Search,
-  Plus,
-  BarChart3
-} from 'lucide-react';
-import { toast } from 'sonner';
+import { Label } from '../../components/ui/label';
+import { Textarea } from '../../components/ui/textarea';
+import { Badge } from '../../components/ui/badge';
+import { dataService, type InventoryLocationRecord } from '../../services/dataService';
+import { fmtQty, money, PageTitle, StatCard, useWarehousePermissions, useWarehouseRefs } from './shared';
 
-interface WarehouseLocation {
-  id: string;
-  zone: string;
-  aisle: string;
-  rack: string;
-  level: number;
-  code: string;
-  capacity: number;
-  currentStock: number;
-  products: Array<{
-    id: string;
-    name: string;
-    quantity: number;
-    lot: string;
-    expiryDate?: string;
-  }>;
-}
+type LocationDraft = {
+  code: string; name: string; zone: string; aisle: string; rack: string;
+  level: string; capacity: string; active: boolean;
+};
+
+const emptyDraft = (): LocationDraft => ({ code: '', name: '', zone: '', aisle: '', rack: '', level: '1', capacity: '100', active: true });
 
 export function Locations() {
-  const [searchTerm, setSearchTerm] = useState('');
+  const { locations, loading, reload } = useWarehouseRefs();
+  const permissions = useWarehousePermissions();
+  const canEdit = permissions.canEdit;
+  const [search, setSearch] = useState('');
+  const [draft, setDraft] = useState<LocationDraft>(emptyDraft());
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const [locations] = useState<WarehouseLocation[]>([
-    {
-      id: 'LOC001',
-      zone: 'A',
-      aisle: '1',
-      rack: 'R1',
-      level: 1,
-      code: 'A-1-R1-L1',
-      capacity: 100,
-      currentStock: 85,
-      products: [
-        {
-          id: '1',
-          name: 'Laptop Dell XPS 15',
-          quantity: 25,
-          lot: 'LOT-2024-001',
-          expiryDate: undefined
-        },
-        {
-          id: '2',
-          name: 'Mouse Logitech MX',
-          quantity: 60,
-          lot: 'LOT-2024-002'
-        }
-      ]
-    },
-    {
-      id: 'LOC002',
-      zone: 'A',
-      aisle: '1',
-      rack: 'R1',
-      level: 2,
-      code: 'A-1-R1-L2',
-      capacity: 100,
-      currentStock: 45,
-      products: [
-        {
-          id: '3',
-          name: 'Teclado Mecánico RGB',
-          quantity: 45,
-          lot: 'LOT-2024-003'
-        }
-      ]
-    },
-    {
-      id: 'LOC003',
-      zone: 'A',
-      aisle: '2',
-      rack: 'R2',
-      level: 1,
-      code: 'A-2-R2-L1',
-      capacity: 150,
-      currentStock: 120,
-      products: [
-        {
-          id: '4',
-          name: 'Monitor LG 27"',
-          quantity: 35,
-          lot: 'LOT-2024-004'
-        },
-        {
-          id: '5',
-          name: 'Auriculares Sony',
-          quantity: 85,
-          lot: 'LOT-2024-005'
-        }
-      ]
-    },
-    {
-      id: 'LOC004',
-      zone: 'B',
-      aisle: '1',
-      rack: 'R1',
-      level: 1,
-      code: 'B-1-R1-L1',
-      capacity: 200,
-      currentStock: 180,
-      products: [
-        {
-          id: '6',
-          name: 'Webcam Logitech C920',
-          quantity: 80,
-          lot: 'LOT-2024-006'
-        },
-        {
-          id: '7',
-          name: 'Silla Gamer',
-          quantity: 40,
-          lot: 'LOT-2024-007'
-        },
-        {
-          id: '8',
-          name: 'SSD Samsung 1TB',
-          quantity: 60,
-          lot: 'LOT-2024-008'
-        }
-      ]
-    },
-    {
-      id: 'LOC005',
-      zone: 'B',
-      aisle: '2',
-      rack: 'R3',
-      level: 1,
-      code: 'B-2-R3-L1',
-      capacity: 100,
-      currentStock: 30,
-      products: [
-        {
-          id: '9',
-          name: 'Cable HDMI Premium',
-          quantity: 30,
-          lot: 'LOT-2024-009'
-        }
-      ]
-    },
-    {
-      id: 'LOC006',
-      zone: 'C',
-      aisle: '1',
-      rack: 'R1',
-      level: 1,
-      code: 'C-1-R1-L1',
-      capacity: 80,
-      currentStock: 15,
-      products: [
-        {
-          id: '10',
-          name: 'Hub USB-C 7 puertos',
-          quantity: 15,
-          lot: 'LOT-2024-010'
-        }
-      ]
-    }
-  ]);
+  const load = useCallback(async () => {
+    await reload();
+  }, [reload]);
+  useEffect(() => { void load(); }, [load]);
 
-  const filteredLocations = locations.filter(loc =>
-    loc.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    loc.zone.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    loc.products.some(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filtered = useMemo(() => locations.filter(location => {
+    const term = search.trim().toLowerCase();
+    return !term || `${location.code} ${location.name} ${location.label} ${location.zone}`.toLowerCase().includes(term);
+  }), [locations, search]);
 
-  const getOccupancyColor = (percentage: number) => {
-    if (percentage >= 90) return 'text-red-600';
-    if (percentage >= 70) return 'text-yellow-600';
-    return 'text-green-600';
+  const totalCapacity = locations.reduce((sum, location) => sum + (Number(location.capacity) || 0), 0);
+  const totalStock = locations.reduce((sum, location) => sum + (Number(location.lotUnits) || 0), 0);
+  const occupancyRate = totalCapacity > 0 ? Math.round((totalStock / totalCapacity) * 100) : 0;
+
+  const startEdit = (location: InventoryLocationRecord) => {
+    setEditingId(location.id);
+    setDraft({ code: location.code, name: location.name, zone: location.zone, aisle: location.aisle, rack: location.rack, level: String(location.level), capacity: String(location.capacity), active: location.active });
+  };
+  const cancelEdit = () => { setEditingId(null); setDraft(emptyDraft()); };
+
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!draft.code.trim() || draft.code.trim().length < 2) { toast.error('El código de la ubicación es obligatorio.'); return; }
+    if (!draft.aisle.trim() && !draft.rack.trim()) { toast.error('Indica pasillo y/o rack para ubicar el stock.'); return; }
+    const payload = {
+      code: draft.code.trim().toUpperCase(),
+      name: draft.name.trim(),
+      zone: draft.zone.trim(),
+      aisle: draft.aisle.trim(),
+      rack: draft.rack.trim(),
+      level: Number(draft.level) || 1,
+      capacity: Number(draft.capacity) || 0,
+      active: draft.active,
+    };
+    setSaving(true);
+    try {
+      if (editingId) { await dataService.updateInventoryLocation(editingId, payload); toast.success('Ubicación actualizada.'); }
+      else { await dataService.createInventoryLocation(payload); toast.success('Ubicación creada.'); }
+      cancelEdit(); await load();
+    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo guardar la ubicación.'); }
+    finally { setSaving(false); }
   };
 
-  const getOccupancyBarColor = (percentage: number) => {
-    if (percentage >= 90) return 'bg-red-500';
-    if (percentage >= 70) return 'bg-yellow-500';
-    return 'bg-green-500';
+  const confirmDelete = async (location: InventoryLocationRecord) => {
+    setDeletingId(location.id);
+    try {
+      const result = await dataService.deleteInventoryLocation(location.id);
+      toast.success(result?.ok === false ? 'Ubicación desactivada.' : 'Ubicación eliminada.');
+      await load();
+    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo eliminar la ubicación.'); }
+    finally { setDeletingId(null); }
   };
 
-  const totalCapacity = locations.reduce((sum, loc) => sum + loc.capacity, 0);
-  const totalStock = locations.reduce((sum, loc) => sum + loc.currentStock, 0);
-  const occupancyRate = Math.round((totalStock / totalCapacity) * 100);
+  return <Layout><div className="mx-auto max-w-7xl space-y-6">
+    <PageTitle eyebrow="Bodega · Ubicaciones" title="Ubicaciones de bodega" description="Zonas, pasillos, racks y niveles. El stock se asigna a ubicaciones por defecto y por transferencia." action={<Button variant="outline" onClick={() => void load()} disabled={loading} className="h-11 rounded-xl"><RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`}/>Actualizar</Button>}/>
 
-  const zones = Array.from(new Set(locations.map(l => l.zone))).sort();
+    <div className="grid gap-3 sm:grid-cols-3">
+      <StatCard label="Ubicaciones activas" value={locations.length} hint="Configuradas para el negocio" icon={MapPin} tone="orange"/>
+      <StatCard label="Capacidad total" value={fmtQty(totalCapacity)} icon={Warehouse} tone="blue"/>
+      <StatCard label="Ocupación" value={`${occupancyRate}%`} hint={`${fmtQty(totalStock)} unidades con existencias`} icon={Package} tone={occupancyRate > 85 ? 'rose' : 'emerald'}/>
+    </div>
 
-  return (
-    <Layout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex justify-between items-center">
-          <div>
-            <h2 className="text-3xl font-bold text-gray-900">Gestión de Ubicaciones</h2>
-            <p className="text-gray-600 mt-1">Control de zonas y ubicaciones en bodega</p>
-          </div>
-          <Button className="bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600">
-            <Plus size={20} className="mr-2" />
-            Nueva Ubicación
-          </Button>
-        </div>
+    {canEdit && <Card className="rounded-2xl border-border/70 p-5 shadow-sm sm:p-6"><h2 className="font-semibold">{editingId ? 'Editar ubicación' : 'Nueva ubicación'}</h2><form onSubmit={save} className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><div className="space-y-1"><Label className="text-xs">Código *</Label><Input value={draft.code} onChange={event => setDraft(prev => ({ ...prev, code: event.target.value }))} placeholder="Ej. A-1-R1" className="h-10 rounded-xl"/></div><div className="space-y-1"><Label className="text-xs">Nombre</Label><Input value={draft.name} onChange={event => setDraft(prev => ({ ...prev, name: event.target.value }))} placeholder="Ej. Cocina fría" className="h-10 rounded-xl"/></div><div className="space-y-1"><Label className="text-xs">Zona</Label><Input value={draft.zone} onChange={event => setDraft(prev => ({ ...prev, zone: event.target.value }))} placeholder="A" className="h-10 rounded-xl"/></div><div className="space-y-1"><Label className="text-xs">Pasillo</Label><Input value={draft.aisle} onChange={event => setDraft(prev => ({ ...prev, aisle: event.target.value }))} className="h-10 rounded-xl"/></div><div className="space-y-1"><Label className="text-xs">Rack</Label><Input value={draft.rack} onChange={event => setDraft(prev => ({ ...prev, rack: event.target.value }))} className="h-10 rounded-xl"/></div><div className="grid grid-cols-2 gap-2 sm:grid-cols-3"><div className="space-y-1"><Label className="text-xs">Nivel</Label><Input type="number" min="0" max="999" value={draft.level} onChange={event => setDraft(prev => ({ ...prev, level: event.target.value }))} className="h-10 rounded-xl"/></div><div className="space-y-1"><Label className="text-xs">Capacidad</Label><Input type="number" min="0" step="1" value={draft.capacity} onChange={event => setDraft(prev => ({ ...prev, capacity: event.target.value }))} className="h-10 rounded-xl"/></div><div className="flex items-end"><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={draft.active} onChange={event => setDraft(prev => ({ ...prev, active: event.target.checked }))} className="h-4 w-4 accent-[var(--brand-primary)]"/> Activa</label></div></div></div><div className="flex justify-end gap-2 border-t border-border/70 pt-3"><Button type="button" variant="outline" onClick={cancelEdit}>Cancelar</Button><Button type="submit" disabled={saving} className="rounded-xl bg-orange-600 text-white hover:bg-orange-700"><Save className="mr-2 h-4 w-4"/>Guardar</Button></div></form></Card>}
 
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="p-6 border-2 border-orange-200 bg-gradient-to-br from-orange-50 to-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Ubicaciones</p>
-                <p className="text-3xl font-bold text-orange-600">{locations.length}</p>
-              </div>
-              <MapPin className="text-orange-400" size={32} />
-            </div>
-          </Card>
-
-          <Card className="p-6 border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Capacidad Total</p>
-                <p className="text-3xl font-bold text-blue-600">{totalCapacity}</p>
-              </div>
-              <WarehouseIcon className="text-blue-400" size={32} />
-            </div>
-          </Card>
-
-          <Card className="p-6 border-2 border-green-200 bg-gradient-to-br from-green-50 to-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Stock Actual</p>
-                <p className="text-3xl font-bold text-green-600">{totalStock}</p>
-              </div>
-              <Package className="text-green-400" size={32} />
-            </div>
-          </Card>
-
-          <Card className="p-6 border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Ocupación</p>
-                <p className={`text-3xl font-bold ${getOccupancyColor(occupancyRate)}`}>
-                  {occupancyRate}%
-                </p>
-              </div>
-              <BarChart3 className="text-purple-400" size={32} />
-            </div>
-          </Card>
-        </div>
-
-        {/* Search */}
-        <Card className="p-4 border-2 border-orange-200">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-            <Input
-              placeholder="Buscar por ubicación o producto..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 border-orange-200"
-            />
-          </div>
-        </Card>
-
-        {/* Locations by Zone */}
-        {zones.map(zone => {
-          const zoneLocations = filteredLocations.filter(l => l.zone === zone);
-          if (zoneLocations.length === 0) return null;
-
-          return (
-            <div key={zone} className="space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-yellow-500 rounded-lg flex items-center justify-center">
-                  <span className="text-2xl font-bold text-white">{zone}</span>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900">Zona {zone}</h3>
-                  <p className="text-sm text-gray-600">{zoneLocations.length} ubicaciones</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {zoneLocations.map((location) => {
-                  const occupancy = Math.round((location.currentStock / location.capacity) * 100);
-
-                  return (
-                    <Card
-                      key={location.id}
-                      className="p-6 border-2 border-orange-200 hover:border-orange-400 hover:shadow-lg transition-all"
-                    >
-                      <div className="space-y-4">
-                        {/* Location Header */}
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <h4 className="text-xl font-bold text-gray-900">
-                              {location.code}
-                            </h4>
-                            <p className="text-sm text-gray-600">
-                              Pasillo {location.aisle} • Rack {location.rack} • Nivel {location.level}
-                            </p>
-                          </div>
-                          <MapPin className="text-orange-600" size={24} />
-                        </div>
-
-                        {/* Capacity */}
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-600">Ocupación:</span>
-                            <span className={`font-bold ${getOccupancyColor(occupancy)}`}>
-                              {location.currentStock} / {location.capacity} ({occupancy}%)
-                            </span>
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div
-                              className={`bar-fill h-2 rounded-full transition-all ${getOccupancyBarColor(occupancy)}`}
-                              style={{ width: `${occupancy}%` }}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Products */}
-                        <div className="space-y-2 pt-3 border-t border-orange-100">
-                          <div className="flex items-center gap-2 text-sm font-semibold text-gray-900">
-                            <Package size={16} />
-                            <span>Productos ({location.products.length})</span>
-                          </div>
-                          {location.products.map((product, idx) => (
-                            <div
-                              key={idx}
-                              className="bg-orange-50 p-3 rounded-lg border border-orange-100"
-                            >
-                              <div className="flex justify-between items-start mb-1">
-                                <p className="text-sm font-medium text-gray-900 flex-1 line-clamp-1">
-                                  {product.name}
-                                </p>
-                                <Badge variant="outline" className="border-orange-300 text-orange-700 ml-2">
-                                  {product.quantity}
-                                </Badge>
-                              </div>
-                              <p className="text-xs text-gray-600">
-                                Lote: {product.lot}
-                              </p>
-                              {product.expiryDate && (
-                                <p className="text-xs text-red-600">
-                                  Vence: {new Date(product.expiryDate).toLocaleDateString('es-MX')}
-                                </p>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* Actions */}
-                        <div className="flex gap-2 pt-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="flex-1 border-orange-300 text-orange-700 hover:bg-orange-50"
-                            onClick={() => toast.info(`Ver detalles de ${location.code}`)}
-                          >
-                            Ver Detalle
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="flex-1 border-green-300 text-green-700 hover:bg-green-50"
-                            onClick={() => toast.success('Movimiento registrado')}
-                          >
-                            Mover Stock
-                          </Button>
-                        </div>
-                      </div>
-                    </Card>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-
-        {filteredLocations.length === 0 && (
-          <Card className="p-12 border-2 border-orange-200 text-center">
-            <WarehouseIcon className="mx-auto text-gray-400 mb-4" size={64} />
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">No se encontraron ubicaciones</h3>
-            <p className="text-gray-600">Intenta con otros términos de búsqueda</p>
-          </Card>
-        )}
-      </div>
-    </Layout>
-  );
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{filtered.map(location => { const occupancy = Math.round((Number(location.lotUnits) || 0) / Math.max(1, Number(location.capacity) || 1) * 100); const pct = Math.min(100, occupancy); return <Card key={location.id} className="rounded-2xl border-border/70 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"><div className="flex items-start justify-between gap-2"><div><h3 className="font-semibold">{location.code}</h3><p className="mt-1 text-xs text-muted-foreground">{location.label || location.name || 'Ubicación'}</p></div><MapPin className="h-5 w-5 text-orange-500"/><Badge variant="outline" className={location.active ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-700'}>{location.active ? 'Activa' : 'Inactiva'}</Badge></div>
+        <div className="mt-3 rounded-xl border border-border/70 p-3"><div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">Ocupación</span><span className="font-semibold">{fmtQty(location.lotUnits)} / {fmtQty(location.capacity)} ({pct}%)</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-muted"><div className={`bar-fill h-full rounded-full ${pct >= 90 ? 'bg-rose-500' : pct >= 70 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, pct)}%` }}/></div></div>
+        <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground"><span>Productos</span><span>{location.productCount}</span><span>Lotes</span><span>{fmtQty(location.lotUnits)}</span></div>
+        {canEdit && <div className="mt-4 flex gap-2 border-t border-border/70 pt-4"><Button size="sm" variant="outline" onClick={() => startEdit(location)} className="rounded-lg"><Pencil className="mr-2 h-4 w-4"/>Editar</Button><Button size="sm" variant="outline" onClick={() => setDeletingId(location.id)} disabled={deletingId === location.id} className="rounded-lg border-rose-200 text-rose-700 hover:bg-rose-50"><Trash2 className="mr-2 h-4 w-4"/>Eliminar</Button></div>}</Card>);})}</div>
+    {filtered.length === 0 && <Card className="rounded-2xl border-dashed p-10 text-center"><Warehouse className="mx-auto mb-3 h-10 w-10 text-muted-foreground/50"/><h2 className="font-semibold">Sin ubicaciones</h2><p className="mt-1 text-sm text-muted-foreground">Crea la primera zona o pasillo de la bodega.</p></Card>}
+  </div></Layout>;
 }

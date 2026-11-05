@@ -18,7 +18,12 @@ const PERMISSIONS = [
   { key: 'catalog.create', label: 'Crear productos', group: 'Catálogo' },
   { key: 'catalog.edit', label: 'Editar o retirar productos', group: 'Catálogo' },
   { key: 'inventory.view', label: 'Consultar inventario y movimientos', group: 'Inventario' },
-  { key: 'inventory.edit', label: 'Ajustes y operaciones de inventario', group: 'Inventario' },
+  { key: 'inventory.edit', label: 'Configurar ubicaciones y parámetros de inventario', group: 'Inventario' },
+  { key: 'inventory.entry', label: 'Registrar entradas, salidas y mermas', group: 'Inventario' },
+  { key: 'inventory.adjust', label: 'Realizar ajustes y conteos físicos', group: 'Inventario' },
+  { key: 'inventory.delete', label: 'Eliminar registros de inventario', group: 'Inventario' },
+  { key: 'inventory.negative', label: 'Permitir stock negativo', group: 'Inventario' },
+  { key: 'purchases.approve', label: 'Aprobar, enviar y cancelar órdenes de compra', group: 'Compras' },
   { key: 'suppliers.view', label: 'Consultar proveedores', group: 'Proveedores' },
   { key: 'suppliers.manage', label: 'Crear o modificar proveedores', group: 'Proveedores' },
   { key: 'sales.view', label: 'Consultar ventas', group: 'Ventas y caja' },
@@ -183,8 +188,11 @@ export function UsersRoles() {
                     next.add(permission.key);
                     const dependencies: Record<string, string[]> = {
                       'catalog.create': ['catalog.view'], 'catalog.edit': ['catalog.view'],
-                      'inventory.edit': ['inventory.view'], 'suppliers.manage': ['suppliers.view'],
-                      'cash.manage': ['cash.view'], 'sales.create': ['sales.view', 'catalog.view', 'cash.view', 'cash.manage'], 'sales.cancel': ['sales.view'],
+                      'inventory.view': [], 'inventory.edit': ['inventory.view'], 'inventory.entry': ['inventory.view'],
+                      'inventory.adjust': ['inventory.view'], 'inventory.delete': ['inventory.view'], 'inventory.negative': ['inventory.view'],
+                      'purchases.approve': ['inventory.view', 'suppliers.view', 'catalog.view'],
+                      'suppliers.manage': ['suppliers.view'], 'cash.manage': ['cash.view'],
+                      'sales.create': ['sales.view', 'catalog.view', 'cash.view', 'cash.manage'], 'sales.cancel': ['sales.view'],
                       'orders.manage': ['orders.view'], 'reports.view': ['sales.view', 'catalog.view'],
                     };
                     const addDependencies = (key: string) => (dependencies[key] ?? []).forEach(required => { if (!next.has(required)) next.add(required); addDependencies(required); });
@@ -193,8 +201,11 @@ export function UsersRoles() {
                     next.delete(permission.key);
                     const dependencies: Record<string, string[]> = {
                       'catalog.create': ['catalog.view'], 'catalog.edit': ['catalog.view'],
-                      'inventory.edit': ['inventory.view'], 'suppliers.manage': ['suppliers.view'],
-                      'cash.manage': ['cash.view'], 'sales.create': ['sales.view', 'catalog.view', 'cash.view', 'cash.manage'], 'sales.cancel': ['sales.view'],
+                      'inventory.view': [], 'inventory.edit': ['inventory.view'], 'inventory.entry': ['inventory.view'],
+                      'inventory.adjust': ['inventory.view'], 'inventory.delete': ['inventory.view'], 'inventory.negative': ['inventory.view'],
+                      'purchases.approve': ['inventory.view', 'suppliers.view', 'catalog.view'],
+                      'suppliers.manage': ['suppliers.view'], 'cash.manage': ['cash.view'],
+                      'sales.create': ['sales.view', 'catalog.view', 'cash.view', 'cash.manage'], 'sales.cancel': ['sales.view'],
                       'orders.manage': ['orders.view'], 'reports.view': ['sales.view', 'catalog.view'],
                     };
                     let changed = true;

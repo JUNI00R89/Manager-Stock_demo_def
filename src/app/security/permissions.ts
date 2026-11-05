@@ -26,6 +26,13 @@ const pathPermission = (path: string): string | null => {
   if (path === '/suppliers') return 'suppliers.view';
   if (path === '/suppliers/new') return 'suppliers.manage';
   if (path.startsWith('/inventory/')) return 'inventory.view';
+  if (path === '/warehouse' || path === '/warehouse/movements' || path === '/warehouse/lots' || path === '/warehouse/reports') return 'inventory.view';
+  if (path === '/warehouse/entries' || path === '/warehouse/exits' || path === '/warehouse/waste' || path === '/warehouse/transfers') return 'inventory.entry';
+  if (path === '/warehouse/adjustments' || path === '/warehouse/counts') return 'inventory.adjust';
+  if (path === '/warehouse/purchase-orders') return 'inventory.view';
+  if (path === '/warehouse/locations') return 'inventory.view';
+  if (path === '/warehouse/settings') return 'inventory.edit';
+  if (path === '/restaurant/recipes') return 'catalog.edit';
   if (path === '/restaurant/waiter') return 'orders.manage';
   if (path === '/restaurant/kitchen') return 'orders.view';
   if (path === '/restaurant/orders') return 'orders.manage';
@@ -48,7 +55,10 @@ export function canAccessPath(path: string, role?: AppRole | null, config?: Busi
     if (!required || !customPermissions.includes(required)) return false;
   }
 
-  if (path === '/restaurant/recipes' || path.startsWith('/restaurant/recipes/')) return false;
+  if (path === '/restaurant/recipes' || path.startsWith('/restaurant/recipes/')) {
+    if (config && config.type !== 'restaurant') return false;
+    if (config && !config.features.inventory && !(config.foodConfig?.activeModules ?? []).includes('menu')) return false;
+  }
 
   if (role === 'cashier' && customPermissions === undefined) {
     const cashierRoutes = [
@@ -65,7 +75,7 @@ export function canAccessPath(path: string, role?: AppRole | null, config?: Busi
   if (config) {
     if (path.startsWith('/restaurant/') && config.type !== 'restaurant') return false;
     if (path.startsWith('/hotel/') && !config.features.rooms) return false;
-    if (path.startsWith('/warehouse/') && !config.features.warehouse) return false;
+    if ((path === '/warehouse' || path.startsWith('/warehouse/')) && !config.features.inventory) return false;
     if (path.startsWith('/services/') && (config.type !== 'services' || !config.features.services)) return false;
     const foodMenuEnabled = config.type === 'restaurant' && (config.foodConfig?.activeModules ?? []).includes('menu');
     if ((path === '/products' || path.startsWith('/products/')) && !config.features.inventory && !foodMenuEnabled) return false;

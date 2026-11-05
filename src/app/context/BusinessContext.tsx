@@ -23,6 +23,12 @@ export interface BusinessTheme {
   mode: 'light' | 'dark';
   customized: boolean;
 }
+export interface InventoryConfig {
+  allowNegativeStock: boolean;
+  expiryAlertDays: number;
+  lowStockAlerts: boolean;
+  defaultLocationId: string | null;
+}
 export interface BusinessConfig {
   /** Identificador del negocio cuando la API lo expone. */
   id?: string;
@@ -33,6 +39,7 @@ export interface BusinessConfig {
   features: { inventory: boolean; pos: boolean; reservations: boolean; tables: boolean; rooms: boolean; warehouse: boolean; services: boolean; delivery: boolean };
   foodConfig?: FoodBusinessConfig;
   theme?: BusinessTheme;
+  inventoryConfig?: InventoryConfig;
 }
 interface BusinessContextType {
   config: BusinessConfig | null;
@@ -151,6 +158,10 @@ function normalizeConfig(value: unknown): BusinessConfig | null {
         : { ...defaults, mode: config.theme.mode ?? defaults.mode })
     : { ...defaults };
   const normalized: BusinessConfig = { ...DEFAULT_CONFIGS[config.type], ...config, theme, currency: 'COP', taxRate: Number.isFinite(config.taxRate) ? config.taxRate : 0.19 };
+  normalized.inventoryConfig = {
+    allowNegativeStock: false, expiryAlertDays: 30, lowStockAlerts: true, defaultLocationId: null,
+    ...(config.inventoryConfig || {}),
+  };
   if (normalized.type === 'restaurant') normalized.foodConfig = { serviceModes: [], foodTypes: [], activeModules: ['menu', 'caja', 'inventario'], ...normalized.foodConfig, displayLabel: 'Negocio de comidas' };
   return normalized;
 }
