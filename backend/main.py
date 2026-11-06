@@ -4280,6 +4280,14 @@ def list_hotel_reservations(status: str | None = Query(default=None, max_length=
         return [hotel_reservation_out(row) for row in conn.execute(query, params).fetchall()]
 
 
+def compute_hotel_stay_charge(room_row, check_in: str, check_out: str) -> float:
+    """Calcula el cargo de la habitación consumida: noches x precio por noche."""
+    start = datetime.strptime(check_in, "%Y-%m-%d").date()
+    end = datetime.strptime(check_out, "%Y-%m-%d").date()
+    nights = max((end - start).days, 1)
+    return float(room_row["price_per_night"] or 0) * nights
+
+
 @app.post("/api/hotel/reservations", status_code=201)
 def create_hotel_reservation(payload: HotelReservationPayload):
     identity = current_identity()
@@ -4293,8 +4301,6 @@ def create_hotel_reservation(payload: HotelReservationPayload):
             raise HTTPException(403, "Tu rol no puede crear reservas.")
     business_id = current_business_id()
     reservation_id = f"RES-{uuid.uuid4().hex[:12].upper()}"
-    start = datetime.strptime(payload.checkIn, "%Y-%m-%d").date()
-    end = datetime.strptime(payload.checkOut, "%Y-%m-%d").date()
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
         room = conn.execute("SELECT * FROM hotel_rooms WHERE id=? AND business_id=?", (payload.roomId, business_id)).fetchone()
@@ -4309,8 +4315,7 @@ def create_hotel_reservation(payload: HotelReservationPayload):
         if overlap:
             conn.rollback()
             raise HTTPException(409, "La habitación ya tiene una reserva para parte de ese periodo.")
-        nights = (end-start).days
-        total = float(room["price_per_night"]) * nights
+        total = compute_hotel_stay_charge(room, payload.checkIn, payload.checkOut)
         if payload.advance > total:
             conn.rollback()
             raise HTTPException(422, "El anticipo no puede superar el valor total de la reserva.")
@@ -4344,12 +4349,16 @@ def update_hotel_reservation_status(reservation_id: str, payload: HotelReservati
         conn.execute("UPDATE hotel_reservations SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND business_id=?", (payload.status,reservation_id,business_id))
         # Recalculate occupancy for this room after the reservation status changes.
         # A checkout/cancellation must not make a room available if another booking is active.
-        room = conn.execute("SELECT status FROM hotel_rooms WHERE id=? AND business_id=?", (reservation["room_id"], business_id)).fetchone()
+        room = conn.execute("SELECT * FROM hotel_rooms WHERE id=? AND business_id=?", (reservation["room_id"], business_id)).fetchone()
         if room and room["status"] not in {"maintenance", "cleaning"}:
             has_checkin = conn.execute("SELECT 1 FROM hotel_reservations WHERE business_id=? AND room_id=? AND status='checkin' LIMIT 1", (business_id, reservation["room_id"])).fetchone()
             has_upcoming = conn.execute("SELECT 1 FROM hotel_reservations WHERE business_id=? AND room_id=? AND status='confirmed' AND check_out>date('now') LIMIT 1", (business_id, reservation["room_id"])).fetchone()
             next_room_status = "occupied" if has_checkin else "reserved" if has_upcoming else "available"
             conn.execute("UPDATE hotel_rooms SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND business_id=?", (next_room_status, reservation["room_id"], business_id))
+        # Consumo de habitación: recalcular el cargo (noches × precio por noche) y mantenerlo en la cuenta.
+        if room:
+            stay_charge = compute_hotel_stay_charge(room, reservation["check_in"], reservation["check_out"])
+            conn.execute("UPDATE hotel_reservations SET total_charges=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND business_id=?", (stay_charge, reservation_id, business_id))
         audit(conn, payload.status, "hotel_reservation", reservation_id, {"status": payload.status})
         row = conn.execute("SELECT r.*,h.room_number FROM hotel_reservations r JOIN hotel_rooms h ON h.id=r.room_id AND h.business_id=r.business_id WHERE r.id=? AND r.business_id=?", (reservation_id,business_id)).fetchone()
         conn.commit()
