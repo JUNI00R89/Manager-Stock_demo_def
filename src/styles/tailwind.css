@@ -1,4 +1,10 @@
 @import 'tailwindcss' source(none);
 @source '../**/*.{js,ts,jsx,tsx}';
 
+/* El tema se controla con la clase `.dark` en <html>, no con la preferencia
+   del sistema operativo. Sin esta variante, las utilidades `dark:*` quedaban
+   atadas a `prefers-color-scheme` y algunas tarjetas/avisos no cambiaban al
+   usar el botón de tema. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @import 'tw-animate-css';

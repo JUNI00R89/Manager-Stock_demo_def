@@ -3982,12 +3982,13 @@ def inventory_reports(days: int = Query(default=30, ge=1, le=365), noMovementDay
 
         count_differences = [{
             "countId": row["count_id"], "productId": row["product_id"], "productName": row["product_name"],
+            "sku": row["sku"] or "",
             "systemQuantity": float(row["system_quantity"] or 0),
             "countedQuantity": float(row["counted_quantity"] or 0),
             "difference": float(row["difference"] or 0), "unit": row["unit"],
             "createdAt": timestamp_iso(row["created_at"]),
         } for row in conn.execute(
-            """SELECT pci.*, p.name AS product_name, p.unit
+            """SELECT pci.*, p.name AS product_name, p.sku, p.unit
                FROM physical_count_items pci JOIN products p ON p.id=pci.product_id
                JOIN physical_counts pc ON pc.id=pci.count_id
                WHERE pc.business_id=? AND pc.created_at >= datetime('now','-90 days')

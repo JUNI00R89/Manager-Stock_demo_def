@@ -62,7 +62,6 @@ export function Settings() {
     root.style.setProperty('--brand-background', previewColors.background);
     root.style.setProperty('--brand-surface', previewColors.surface);
     root.style.setProperty('--brand-soft', `${themeDraft.primary}14`);
-    root.classList.toggle('dark', themeDraft.mode === 'dark');
     root.dataset.businessTheme = themeDraft.mode;
     setTheme(themeDraft.mode);
   }, [themeDraft, previewColors.background, previewColors.surface, setTheme]);

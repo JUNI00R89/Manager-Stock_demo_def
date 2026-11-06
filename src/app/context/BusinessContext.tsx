@@ -126,10 +126,9 @@ export function resolveThemeColors(theme: BusinessTheme) {
 }
 
 /**
- * Aplica la paleta al documento de forma sincrónica (clase `.dark` + variables
- * `--brand-*`). Al ser sincrónica se puede llamar dentro del callback de
- * View Transitions: el snapshot del tema nuevo ya sale con el color nuevo, sin
- * esperar a que React re-renderice ni a que el servidor responda.
+ * Aplica la paleta al documento de forma sincrónica (variables `--brand-*`).
+ * La clase `.dark` la controla ThemeContext, que también se encarga del breve
+ * fundido entre modos. Así hay una sola fuente de verdad para el tema.
  */
 export function applyTheme(theme: BusinessTheme) {
   const root = document.documentElement;
@@ -141,7 +140,6 @@ export function applyTheme(theme: BusinessTheme) {
   root.style.setProperty('--brand-surface', surface);
   root.style.setProperty('--brand-soft', `${theme.primary}14`);
   root.dataset.businessTheme = theme.mode;
-  root.classList.toggle('dark', theme.mode === 'dark');
 }
 
 function normalizeConfig(value: unknown): BusinessConfig | null {

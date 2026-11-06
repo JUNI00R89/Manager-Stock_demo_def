@@ -111,22 +111,23 @@ Extras implementados:
 
 ## Verificación realizada
 
-- Script de integración backend `backend/tests/test_sales_api.py` ejecutado correctamente antes de este bloque de cambios: ventas atómicas, recetas, deducción de ingredientes, cancelación y stock.
-- No se pudo ejecutar `tsc`/`vite build` porque `npm install` quedó interrumpido y no hay `node_modules`. **Pendiente de verificación de compilación frontend.**
+- Backend: `python backend/tests/test_sales_api.py` ejecutado correctamente después de los últimos cambios (ventas atómicas, recetas, deducción de ingredientes, cancelación, stock, permisos y auditoría).
+- Frontend: `npm install`, `npx tsc --noEmit` y `npm run build` completados sin errores.
+- Tema: se corrigió la variante `dark:` de Tailwind para que dependa de la clase `.dark` (antes seguía la preferencia del sistema operativo). Se reemplazó el barrido orgánico por un fundido de color de 180 ms.
+- Smoke test en modo escritorio: inicio de sesión, dashboard, productos, configuración y rutas de bodega (entradas, salidas, mermas, ajustes, compras, conteos, traslados, ubicaciones, lotes, movimientos y reportes) en claro y oscuro, sin tarjetas claras sobre fondo oscuro ni errores de consola.
 
 ## Trabajo pendiente (resumen)
 
-1. Restaurar dependencias con `npm install` y ejecutar `npx tsc --noEmit` + `npm run build`.
-2. Probar en UI los flujos de entradas, salidas, mermas, ajustes, lotes, compras (incluyendo reposición), conteos, traslados, ubicaciones, reportes y configuración.
-3. Verificar redirecciones heredadas `/inventory/*` y acceso a `/restaurant/recipes` en negocios de comida.
-4. Opcional: eliminar las páginas heredadas `src/app/pages/inventory/Transfers.tsx` y `PhysicalCount.tsx` si se confirma que no se usan.
-5. Opcional: exponer en UI el CRUD de sustituciones (`/api/inventory/substitutions`), que ya existe en backend y `dataService`.
+1. Probar en UI el ciclo completo de cada flujo operativo (crear entrada/salida/merma/ajuste, recibir compra, ejecutar conteo y traslado) y no solo el renderizado de las pantallas.
+2. Verificar redirecciones heredadas `/inventory/*` y acceso a `/restaurant/recipes` en negocios de comida.
+3. Opcional: eliminar las páginas heredadas `src/app/pages/inventory/Transfers.tsx` y `PhysicalCount.tsx` si se confirma que no se usan.
+4. Opcional: exponer en UI el CRUD de sustituciones (`/api/inventory/substitutions`), que ya existe en backend y `dataService`.
 
 ## Cómo correr
 
 - Frontend: `npm run dev`
 - Backend: `python -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000`
-- Tests: `python -m pytest backend/tests`
+- Tests: `python backend/tests/test_sales_api.py`
 
 ---
 

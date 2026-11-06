@@ -1,7 +1,7 @@
-import { ReactNode, createContext, useContext, useState, useEffect, useLayoutEffect, type MouseEvent as ReactMouseEvent } from 'react';
+import { ReactNode, createContext, useContext, useState, useEffect, useLayoutEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../context/AuthContext';
-import { useBusiness, DEFAULT_BUSINESS_THEMES, applyTheme, resolveThemeColors } from '../context/BusinessContext';
+import { useBusiness, DEFAULT_BUSINESS_THEMES, applyTheme } from '../context/BusinessContext';
 import { useTheme } from '../context/ThemeContext';
 import {
   LayoutDashboard, Package, ShoppingCart, CreditCard, LogOut, Bell, Database, Barcode,
@@ -19,7 +19,6 @@ import { isDesktopMode } from '../services/desktop';
 import { motion, AnimatePresence } from 'motion/react';
 import { canAccessPath, roleLabel } from '../security/permissions';
 import { toast } from 'sonner';
-import { ThemeSweep } from './ThemeSweep';
 
 // Continuidad visual entre navegaciones: en el shell persistente (AppShell) la
 // interfaz no se vuelve a montar y el indicador guarda su posición en el estado.
@@ -36,97 +35,6 @@ const ChromeContext = createContext(false);
 
 interface LayoutProps {
   children: ReactNode;
-}
-
-/** Punto de entrada de View Transitions (API todavía no disponible en todos los navegadores). */
-type ViewTransitionStarter = (callback: () => Promise<void> | void) => {
-  ready: Promise<void>;
-  finished?: Promise<void>;
-};
-
-/** Tentáculos del barrido (coordenadas normalizadas 0..1 del giro completo). */
-const VENOM_SPIKES = [
-  { at: 0.04, width: 0.055, length: 0.6 },
-  { at: 0.22, width: 0.04, length: 0.34 },
-  { at: 0.41, width: 0.07, length: 0.78 },
-  { at: 0.58, width: 0.035, length: 0.28 },
-  { at: 0.74, width: 0.05, length: 0.5 },
-  { at: 0.9, width: 0.032, length: 0.24 },
-];
-
-/**
- * Borde vivo de la masa: lóbulos orgánicos + tentáculos afilados que se estiran
- * hacia afuera. Al girar (`spin`) los tentáculos salen disparados en nuevas
- * direcciones, así el borde nunca parece un círculo perfecto.
- */
-function venomBlob(cx: number, cy: number, radius: number, options: { spin: number; wobble: number; tendril: number }, points = 72) {
-  const { spin, wobble, tendril } = options;
-  const coords: string[] = [];
-  for (let index = 0; index < points; index += 1) {
-    const t = index / points;
-    const angle = t * Math.PI * 2 + spin;
-    let factor = 1
-      + Math.sin(angle * 3 + spin * 1.7) * wobble * 0.6
-      + Math.sin(angle * 6.5 - spin * 2.3) * wobble * 0.3
-      + Math.sin(angle * 11 + 1.3) * wobble * 0.15;
-    for (const spike of VENOM_SPIKES) {
-      const straight = Math.abs(t - spike.at);
-      const delta = Math.min(straight, 1 - straight) / spike.width;
-      // Gaussianas angulares: cada tentáculo estira el borde con punta afilada.
-      if (delta < 3) factor += Math.exp(-delta * delta) * spike.length * tendril;
-    }
-    const distance = radius * factor;
-    coords.push(`${(cx + Math.cos(angle) * distance).toFixed(1)}px ${(cy + Math.sin(angle) * distance).toFixed(1)}px`);
-  }
-  return `polygon(${coords.join(', ')})`;
-}
-
-function nextFrames(count = 2) {
-  return new Promise<void>(resolve => {
-    const step = (remaining: number) => {
-      if (remaining <= 0) resolve();
-      else window.requestAnimationFrame(() => step(remaining - 1));
-    };
-    step(count);
-  });
-}
-
-/**
- * Revela el tema nuevo como una masa de simbionte que brota en el botón
- * sol/luna (~0.4 s): estallido instantáneo, ondulación con tentáculos y giro
- * hasta envolver la pantalla. El tema anterior se escapa (escala) al ser absorbido.
- */
-function animateThemeReveal(origin: { x: number; y: number }) {
-  const reach = Math.hypot(
-    Math.max(origin.x, window.innerWidth - origin.x),
-    Math.max(origin.y, window.innerHeight - origin.y),
-  ) + 160;
-  // Radio relativo en cada tiempo: avance lineal + UNA sola curva de easing en
-  // toda la animación (curvas por keyframe reiniciaban la velocidad en cada
-  // tiempo y se sentía a tirones). La ondulación y los tentáculos se desvanecen
-  // al acercarse a pantalla completa.
-  const beats = [
-    { radius: 0.02, wobble: 0.03, tendril: 0.8, spin: -0.2 },
-    { radius: 0.15, wobble: 0.12, tendril: 0.7, spin: -0.1 },
-    { radius: 0.4, wobble: 0.18, tendril: 0.5, spin: 0.04 },
-    { radius: 0.65, wobble: 0.12, tendril: 0.35, spin: 0.15 },
-    { radius: 0.85, wobble: 0.06, tendril: 0.2, spin: 0.3 },
-    { radius: 1, wobble: 0.02, tendril: 0.1, spin: 0.4 },
-  ];
-  const duration = 750;
-  const clipPath = beats.map(beat => ({
-    clipPath: venomBlob(origin.x, origin.y, reach * beat.radius, beat),
-  }));
-  document.documentElement.animate(clipPath, {
-    duration,
-    easing: 'cubic-bezier(0.2, 0.85, 0.25, 1)',
-    pseudoElement: '::view-transition-new(root)',
-  });
-  // El tema anterior se hunde al ser absorbido (escala hacia afuera, sin salirse).
-  document.documentElement.animate(
-    [{ transform: 'scale(1)' }, { transform: 'scale(1.06)' }],
-    { duration, easing: 'cubic-bezier(0.3, 0, 0.2, 1)', pseudoElement: '::view-transition-old(root)' },
-  );
 }
 
 interface NavItem {
@@ -158,8 +66,6 @@ function LayoutShell({ children }: LayoutProps) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
 
-  // Barrido de tema: forma orgánica que nace en el botón sol/luna.
-  const [themeSweep, setThemeSweep] = useState<{ x: number; y: number; mode: 'light' | 'dark' } | null>(null);
   // Indicador que se desliza hasta el ítem activo de la sidebar.
   const [sidebarIndicator, setSidebarIndicator] = useState<{ from: { top: number; height: number } | null; to: { top: number; height: number } } | null>(null);
   // Varias entradas de la lista pueden compartir ruta (p. ej. "Pedidos /
@@ -228,74 +134,17 @@ function LayoutShell({ children }: LayoutProps) {
     mode,
   });
 
-  /** Fondo del tema que entra: lo usan el halo del revelado y el barrido de respaldo. */
-  const incomingThemeColor = (mode: 'light' | 'dark') => {
-    const themeRef = config?.theme ?? DEFAULT_BUSINESS_THEMES[config?.type ?? 'retail'];
-    return resolveThemeColors({ ...themeRef, mode }).background;
-  };
-
   /**
-   * El botón sol/luna cambia el tema con una masa de simbionte que brota en el
-   * propio botón (borde irregular con tentáculos que giran, halo del color que
-   * entra y el tema viejo hundiéndose al ser absorbido):
-   *  · Navegadores con View Transitions: el snapshot del tema nuevo se revela
-   *    animando `clip-path` sobre ::view-transition-new(root) durante ~0.45 s.
-   *  · Resto: <ThemeSweep> dibuja la misma masa con motion (onda + tentáculos).
-   * El tema se aplica al DOM de forma SINCRÓNICA —nada de awaits dentro del
-   * callback— para que el snapshot nuevo ya salga con el color nuevo y siempre
-   * haya algo que revelar; el guardado en el servidor va por detrás.
-   * Con prefers-reduced-motion el tema cambia al instante.
+   * Cambia de tema con un fundido de color muy corto (180 ms). El barrido
+   * orgánico y el respaldo con tentáculos se retiraron porque resultaban
+   * pesados y poco legibles; ahora el cambio es uniforme en toda la interfaz.
+   * El guardado en el servidor va por detrás para no bloquear el cambio visual.
    */
-  const handleThemeToggle = (event?: ReactMouseEvent<HTMLElement>) => {
+  const handleThemeToggle = () => {
     const nextMode: 'light' | 'dark' = isDark ? 'light' : 'dark';
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const rect = event?.currentTarget?.getBoundingClientRect();
-    if (themeSweep) return;
-
-    // Sin animación (o sin posición del botón): aplicar el tema y guardar.
-    if (!rect || reduceMotion) {
-      applyTheme(themeFor(nextMode));
-      setTheme(nextMode);
-      void persistTheme(nextMode);
-      return;
-    }
-
-    const origin = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-
-    const viewTransitionDocument = document as unknown as { startViewTransition?: ViewTransitionStarter };
-    if (typeof viewTransitionDocument.startViewTransition === 'function') {
-      const transition = viewTransitionDocument.startViewTransition(() => {
-        // Sincrónico a propósito: el snapshot nuevo se captura con el tema ya
-        // aplicado, así el clip-path revela un cambio real (antes se esperaba la
-        // respuesta del servidor y, con renders congelados, la transición salía
-        // sin diferencia visible).
-        applyTheme(themeFor(nextMode));
-        setTheme(nextMode);
-      });
-      void transition.ready.then(() => animateThemeReveal(origin)).catch(() => undefined);
-      void transition.finished?.catch(() => undefined);
-      void persistTheme(nextMode);
-      return;
-    }
-
-    // Fallback (sin View Transitions): la forma cubre la pantalla con el color que
-    // entra y el tema se aplica debajo (ver coverAndPersistTheme).
-    setThemeSweep({ ...origin, mode: nextMode });
-  };
-
-  // Color del tema que entra: la forma lo usa mientras cubre la pantalla, así el
-  // cambio de tema debajo pasa inadvertido.
-  const themeSweepColor = incomingThemeColor(themeSweep?.mode ?? (isDark ? 'light' : 'dark'));
-
-  const coverAndPersistTheme = async () => {
-    if (!themeSweep) return;
-    // La forma ya cubre la pantalla: se aplica el tema debajo y se esperan un par
-    // de frames para que el nuevo fondo esté pintado antes de revelarlo. El guardado
-    // va por detrás para no dejar la pantalla cubierta esperando al servidor.
-    applyTheme(themeFor(themeSweep.mode));
-    setTheme(themeSweep.mode);
-    await nextFrames();
-    void persistTheme(themeSweep.mode);
+    applyTheme(themeFor(nextMode));
+    setTheme(nextMode);
+    void persistTheme(nextMode);
   };
 
   const getNavItems = (): NavItem[] => {
@@ -822,16 +671,6 @@ function LayoutShell({ children }: LayoutProps) {
           </>
         )}
       </AnimatePresence>
-
-      {/* Barrido de tema: la forma nace en el botón sol/luna y cubre la pantalla. */}
-      {themeSweep && (
-        <ThemeSweep
-          origin={{ x: themeSweep.x, y: themeSweep.y }}
-          color={themeSweepColor}
-          onCovered={coverAndPersistTheme}
-          onDone={() => setThemeSweep(null)}
-        />
-      )}
     </div>
   );
 }

@@ -315,15 +315,6 @@ img, video, canvas, svg { max-width: 100%; }
   input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: 16px; }
 }
 
-html {
-  transition-property: background-color, color, border-color, fill, stroke;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 500ms;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html {
-    transition-duration: 0.01ms !important;
-    transition-property: none !important;
-  }
-}
+/* El cambio de tema se anima desde `.theme-transitioning` (index.css) durante
+   un fundido breve. No dejamos una transición permanente en <html> para que el
+   resto de cambios de color no arrastren medio segundo de retraso. */

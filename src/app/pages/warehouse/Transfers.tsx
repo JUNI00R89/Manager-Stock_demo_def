@@ -10,7 +10,7 @@ import { Textarea } from '../../components/ui/textarea';
 import { Badge } from '../../components/ui/badge';
 import { dataService, type InventoryLotRecord, type TransferRecord } from '../../services/dataService';
 import type { Product } from '../../utils/mockData';
-import { dateOnly, dateTime, fmtQty, PageTitle, ProductSelect, useWarehousePermissions, useWarehouseRefs } from './shared';
+import { dateTime, fmtQty, LotSelect, PageTitle, ProductSelect, useWarehousePermissions, useWarehouseRefs } from './shared';
 
 type TransferLine = { key: string; productId: string; quantity: string; unit: string; lotId: string };
 const newLine = (): TransferLine => ({ key: `${Date.now()}-${Math.random().toString(36).slice(2)}`, productId: '', quantity: '1', unit: '', lotId: '' });
@@ -108,7 +108,7 @@ export function WarehouseTransfers() {
               <LotSelect lots={lineLots} value={line.lotId} onChange={value => updateLine(line.key, { lotId: value })} className="h-10" placeholder="FEFO / sin lote específico"/>
               <Button type="button" variant="ghost" size="icon" onClick={() => removeLine(line.key)} disabled={lines.length === 1} aria-label="Quitar línea" className="text-rose-600"><Trash2 className="h-4 w-4"/></Button>
               {product && <p className="text-xs text-muted-foreground sm:col-span-4">Stock disponible: {fmtQty(product.stock)} {product.unit}</p>}
-            </div>; })}</div></div>
+            </div>; })}</div></div></div>
           <div className="space-y-1"><Label className="text-xs">Notas</Label><Textarea value={notes} onChange={event => setNotes(event.target.value)} rows={2} maxLength={1000} className="rounded-xl"/></div>
           <div className="flex justify-end"><Button type="submit" disabled={saving || loading || !permissions.canEntry} className="rounded-xl bg-orange-600 text-white hover:bg-orange-700"><Send className="mr-2 h-4 w-4"/>{saving ? 'Creando…' : 'Crear transferencia'}</Button></div>
         </form>

@@ -106,14 +106,6 @@
   animation: ms-grow-x 0.8s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
-/* Barrido de tema: el snapshot nuevo se revela con un clip-path orgánico con
-   tentáculos desde el botón (ver Layout). Aquí solo se anula el cross-fade por
-   defecto de View Transitions. */
-::view-transition-old(root) { animation: none; mix-blend-mode: normal; z-index: 1; }
-/* El snapshot nuevo va encima: el clip-path orgánico (ver Layout) lo va revelando
-   sobre el anterior. */
-::view-transition-new(root) { animation: none; mix-blend-mode: normal; z-index: 2; }
-
 @layer components {
   /* Feedback de pulsación al presionar cualquier botón (equivale a whileTap 0.95).
      Los utilitarios de Tailwind (transition-colors, transition-all…) siguen
@@ -250,10 +242,92 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .from-orange-50 { --tw-gradient-from: var(--brand-soft) var(--tw-gradient-from-position) !important; }
 .border-orange-200, .border-orange-300 { border-color: color-mix(in srgb, var(--brand-primary) 22%, white) !important; }
 
-/* Transición suave al cambiar de tema claro/oscuro. */
+/* ── Avisos y tarjetas con colores fijos en modo oscuro ─────────────────────
+   Varias pantallas heredadas usan fondos pastel y textos oscuros sin variantes
+   `dark:`. Aquí se adaptan solo dentro del marco autenticado (`.app-shell`),
+   sin tocar las vistas públicas de acceso o descargas. Las variantes `dark:`
+   explícitas siguen ganando porque tienen mayor especificidad. */
+@layer utilities {
+  :where(.dark .app-shell) .bg-white:not([class*="dark:bg-"]) { background-color: var(--card); }
+
+  :where(.dark .app-shell) :is(.bg-slate-50, .bg-gray-50, .bg-zinc-50, .bg-neutral-50, .bg-stone-50):not([class*="dark:bg-"]) {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+  :where(.dark .app-shell) :is(.bg-slate-100, .bg-gray-100, .bg-zinc-100, .bg-neutral-100, .bg-stone-100):not([class*="dark:bg-"]) {
+    background-color: rgba(255, 255, 255, 0.08);
+  }
+  :where(.dark .app-shell) :is(.text-slate-500, .text-gray-500, .text-zinc-500, .text-neutral-500, .text-stone-500):not([class*="dark:text-"]) {
+    color: #94a3b8;
+  }
+  :where(.dark .app-shell) :is(.text-slate-600, .text-gray-600, .text-zinc-600, .text-neutral-600, .text-stone-600):not([class*="dark:text-"]) {
+    color: #cbd5e1;
+  }
+  :where(.dark .app-shell) :is(.text-slate-700, .text-gray-700, .text-zinc-700, .text-neutral-700, .text-stone-700):not([class*="dark:text-"]) {
+    color: #e2e8f0;
+  }
+  :where(.dark .app-shell) :is(.text-slate-800, .text-slate-900, .text-slate-950, .text-gray-800, .text-gray-900, .text-gray-950, .text-zinc-800, .text-zinc-900, .text-neutral-800, .text-neutral-900, .text-stone-800, .text-stone-900):not([class*="dark:text-"]) {
+    color: #f8fafc;
+  }
+  :where(.dark .app-shell) :is(.border-slate-100, .border-gray-100, .border-zinc-100, .border-neutral-100, .border-stone-100):not([class*="dark:border-"]) {
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+  :where(.dark .app-shell) :is(.border-slate-200, .border-gray-200, .border-zinc-200, .border-neutral-200, .border-stone-200):not([class*="dark:border-"]) {
+    border-color: rgba(255, 255, 255, 0.12);
+  }
+  :where(.dark .app-shell) :is(.border-slate-300, .border-gray-300, .border-zinc-300, .border-neutral-300, .border-stone-300):not([class*="dark:border-"]) {
+    border-color: rgba(255, 255, 255, 0.18);
+  }
+
+  /* Ámbar / amarillo */
+  :where(.dark .app-shell) :is(.bg-amber-50, .bg-yellow-50):not([class*="dark:bg-"]) { background-color: color-mix(in srgb, #f59e0b 14%, transparent); }
+  :where(.dark .app-shell) :is(.bg-amber-100, .bg-yellow-100):not([class*="dark:bg-"]) { background-color: color-mix(in srgb, #f59e0b 20%, transparent); }
+  :where(.dark .app-shell) :is(.text-amber-600, .text-yellow-600):not([class*="dark:text-"]) { color: #fbbf24; }
+  :where(.dark .app-shell) :is(.text-amber-700, .text-amber-800, .text-amber-900, .text-yellow-700, .text-yellow-800, .text-yellow-900):not([class*="dark:text-"]) { color: #fcd34d; }
+  :where(.dark .app-shell) :is(.border-amber-100, .border-yellow-100):not([class*="dark:border-"]) { border-color: color-mix(in srgb, #f59e0b 22%, transparent); }
+  :where(.dark .app-shell) :is(.border-amber-200, .border-amber-300, .border-yellow-200, .border-yellow-300):not([class*="dark:border-"]) { border-color: color-mix(in srgb, #f59e0b 34%, transparent); }
+
+  /* Naranja de marca (los tonos 50/500 ya usan --brand-*) */
+  :where(.dark .app-shell) .bg-orange-100:not([class*="dark:bg-"]) { background-color: color-mix(in srgb, var(--brand-primary) 20%, transparent); }
+  :where(.dark .app-shell) :is(.text-orange-800, .text-orange-900):not([class*="dark:text-"]) { color: color-mix(in srgb, var(--brand-primary) 60%, white); }
+  :where(.dark .app-shell) .border-orange-100:not([class*="dark:border-"]) { border-color: color-mix(in srgb, var(--brand-primary) 24%, transparent); }
+
+  /* Rosa / rojo / rosa fuerte */
+  :where(.dark .app-shell) :is(.bg-rose-50, .bg-red-50, .bg-pink-50):not([class*="dark:bg-"]) { background-color: color-mix(in srgb, #f43f5e 14%, transparent); }
+  :where(.dark .app-shell) :is(.bg-rose-100, .bg-red-100, .bg-pink-100):not([class*="dark:bg-"]) { background-color: color-mix(in srgb, #f43f5e 20%, transparent); }
+  :where(.dark .app-shell) :is(.text-rose-600, .text-red-600, .text-pink-600):not([class*="dark:text-"]) { color: #fb7185; }
+  :where(.dark .app-shell) :is(.text-rose-700, .text-rose-800, .text-rose-900, .text-red-700, .text-red-800, .text-red-900, .text-pink-700, .text-pink-800, .text-pink-900):not([class*="dark:text-"]) { color: #fda4af; }
+  :where(.dark .app-shell) :is(.border-rose-100, .border-red-100, .border-pink-100):not([class*="dark:border-"]) { border-color: color-mix(in srgb, #f43f5e 22%, transparent); }
+  :where(.dark .app-shell) :is(.border-rose-200, .border-rose-300, .border-red-200, .border-red-300, .border-pink-200, .border-pink-300):not([class*="dark:border-"]) { border-color: color-mix(in srgb, #f43f5e 34%, transparent); }
+
+  /* Verde / esmeralda / teal */
+  :where(.dark .app-shell) :is(.bg-emerald-50, .bg-green-50, .bg-teal-50):not([class*="dark:bg-"]) { background-color: color-mix(in srgb, #10b981 14%, transparent); }
+  :where(.dark .app-shell) :is(.bg-emerald-100, .bg-green-100, .bg-teal-100):not([class*="dark:bg-"]) { background-color: color-mix(in srgb, #10b981 20%, transparent); }
+  :where(.dark .app-shell) :is(.text-emerald-600, .text-green-600, .text-teal-600):not([class*="dark:text-"]) { color: #34d399; }
+  :where(.dark .app-shell) :is(.text-emerald-700, .text-emerald-800, .text-emerald-900, .text-green-700, .text-green-800, .text-green-900, .text-teal-700, .text-teal-800, .text-teal-900):not([class*="dark:text-"]) { color: #6ee7b7; }
+  :where(.dark .app-shell) :is(.border-emerald-100, .border-green-100, .border-teal-100):not([class*="dark:border-"]) { border-color: color-mix(in srgb, #10b981 22%, transparent); }
+  :where(.dark .app-shell) :is(.border-emerald-200, .border-emerald-300, .border-green-200, .border-green-300, .border-teal-200, .border-teal-300):not([class*="dark:border-"]) { border-color: color-mix(in srgb, #10b981 34%, transparent); }
+
+  /* Azul / cielo */
+  :where(.dark .app-shell) :is(.bg-blue-50, .bg-sky-50):not([class*="dark:bg-"]) { background-color: color-mix(in srgb, #3b82f6 14%, transparent); }
+  :where(.dark .app-shell) :is(.bg-blue-100, .bg-sky-100):not([class*="dark:bg-"]) { background-color: color-mix(in srgb, #3b82f6 20%, transparent); }
+  :where(.dark .app-shell) :is(.text-blue-600, .text-sky-600):not([class*="dark:text-"]) { color: #60a5fa; }
+  :where(.dark .app-shell) :is(.text-blue-700, .text-blue-800, .text-blue-900, .text-sky-700, .text-sky-800, .text-sky-900):not([class*="dark:text-"]) { color: #93c5fd; }
+  :where(.dark .app-shell) :is(.border-blue-100, .border-sky-100):not([class*="dark:border-"]) { border-color: color-mix(in srgb, #3b82f6 22%, transparent); }
+  :where(.dark .app-shell) :is(.border-blue-200, .border-blue-300, .border-sky-200, .border-sky-300):not([class*="dark:border-"]) { border-color: color-mix(in srgb, #3b82f6 34%, transparent); }
+
+  /* Índigo / violeta / púrpura */
+  :where(.dark .app-shell) :is(.bg-indigo-50, .bg-violet-50, .bg-purple-50):not([class*="dark:bg-"]) { background-color: color-mix(in srgb, #8b5cf6 14%, transparent); }
+  :where(.dark .app-shell) :is(.bg-indigo-100, .bg-violet-100, .bg-purple-100):not([class*="dark:bg-"]) { background-color: color-mix(in srgb, #8b5cf6 20%, transparent); }
+  :where(.dark .app-shell) :is(.text-indigo-600, .text-violet-600, .text-purple-600):not([class*="dark:text-"]) { color: #a78bfa; }
+  :where(.dark .app-shell) :is(.text-indigo-700, .text-indigo-800, .text-indigo-900, .text-violet-700, .text-violet-800, .text-violet-900, .text-purple-700, .text-purple-800, .text-purple-900):not([class*="dark:text-"]) { color: #c4b5fd; }
+  :where(.dark .app-shell) :is(.border-indigo-100, .border-violet-100, .border-purple-100):not([class*="dark:border-"]) { border-color: color-mix(in srgb, #8b5cf6 22%, transparent); }
+  :where(.dark .app-shell) :is(.border-indigo-200, .border-indigo-300, .border-violet-200, .border-violet-300, .border-purple-200, .border-purple-300):not([class*="dark:border-"]) { border-color: color-mix(in srgb, #8b5cf6 34%, transparent); }
+}
+
+/* Cambio de tema: fundido corto y uniforme, sin barridos ni clip-paths. */
 html.theme-transitioning,
 html.theme-transitioning * {
-  transition: background-color 0.7s ease, color 0.7s ease, border-color 0.7s ease, box-shadow 0.7s ease !important;
+  transition: background-color 180ms ease-out, color 180ms ease-out, border-color 180ms ease-out !important;
 }
 @media (prefers-reduced-motion: reduce) {
   html.theme-transitioning, html.theme-transitioning * { transition: none !important; }

@@ -313,7 +313,7 @@ export interface InventoryReportsRecord {
   wasteCost: number; wasteByReason: Array<{ reasonCode: string; reasonLabel: string; quantity: number; cost: number }>;
   rotation: Array<{ productId: string; productName: string; sku: string; unit: string; quantity: number; cost: number; movements: number }>;
   noMovement: Array<{ productId: string; productName: string; sku: string; stock: number; unit: string; lastMovementAt: string | null }>;
-  countDifferences: Array<{ countId: string; productId: string; productName: string; systemQuantity: number; countedQuantity: number; difference: number; unit: string; createdAt: string }>;
+  countDifferences: Array<{ countId: string; productId: string; productName: string; sku: string; systemQuantity: number; countedQuantity: number; difference: number; unit: string; createdAt: string }>;
   periodDays: number; noMovementDays: number; generatedAt: string;
 }
 
@@ -1235,8 +1235,8 @@ export const dataService = {
   async updateInventoryLocation(id: string, input: Omit<InventoryLocationRecord, 'id' | 'productCount' | 'lotUnits' | 'label' | 'createdAt'>): Promise<InventoryLocationRecord> {
     return api<InventoryLocationRecord>(`/inventory/locations/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) });
   },
-  async deleteInventoryLocation(id: string): Promise<void> {
-    await api(`/inventory/locations/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  async deleteInventoryLocation(id: string): Promise<{ ok: boolean; id: string }> {
+    return api<{ ok: boolean; id: string }>(`/inventory/locations/${encodeURIComponent(id)}`, { method: 'DELETE' });
   },
   async getInventoryLots(filters?: { productId?: string; locationId?: string; status?: string; search?: string; includeEmpty?: boolean }): Promise<InventoryLotRecord[]> {
     const params = new URLSearchParams();
