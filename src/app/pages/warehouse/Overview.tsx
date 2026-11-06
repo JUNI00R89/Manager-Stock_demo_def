@@ -10,7 +10,7 @@ import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { dataService, type InventoryAlertRecord, type InventoryOverviewRecord } from '../../services/dataService';
-import { dateOnly, dateTime, EmptyState, fmtQty, money, PageTitle, StatCard } from './shared';
+import { dateOnly, dateTime, EmptyState, fmtQty, money, PageTitle, StatCard, useWarehousePermissions } from './shared';
 
 const alertTone: Record<InventoryAlertRecord['severity'], string> = {
   high: 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200',
@@ -30,9 +30,15 @@ const quickActions = [
 ];
 
 export function WarehouseOverview() {
+  const permissions = useWarehousePermissions();
   const [overview, setOverview] = useState<InventoryOverviewRecord | null>(null);
   const [alerts, setAlerts] = useState<InventoryAlertRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const visibleQuickActions = quickActions.filter(action => {
+    if (['/warehouse/entries', '/warehouse/exits', '/warehouse/waste', '/warehouse/transfers'].includes(action.to)) return permissions.canEntry;
+    if (['/warehouse/adjustments', '/warehouse/counts'].includes(action.to)) return permissions.canAdjust;
+    return true;
+  });
   const load = async () => {
     setLoading(true);
     try {
@@ -57,7 +63,7 @@ export function WarehouseOverview() {
         <StatCard label="Merma últimos 30 días" value={money(overview.wasteCost)} hint="Costo de unidades dadas de baja" icon={PackageMinus} tone="violet"/>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{quickActions.map(action => <Link key={action.to} to={action.to} className="group flex items-center gap-3 rounded-2xl border border-border/70 bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-orange-300 hover:shadow-md"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-50 text-orange-600 dark:bg-orange-950/40"><action.icon className="h-5 w-5"/></span><span className="text-sm font-semibold">{action.label}</span></Link>)}</div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{visibleQuickActions.map(action => <Link key={action.to} to={action.to} className="group flex items-center gap-3 rounded-2xl border border-border/70 bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-orange-300 hover:shadow-md"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-50 text-orange-600 dark:bg-orange-950/40"><action.icon className="h-5 w-5"/></span><span className="text-sm font-semibold">{action.label}</span></Link>)}</div>
 
       <div className="grid gap-5 xl:grid-cols-[1.1fr_.9fr]">
         <Card className="rounded-2xl border-border/70 p-5 shadow-sm"><div className="flex items-center justify-between gap-3"><div><h2 className="font-semibold">Alertas de existencias y vencimientos</h2><p className="mt-1 text-sm text-muted-foreground">{alerts.length ? `${alerts.length} alertas requieren revisión` : 'Todo en orden por ahora'}</p></div><AlertTriangle className={`h-5 w-5 ${alerts.length ? 'text-rose-500' : 'text-emerald-600'}`}/></div>

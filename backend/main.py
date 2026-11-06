@@ -2600,9 +2600,12 @@ def inventory_movements(
 ):
     with connection() as conn:
         query = """SELECT m.*, p.name AS product_name, p.sku, p.unit AS product_unit,
-                   l.code AS location_code, l.name AS location_name
+                   l.code AS location_code, l.name AS location_name,
+                   pl.lot_code AS lot_code, COALESCE(NULLIF(u.full_name,''), m.created_by_name) AS created_by_name
                    FROM inventory_movements m JOIN products p ON p.id=m.product_id
                    LEFT JOIN warehouse_locations l ON l.id=m.location_id
+                   LEFT JOIN product_lots pl ON pl.id=m.lot_id
+                   LEFT JOIN auth_users u ON u.id=m.created_by
                    WHERE m.business_id=?"""
         params: list = [current_business_id()]
         if productId:
@@ -2621,8 +2624,8 @@ def inventory_movements(
             params.append(lotId)
         if search:
             term = f"%{search.lower()}%"
-            query += " AND (lower(p.name) LIKE ? OR lower(p.sku) LIKE ? OR lower(m.note) LIKE ? OR lower(m.reason) LIKE ? OR lower(m.reference_id) LIKE ?)"
-            params.extend([term, term, term, term, term])
+            query += " AND (lower(p.name) LIKE ? OR lower(p.sku) LIKE ? OR lower(p.barcode) LIKE ? OR lower(m.note) LIKE ? OR lower(m.reason) LIKE ? OR lower(m.reference_id) LIKE ?)"
+            params.extend([term, term, term, term, term, term])
         if dateFrom:
             query += " AND date(m.created_at) >= date(?)"
             params.append(normalize_date(dateFrom))

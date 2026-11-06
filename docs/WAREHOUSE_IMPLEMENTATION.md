@@ -72,37 +72,55 @@ Funciones clave en backend:
 - `cancel_sale`: revierte movimientos (`sale`, `recipe_consumption`).
 - `create_order` / `update_order_status` / `add_order_items`: deducen stock al pasar a `preparing/ready/delivered`; soportan añadir líneas después de consumo parcial; reversión al cancelar.
 
-## Frontend implementado (parcial)
+## Frontend implementado
 
 - Rutas nuevas: `/warehouse`, `/warehouse/entries`, `/warehouse/exits`, `/warehouse/waste`, `/warehouse/adjustments`, `/warehouse/lots`, `/warehouse/purchase-orders`, `/warehouse/counts`, `/warehouse/transfers`, `/warehouse/locations`, `/warehouse/movements`, `/warehouse/reports`, `/warehouse/settings`.
 - Rutas heredadas redirigidas: `/inventory/transfers`, `/inventory/physical-count`, `/inventory/movements`.
 - Nuevas secciones: `/restaurant/recipes`.
+- Navegación lateral agrupada en **Bodega**, con acceso a recetas para negocios de comida.
+- Las acciones rápidas del resumen de bodega se ocultan según permisos (`inventory.entry`, `inventory.adjust`).
 
 Páginas creadas en `src/app/pages/warehouse/`:
 
-- `Overview.tsx` ✅
-- `Entries.tsx` ✅
-- `Exits.tsx` ✅
-- `Adjustments.tsx` ✅
-- `Lots.tsx` ✅
-- `PurchaseOrders.tsx` ✅
-- `Counts.tsx` ✅
-- `Transfers.tsx` ⬜ (pendiente)
-- `Reports.tsx` ⬜ (pendiente)
-- `Settings.tsx` ⬜ (pendiente)
-- `Locations.tsx` ⬜ (debe reemplazarse por CRUD real)
+- `Overview.tsx`: valor del inventario, stock crítico, vencimientos, merma, alertas, lotes por vencer y últimos movimientos.
+- `Entries.tsx`: compras, devoluciones de cliente, donaciones y existencias iniciales; multi-línea, lotes, vencimiento, costo, ubicación y escáner.
+- `Exits.tsx`: consumo interno, venta directa, otras salidas y mermas con motivo obligatorio (`vencido`, `danado`, `error_preparacion`).
+- `Adjustments.tsx`: ajustes con motivo obligatorio y motivos rápidos.
+- `Lots.tsx`: lotes, estado, días restantes, valor, filtros por ubicación y accesos a merma/traslado.
+- `PurchaseOrders.tsx`: creación, aprobación, envío, recepción parcial/total, historial de precios, compras recientes y **sugerencias de reposición** que se pueden volcar a la orden.
+- `Counts.tsx`: conteos físicos que generan ajustes por diferencia.
+- `Transfers.tsx`: traslados entre ubicaciones con envío/recepción y movimientos enlazados.
+- `Locations.tsx`: CRUD real de zonas, pasillos, racks y niveles.
+- `Reports.tsx`: valor total, stock crítico, vencimientos, merma por motivo, rotación, sin movimiento y diferencias de conteo.
+- `Settings.tsx`: stock negativo, días de alerta de vencimiento, alertas de stock bajo y ubicación por defecto.
 
-`src/app/pages/inventory/Transfers.tsx` y `PhysicalCount.tsx` ya no se usan en rutas y deben eliminarse o dejar de usarse.
+`src/app/pages/inventory/Movements.tsx` fue reescrito para el módulo nuevo:
+
+- Filtros en servidor por producto, tipo, ubicación, rango de fechas y búsqueda (producto, SKU, código de barras, motivo, nota o referencia).
+- Columnas de usuario, lote, ubicación, stock antes/después, costo y referencia.
+- Enlace directo desde cada producto del catálogo: **Ver movimientos y trazabilidad** (`/warehouse/movements?productId=...`).
+- Exportación CSV del resultado filtrado.
+
+Extras implementados:
+
+- `Products.tsx` muestra proveedor, código de barras y acceso al historial del producto.
+- `NewProduct.tsx` captura proveedor, código de barras, manejo de lotes y ubicación por defecto.
+- `restaurant/Recipes.tsx` guarda unidades por ingrediente y muestra una tabla de **costeo y margen por plato** usando `/api/inventory/dish-costing`.
+- `UsersRoles.tsx` expone los permisos nuevos y sus dependencias.
+- `security/permissions.ts` protege las rutas de bodega y recetas según el módulo/permisos.
+
+## Verificación realizada
+
+- Script de integración backend `backend/tests/test_sales_api.py` ejecutado correctamente antes de este bloque de cambios: ventas atómicas, recetas, deducción de ingredientes, cancelación y stock.
+- No se pudo ejecutar `tsc`/`vite build` porque `npm install` quedó interrumpido y no hay `node_modules`. **Pendiente de verificación de compilación frontend.**
 
 ## Trabajo pendiente (resumen)
 
-1. Crear restantes páginas de bodega.
-2. Reemplazar mock de ubicaciones con CRUD real.
-3. Campos de nuevo producto (proveedor, código de barras, lotes, ubicación por defecto).
-4. Recetas con unidades; verificación de `/restaurant/recipes`.
-5. Dependencias de permisos en `UsersRoles.tsx` (nueva checklist).
-6. Actualizar tests backend (`backend/tests/test_sales_api.py`) para recetas y comportamiento nuevo.
-7. Ejecutar: tests backend, checks Python, build TypeScript/Vite, migración SQLite y flujos.
+1. Restaurar dependencias con `npm install` y ejecutar `npx tsc --noEmit` + `npm run build`.
+2. Probar en UI los flujos de entradas, salidas, mermas, ajustes, lotes, compras (incluyendo reposición), conteos, traslados, ubicaciones, reportes y configuración.
+3. Verificar redirecciones heredadas `/inventory/*` y acceso a `/restaurant/recipes` en negocios de comida.
+4. Opcional: eliminar las páginas heredadas `src/app/pages/inventory/Transfers.tsx` y `PhysicalCount.tsx` si se confirma que no se usan.
+5. Opcional: exponer en UI el CRUD de sustituciones (`/api/inventory/substitutions`), que ya existe en backend y `dataService`.
 
 ## Cómo correr
 

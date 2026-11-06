@@ -174,7 +174,9 @@ export interface InventoryMovementRecord {
   productUnit?: string;
   reason?: string;
   createdByName?: string;
+  createdById?: string | null;
   lotId?: string | null;
+  lotCode?: string | null;
   locationId?: string | null;
   locationCode?: string | null;
   referenceType?: string;
@@ -1193,8 +1195,8 @@ export const dataService = {
         id: row.id, productId: row.product_id, productName: row.product_name, saleId: row.sale_id,
         movementType: row.movement_type, quantityDelta: row.quantity_delta, stockBefore: row.stock_before,
         stockAfter: row.stock_after, note: row.note, createdAt: row.created_at, sku: row.sku,
-        productUnit: row.product_unit, reason: row.reason, createdByName: row.created_by_name,
-        lotId: row.lot_id, locationId: row.location_id, locationCode: row.location_code,
+        productUnit: row.product_unit, reason: row.reason, createdByName: row.created_by_name || '',
+        createdById: row.created_by, lotId: row.lot_id, lotCode: row.lot_code || '', locationId: row.location_id, locationCode: row.location_code,
         referenceType: row.reference_type, referenceId: row.reference_id, unitCost: row.unit_cost,
       }));
       const db = readLocal(); db.movements = normalized; writeLocal(db); return normalized;

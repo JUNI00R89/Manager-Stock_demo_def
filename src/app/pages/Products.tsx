@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { AlertTriangle, Boxes, Edit3, Package, Plus, Search, Trash2 } from 'lucide-react';
+import { AlertTriangle, Boxes, Edit3, History, Package, Plus, Search, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Layout } from '../components/Layout';
 import { ConfirmActionDialog } from '../components/ConfirmActionDialog';
@@ -11,15 +11,17 @@ import { Badge } from '../components/ui/badge';
 import { dataService } from '../services/dataService';
 import { useBusiness } from '../context/BusinessContext';
 import { useAuth } from '../context/AuthContext';
+import { canAccessPath } from '../security/permissions';
 import type { Product } from '../utils/mockData';
 
 const money = (value: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(value);
 
 export function Products() {
   const navigate = useNavigate();
-  const { isFoodBusiness } = useBusiness();
+  const { isFoodBusiness, config } = useBusiness();
   const { user } = useAuth();
   const isCustomRole = Boolean(user?.customRoleId);
+  const canViewInventory = canAccessPath('/warehouse/movements', user?.role, config, isCustomRole ? user?.permissions ?? [] : undefined);
   const canCreateProduct = isCustomRole ? Boolean(user?.permissions?.includes('catalog.create')) : user?.role === 'owner' || user?.role === 'business_admin';
   const canEditProduct = isCustomRole ? Boolean(user?.permissions?.includes('catalog.edit')) : user?.role === 'owner' || user?.role === 'business_admin';
   const [products, setProducts] = useState<Product[]>([]);
@@ -86,6 +88,7 @@ export function Products() {
             <div className="mt-5 flex items-end justify-between gap-3"><div><p className="text-xs text-muted-foreground">Precio de venta</p><p className="mt-1 text-2xl font-bold tracking-tight">{money(product.price)}</p></div><Badge variant="secondary" className="max-w-[50%] truncate rounded-lg">{product.category}</Badge></div>
             <div className="mt-5"><div className="mb-2 flex justify-between text-sm"><span className="text-muted-foreground">Existencias</span><span className={`font-semibold ${isLow ? 'text-rose-600' : ''}`}>{product.stock} <span className="font-normal text-muted-foreground">{product.stock === 1 ? 'unidad' : 'unidades'}</span></span></div><div className="h-2 overflow-hidden rounded-full bg-muted"><div className={`bar-fill h-full rounded-full transition-all ${isLow ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{ width: `${ratio}%` }}/></div><p className="mt-2 text-xs text-muted-foreground">Mínimo recomendado: {product.minStock}</p></div>
             {canEditProduct && <div className="mt-5 flex gap-2 border-t border-border/60 pt-4"><Button variant="outline" onClick={() => navigate(`/products/${product.id}/edit`)} className="flex-1 rounded-xl"><Edit3 className="mr-2 h-4 w-4"/>Editar</Button><Button variant="outline" onClick={() => void deleteProduct(product)} aria-label={`Retirar ${product.name}`} className="rounded-xl border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700"><Trash2 className="h-4 w-4"/></Button></div>}
+            {canViewInventory && <div className={canEditProduct ? 'mt-2' : 'mt-5 border-t border-border/60 pt-4'}><Button variant="ghost" size="sm" onClick={() => navigate(`/warehouse/movements?productId=${encodeURIComponent(product.id)}`)} className="w-full rounded-xl text-xs text-muted-foreground hover:text-orange-700"><History className="mr-2 h-4 w-4"/>Ver movimientos y trazabilidad</Button></div>}
           </Card>;
         })}</div>}
     </div>

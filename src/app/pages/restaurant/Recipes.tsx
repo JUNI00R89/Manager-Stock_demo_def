@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BookOpen, ChefHat, CirclePlus, ClipboardList, Trash2, Save, PencilLine } from 'lucide-react';
+import { BookOpen, ChefHat, CirclePlus, ClipboardList, Trash2, Save, PencilLine, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { Layout } from '../../components/Layout';
 import { ConfirmActionDialog } from '../../components/ConfirmActionDialog';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
+import { Badge } from '../../components/ui/badge';
 import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
-import { dataService, type RecipeRecord } from '../../services/dataService';
+import { dataService, type DishCostingRecord, type RecipeRecord } from '../../services/dataService';
 import type { Product } from '../../utils/mockData';
 
 const money = (v: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(v);
@@ -17,6 +18,7 @@ type RecipeLine = { ingredientId: string; quantity: string; unit: string };
 export function Recipes() {
   const [products, setProducts] = useState<Product[]>([]);
   const [recipes, setRecipes] = useState<RecipeRecord[]>([]);
+  const [costing, setCosting] = useState<DishCostingRecord[]>([]);
   const [productId, setProductId] = useState('');
   const [yieldQuantity, setYieldQuantity] = useState('1');
   const [instructions, setInstructions] = useState('');
@@ -29,7 +31,11 @@ export function Recipes() {
   const ingredientCost = (recipe: RecipeRecord) => recipe.ingredients.reduce((total, item) => total + (products.find(p => p.id === item.ingredientId)?.cost || 0) * item.quantity / recipe.yieldQuantity, 0);
 
   const load = async () => {
-    try { const [allProducts, allRecipes] = await Promise.all([dataService.getProducts(), dataService.getRecipes()]); setProducts(allProducts); setRecipes(allRecipes); }
+    try {
+      const [allProducts, allRecipes] = await Promise.all([dataService.getProducts(), dataService.getRecipes()]);
+      setProducts(allProducts); setRecipes(allRecipes);
+      try { setCosting(await dataService.getDishCosting()); } catch { setCosting([]); }
+    }
     catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudieron cargar las recetas.'); }
     finally { setLoading(false); }
   };
@@ -66,6 +72,23 @@ export function Recipes() {
 
       <div className="space-y-4"><div className="flex items-center justify-between"><div><h2 className="font-semibold">Recetas registradas</h2><p className="mt-1 text-sm text-muted-foreground">{recipes.length} productos con consumo automático</p></div><BookOpen className="h-5 w-5 text-orange-600"/></div>{loading ? <Card className="rounded-2xl p-8 text-center text-muted-foreground">Cargando recetas…</Card> : recipes.length === 0 ? <Card className="rounded-2xl border-dashed p-8 text-center"><ClipboardList className="mx-auto h-9 w-9 text-muted-foreground/50"/><p className="mt-3 font-semibold">Aún no hay recetas</p><p className="mt-1 text-sm text-muted-foreground">Crea la primera para descontar ingredientes desde las ventas.</p></Card> : recipes.map(recipe => <Card key={recipe.id} className="rounded-2xl border-border/70 p-5 shadow-sm"><div className="flex items-start gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-orange-600 dark:bg-orange-950/40"><ChefHat className="h-5 w-5"/></div><div className="min-w-0 flex-1"><h3 className="font-semibold">{recipe.productName}</h3><p className="mt-1 text-xs text-muted-foreground">Rendimiento: {recipe.yieldQuantity} porciones</p></div><Button variant="ghost" size="icon" onClick={() => loadRecipe(recipe)} aria-label="Editar receta"><PencilLine className="h-4 w-4"/></Button><Button variant="ghost" size="icon" onClick={() => void remove(recipe)} aria-label="Eliminar receta" className="text-rose-600"><Trash2 className="h-4 w-4"/></Button></div><div className="mt-4 space-y-2">{recipe.ingredients.map(ingredient => <div key={ingredient.ingredientId} className="flex items-center justify-between gap-3 text-sm"><span className="text-muted-foreground">{ingredient.name}</span><span className="font-medium">{ingredient.quantity} {ingredient.unit}</span></div>)}</div><div className="mt-4 flex items-center justify-between border-t border-border/70 pt-3"><span className="text-xs text-muted-foreground">Costo estimado de ingredientes / porción</span><span className="font-semibold text-orange-700">{money(ingredientCost(recipe))}</span></div>{recipe.instructions && <p className="mt-3 rounded-lg bg-muted/40 p-3 text-xs leading-5 text-muted-foreground">{recipe.instructions}</p>}</Card>)}</div>
     </div>
+    <Card className="rounded-2xl border-border/70 p-5 shadow-sm sm:p-6">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="flex items-center gap-2 font-semibold"><TrendingUp className="h-5 w-5 text-orange-600"/>Costeo y margen por plato</h2><p className="mt-1 text-sm text-muted-foreground">Costo de ingredientes por porción frente al precio de venta, con la conversión de unidades aplicada. Detecta platos con margen bajo antes de que afecten la rentabilidad.</p></div><Badge variant="outline" className="w-fit rounded-lg">{costing.length} plato(s)</Badge></div>
+      {costing.length === 0 ? <p className="mt-4 text-sm text-muted-foreground">Guarda una receta para ver su costeo y margen.</p> : <div className="mt-4 overflow-x-auto rounded-xl border border-border/60"><table className="w-full min-w-[760px] text-sm">
+        <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground"><tr><th className="px-3 py-2 font-semibold">Plato</th><th className="px-3 py-2 text-right font-semibold">Costo / porción</th><th className="px-3 py-2 text-right font-semibold">Precio de venta</th><th className="px-3 py-2 text-right font-semibold">Margen</th><th className="px-3 py-2 text-right font-semibold">Margen %</th><th className="px-3 py-2 font-semibold">Ingredientes</th></tr></thead>
+        <tbody className="divide-y divide-border/60">{costing.map(item => {
+          const tone = item.marginPercent >= 60 ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300' : item.marginPercent >= 30 ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300' : 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300';
+          return <tr key={item.recipeId}>
+            <td className="px-3 py-3"><p className="font-medium">{item.productName}</p><p className="text-xs text-muted-foreground">Rinde {item.yieldQuantity} porción(es)</p></td>
+            <td className="px-3 py-3 text-right tabular-nums">{money(item.cost)}</td>
+            <td className="px-3 py-3 text-right tabular-nums">{money(item.price)}</td>
+            <td className={`px-3 py-3 text-right font-semibold tabular-nums ${item.margin < 0 ? 'text-rose-600' : ''}`}>{money(item.margin)}</td>
+            <td className="px-3 py-3 text-right"><Badge variant="outline" className={`rounded-lg ${tone}`}>{item.marginPercent.toFixed(1)}%</Badge></td>
+            <td className="max-w-[280px] px-3 py-3"><p className="truncate text-xs text-muted-foreground" title={item.ingredients.map(ingredient => `${ingredient.name}: ${ingredient.quantity} ${ingredient.unit}`).join(' · ')}>{item.ingredients.map(ingredient => ingredient.name).join(', ')}</p></td>
+          </tr>;
+        })}</tbody>
+      </table></div>}
+    </Card>
     <ConfirmActionDialog open={Boolean(recipeToDelete)} onOpenChange={open => { if (!open) setRecipeToDelete(null); }} title="Eliminar receta" description={recipeToDelete ? `¿Eliminar la receta de ${recipeToDelete.productName}? Las ventas anteriores no se modificarán.` : ''} confirmLabel="Eliminar receta" destructive onConfirm={confirmRemove}/>
   </div></Layout>;
 }

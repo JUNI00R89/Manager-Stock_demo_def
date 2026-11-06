@@ -9,7 +9,10 @@ import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
 import { Badge } from '../../components/ui/badge';
 import { dataService, type InventoryMovementRecord, type PurchaseOrderRecord, type SupplierPriceHistoryRecord } from '../../services/dataService';
+import type { Product } from '../../utils/mockData';
 import { dateOnly, dateTime, fmtQty, money, PageTitle, ProductSelect, useWarehousePermissions, useWarehouseRefs } from './shared';
+
+type ReplenishmentItem = Product & { suggestedQuantity: number; lastCost: number; estimatedCost: number };
 
 type OrderLine = { key: string; productId: string; quantity: string; unitCost: string; unit: string };
 type ReceiveLine = { itemId: number; productName: string; productUnit: string; pending: number; quantity: string; unitCost: string; lotCode: string; expiryDate: string; locationId: string };
@@ -29,6 +32,7 @@ export function WarehousePurchaseOrders() {
   const [orders, setOrders] = useState<PurchaseOrderRecord[]>([]);
   const [priceHistory, setPriceHistory] = useState<SupplierPriceHistoryRecord[]>([]);
   const [recentPurchases, setRecentPurchases] = useState<InventoryMovementRecord[]>([]);
+  const [replenishment, setReplenishment] = useState<ReplenishmentItem[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
   const [search, setSearch] = useState('');
@@ -54,13 +58,39 @@ export function WarehousePurchaseOrders() {
   };
   const loadSecondary = async () => {
     try {
-      const [prices, movements] = await Promise.all([dataService.getPriceHistory({ limit: 12 }), dataService.getInventoryMovements(200, undefined, { types: 'purchase' })]);
-      setPriceHistory(prices); setRecentPurchases(movements);
+      const [prices, movements, suggestions] = await Promise.all([dataService.getPriceHistory({ limit: 12 }), dataService.getInventoryMovements(200, undefined, { types: 'purchase' }), dataService.getReplenishment()]);
+      setPriceHistory(prices); setRecentPurchases(movements); setReplenishment(suggestions);
     } catch { /* información complementaria */ }
   };
   useEffect(() => { void loadOrders(); void loadSecondary(); }, []);
 
   const productById = useMemo(() => new Map(products.map(product => [product.id, product])), [products]);
+  const replenishmentTotal = replenishment.reduce((sum, item) => sum + item.estimatedCost, 0);
+  const suggestionLine = (item: ReplenishmentItem): OrderLine => ({
+    key: `${item.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    productId: item.id,
+    quantity: String(Math.max(1, Math.ceil(item.suggestedQuantity))),
+    unitCost: String(Math.round(item.lastCost || item.cost || 0)),
+    unit: item.unit || '',
+  });
+  const addSuggestion = (item: ReplenishmentItem) => {
+    setLines(current => {
+      const existing = current.find(line => line.productId === item.id);
+      if (existing) return current.map(line => line.productId === item.id ? { ...line, quantity: String((Number(line.quantity) || 0) + Math.max(1, Math.ceil(item.suggestedQuantity))) } : line);
+      const filled = current.filter(line => line.productId || line.unitCost !== '' || Number(line.quantity) !== 1);
+      return [...filled, suggestionLine(item)];
+    });
+    if (!supplierId && item.supplierId) setSupplierId(item.supplierId);
+    toast.success(`${item.name} agregado a la orden de compra.`);
+  };
+  const applySuggestions = () => {
+    if (!replenishment.length) return;
+    setLines(replenishment.map(item => suggestionLine(item)));
+    const supplier = replenishment.find(item => item.supplierId)?.supplierId;
+    if (!supplierId && supplier) setSupplierId(supplier);
+    toast.success(`${replenishment.length} producto(s) agregados a la orden. Revisa cantidades y costos antes de crearla.`);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
   const filteredOrders = useMemo(() => {
     const term = search.trim().toLocaleLowerCase('es');
     return orders.filter(order => (statusFilter === 'all' || order.status === statusFilter) && (!term || `${order.id} ${order.supplierName} ${order.notes}`.toLocaleLowerCase('es').includes(term)));
@@ -133,8 +163,25 @@ export function WarehousePurchaseOrders() {
   return <Layout><div className="mx-auto max-w-7xl space-y-6">
     <PageTitle eyebrow="Bodega · Compras" title="Órdenes de compra" description="Planifica compras, envíalas al proveedor y recibe mercancía de forma parcial o total. Cada recepción actualiza stock, lotes y el historial de precios." action={<Button variant="outline" onClick={() => { void loadOrders(); void loadSecondary(); }} disabled={loadingOrders} className="h-11 rounded-xl"><RefreshCw className={`mr-2 h-4 w-4 ${loadingOrders ? 'animate-spin' : ''}`}/>Actualizar</Button>}/>
 
+    {replenishment.length > 0 && permissions.canEntry && <Card className="rounded-2xl border-blue-200 bg-blue-50/40 p-5 shadow-sm dark:border-blue-900 dark:bg-blue-950/20 sm:p-6">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row">
+        <div><h2 className="flex items-center gap-2 font-semibold"><ShoppingCart className="h-5 w-5 text-blue-600"/>Sugerencias de reposición</h2><p className="mt-1 text-sm text-muted-foreground">{replenishment.length} producto(s) en o por debajo del mínimo. Basado en stock actual, mínimo configurado y consumo reciente.</p></div>
+        <Button type="button" onClick={applySuggestions} className="rounded-xl bg-blue-600 text-white hover:bg-blue-700"><CirclePlus className="mr-2 h-4 w-4"/>Usar todas en la orden</Button>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {replenishment.slice(0, 6).map(item => <div key={item.id} className="rounded-xl border border-blue-200/70 bg-card p-3 dark:border-blue-900/60">
+          <p className="truncate font-semibold" title={item.name}>{item.name}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">Stock {fmtQty(item.stock)} {item.unit} · mínimo {fmtQty(item.minStock)} {item.unit}</p>
+          <div className="mt-2 flex items-center justify-between text-sm"><span className="text-muted-foreground">Sugerido</span><span className="font-semibold text-blue-700 dark:text-blue-300">{fmtQty(Math.max(1, Math.ceil(item.suggestedQuantity)))} {item.unit}</span></div>
+          <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">Último costo</span><span>{money(item.lastCost || item.cost || 0)}</span></div>
+          <Button type="button" size="sm" variant="outline" onClick={() => addSuggestion(item)} className="mt-2 w-full rounded-lg"><CirclePlus className="mr-1 h-4 w-4"/>Agregar a la orden</Button>
+        </div>)}
+      </div>
+      <p className="mt-3 text-xs text-muted-foreground">Costo estimado de todas las sugerencias: <span className="font-semibold text-foreground">{money(replenishmentTotal)}</span>. Ajusta cantidades antes de crear la orden.</p>
+    </Card>}
+
     {receiving && <Card className="rounded-2xl border-orange-200 bg-orange-50/50 p-5 shadow-sm dark:border-orange-900 dark:bg-orange-950/20 sm:p-6">
-      <div className="flex flex-flex-col items-start justify-between gap-3 sm:flex-row"><div><h2 className="flex items-center gap-2 font-semibold"><PackageCheck className="h-5 w-5 text-orange-600"/>Recibir orden {receiving.id}</h2><p className="mt-1 text-sm text-muted-foreground">{receiving.supplierName} · {receiving.pendingLines} línea(s) pendiente(s). Ajusta las cantidades que llegaron realmente.</p></div><Button type="button" variant="ghost" onClick={() => setReceiving(null)} className="rounded-xl">Cerrar</Button></div>
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row"><div><h2 className="flex items-center gap-2 font-semibold"><PackageCheck className="h-5 w-5 text-orange-600"/>Recibir orden {receiving.id}</h2><p className="mt-1 text-sm text-muted-foreground">{receiving.supplierName} · {receiving.pendingLines} línea(s) pendiente(s). Ajusta las cantidades que llegaron realmente.</p></div><Button type="button" variant="ghost" onClick={() => setReceiving(null)} className="rounded-xl">Cerrar</Button></div>
       <form onSubmit={submitReceive} className="mt-5 space-y-4">
         <div className="grid gap-3 sm:grid-cols-2"><div className="space-y-1"><Label className="text-xs">Factura del proveedor</Label><Input value={invoiceRef} onChange={event => setInvoiceRef(event.target.value)} maxLength={120} placeholder="Número de factura" className="h-10 rounded-xl bg-card"/></div><div className="space-y-1"><Label className="text-xs">Notas de recepción</Label><Input value={receiveNotes} onChange={event => setReceiveNotes(event.target.value)} maxLength={1000} placeholder="Novedades, faltantes, estado…" className="h-10 rounded-xl bg-card"/></div></div>
         <div className="space-y-3">{receiveLines.map(line => <div key={line.itemId} className="rounded-xl border border-border/70 bg-card p-3"><div className="flex flex-wrap items-baseline justify-between gap-2"><p className="font-medium">{line.productName}</p><p className="text-xs text-muted-foreground">Pendiente: {fmtQty(line.pending)} {line.productUnit}</p></div><div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
