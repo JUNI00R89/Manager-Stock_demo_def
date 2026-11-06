@@ -376,6 +376,27 @@ class ApiError extends Error {
   constructor(status: number, message: string) { super(message); this.name = 'ApiError'; this.status = status; }
 }
 
+function extractApiErrorMessage(body: any, status: number): string {
+  const detail = body?.detail ?? body?.message ?? body?.error ?? body?.msg;
+  if (typeof detail === 'string' && detail.trim()) return detail;
+  if (Array.isArray(detail)) {
+    const parts = detail.map((item: any) => {
+      const field = Array.isArray(item?.loc)
+        ? item.loc.filter((part: any) => part !== 'body' && part !== 'query' && part !== 'path').join('.')
+        : '';
+      const message = item?.msg || item?.message || item?.detail || (typeof item === 'string' ? item : '');
+      return field && message ? `${field}: ${message}` : (message || JSON.stringify(item));
+    }).filter(Boolean);
+    if (parts.length) return parts.join('; ');
+  }
+  if (detail && typeof detail === 'object') {
+    if (typeof detail.message === 'string') return detail.message;
+    try { return JSON.stringify(detail); } catch { /* ignore */ }
+  }
+  if (typeof body?.message === 'string' && body.message.trim()) return body.message;
+  return `Error HTTP ${status}`;
+}
+
 async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   // La app de escritorio no levanta FastAPI: todo se resuelve con el paquete
   // local. Lanzar TypeError permite que los métodos con respaldo local lo usen.
@@ -390,7 +411,7 @@ async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     localStorage.removeItem('businessConfig');
     if (window.location.pathname !== '/login' && window.location.pathname !== '/register') window.location.assign('/login');
   }
-  if (!response.ok) throw new ApiError(response.status, body?.detail || `Error HTTP ${response.status}`);
+  if (!response.ok) throw new ApiError(response.status, extractApiErrorMessage(body, response.status));
   return body as T;
 }
 
