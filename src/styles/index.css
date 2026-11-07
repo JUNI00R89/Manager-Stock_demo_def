@@ -170,6 +170,40 @@
   -webkit-backdrop-filter: blur(18px) saturate(140%);
 }
 
+/* Scrollbar fina y discreta para el menú lateral. El menú de bodega es largo,
+   así que la barra debe acompañar sin robar ancho ni protagonismo. */
+[data-sidebar-nav="true"] {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--sidebar-foreground) 26%, transparent) transparent;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+[data-sidebar-nav="true"]::-webkit-scrollbar {
+  width: 6px;
+}
+
+[data-sidebar-nav="true"]::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-sidebar-nav="true"]::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sidebar-foreground) 24%, transparent);
+}
+
+[data-sidebar-nav="true"]::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--brand-primary) 55%, transparent);
+}
+
+[data-sidebar-nav="true"]::-webkit-scrollbar-thumb:active {
+  background: var(--brand-primary);
+}
+
+[data-sidebar-nav="true"]::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* Con la barra colapsada el ancho es mínimo: ocultamos la barra de scroll para
    que no consuma el espacio y los iconos conserven sus 22 px. La navegación
    sigue siendo desplazable con la rueda o el trackpad. */
