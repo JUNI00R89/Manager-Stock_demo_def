@@ -551,7 +551,7 @@ function LayoutShell({ children }: LayoutProps) {
     <div className="app-shell flex h-screen overflow-hidden">
       {/* ── Desktop sidebar ── */}
       <aside
-        className={`app-sidebar hidden lg:flex flex-col transition-all duration-300 flex-shrink-0 m-4 ${sidebarCollapsed ? 'w-16 app-sidebar-collapsed' : 'w-64'}`}
+        className={`app-sidebar hidden lg:flex flex-col overflow-hidden rounded-2xl transition-all duration-300 flex-shrink-0 m-4 ${sidebarCollapsed ? 'w-16 app-sidebar-collapsed' : 'w-64'}`}
       >
         {SidebarContent({ collapsed: sidebarCollapsed, withIndicator: true })}
       </aside>
