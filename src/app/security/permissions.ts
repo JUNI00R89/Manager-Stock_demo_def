@@ -75,7 +75,7 @@ export function canAccessPath(path: string, role?: AppRole | null, config?: Busi
   if (config) {
     if (path.startsWith('/restaurant/') && config.type !== 'restaurant') return false;
     if (path.startsWith('/hotel/') && !config.features.rooms) return false;
-    if ((path === '/warehouse' || path.startsWith('/warehouse/')) && !config.features.inventory) return false;
+    if ((path === '/inventory' || path.startsWith('/inventory/') || path === '/warehouse' || path.startsWith('/warehouse/')) && !config.features.warehouse) return false;
     if (path.startsWith('/services/') && (config.type !== 'services' || !config.features.services)) return false;
     const foodMenuEnabled = config.type === 'restaurant' && (config.foodConfig?.activeModules ?? []).includes('menu');
     if ((path === '/products' || path.startsWith('/products/')) && !config.features.inventory && !foodMenuEnabled) return false;

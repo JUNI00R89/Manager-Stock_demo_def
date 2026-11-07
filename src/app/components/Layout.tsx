@@ -178,15 +178,10 @@ function LayoutShell({ children }: LayoutProps) {
       items.push({ path: '/services', icon: Scissors, label: 'Servicios', group: 'tipo' });
       items.push({ path: '/services/appointments', icon: CalendarDays, label: 'Agenda de citas', group: 'tipo' });
     }
-    // Las funciones de bodega (almacén) se listan solo para los módulos que no
-    // tienen un módulo operativo propio con agrupación propia (comidas, hotel,
-    // servicios). Un negocio de comidas tiene su propia agrupación ("Negocio de
-    // comidas") con el menú, catálogo y pedidos; el hotel con habitaciones y
-    // disponibilidad; los servicios con su catálogo y agenda. La bodega no debe
-    // mezclarse con ninguno de ellos.
-    const moduleType = config?.type;
-    const hasDedicatedModule = moduleType === 'restaurant' || moduleType === 'hotel' || moduleType === 'services';
-    if (config?.features.inventory && !hasDedicatedModule) {
+    // La bodega es un módulo independiente del inventario básico del negocio.
+    // Solo se lista cuando el negocio la tiene habilitada (tipo Bodega); retail,
+    // comidas, hotel y servicios conservan únicamente su operación propia.
+    if (config?.features.warehouse) {
       items.push(
         { path: '/warehouse', icon: Warehouse, label: 'Bodega', group: 'inventario' },
         { path: '/warehouse/entries', icon: ArrowDownToLine, label: 'Entradas', group: 'inventario' },
