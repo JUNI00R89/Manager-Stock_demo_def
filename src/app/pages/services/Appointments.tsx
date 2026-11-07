@@ -10,6 +10,7 @@ import {
 import type { Cita, Profesional, Servicio } from '../../utils/mockData';
 import { deleteServiceAppointment, editServiceAppointment, getServiceAppointments, getServiceProfessionals, getServicesCatalog, updateServiceAppointmentStatus, type ServiceAppointmentRecord, type ServiceCatalogRecord, type ServiceProfessionalRecord } from '../../services/dataService';
 import { toast } from 'sonner';
+import { toastError } from '../../utils/notifications';
 
 type ViewMode = 'semana' | 'dia';
 
@@ -47,13 +48,13 @@ export function Appointments() {
       const statusMap: Record<ServiceAppointmentRecord['estado'], Cita['estado']> = { reserved:'reservada', confirmed:'confirmada', attended:'atendida', cancelled:'cancelada', no_show:'no_asistio' };
       const mappedAppointments: Cita[] = appointmentRows.map((v: ServiceAppointmentRecord) => ({ id:v.id, clienteId:v.clienteId || '', clienteNombre:v.clienteNombre, clienteTelefono:v.clienteTelefono, clienteEmail:v.clienteEmail, servicioId:v.servicioId, servicioNombre:v.servicioNombre, profesionalId:v.profesionalId, profesionalNombre:v.profesionalNombre, fecha:v.fecha, horaInicio:v.horaInicio, horaFin:v.horaFin, estado:statusMap[v.estado], notas:v.notes }));
       setServices(mappedServices); setProfessionals(mappedProfessionals); setCitas(mappedAppointments);
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo cargar la agenda del negocio.'); }
+    } catch (error) { toastError(error, 'No se pudo cargar la agenda del negocio.'); }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { void load(); }, [load]);
   const setAppointmentStatus = async (appointment: Cita, status: ServiceAppointmentRecord['estado']) => {
     try { await updateServiceAppointmentStatus(appointment.id, status); toast.success(status === 'attended' ? 'Cita marcada como atendida.' : 'Estado de la cita actualizado.'); await load(); setSelectedCita(null); }
-    catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo actualizar la cita.'); }
+    catch (error) { toastError(error, 'No se pudo actualizar la cita.'); }
   };
 
   const beginEdit = (appointment: Cita) => {
@@ -65,13 +66,13 @@ export function Appointments() {
     try {
       await editServiceAppointment(selectedCita.id, { ...editForm, clientName: editForm.clientName.trim() });
       toast.success('Cita actualizada.'); setEditingCita(false); setSelectedCita(null); await load();
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo editar la cita.'); }
+    } catch (error) { toastError(error, 'No se pudo editar la cita.'); }
   };
   const removeAppointment = async () => {
     if (!selectedCita) return;
     setDeletingCita(true);
     try { await deleteServiceAppointment(selectedCita.id); toast.success('Cita eliminada.'); setSelectedCita(null); await load(); }
-    catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo eliminar la cita.'); }
+    catch (error) { toastError(error, 'No se pudo eliminar la cita.'); }
     finally { setDeletingCita(false); }
   };
 

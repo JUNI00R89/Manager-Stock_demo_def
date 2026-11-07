@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { AlertTriangle, Bell, CheckCheck, CircleDollarSign, Package, RefreshCw, SearchX, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../utils/notifications';
 import { Layout } from '../components/Layout';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -60,7 +61,7 @@ export function Notifications() {
     setReadIds(nextRead);
     setDismissedIds(nextDismissed);
     try { localStorage.setItem(storageKey(userId), JSON.stringify({ readIds: nextRead, dismissedIds: nextDismissed })); }
-    catch { toast.error('No se pudo guardar el estado local de las notificaciones en este navegador.'); }
+    catch (error) { toastError(error, 'No se pudo guardar el estado local de las notificaciones en este navegador.'); }
   }, [userId]);
 
   const load = useCallback(async () => {
@@ -73,7 +74,7 @@ export function Notifications() {
       setProducts(nextProducts);
       setSales(nextSales);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudieron cargar las alertas del negocio.');
+      toastError(error, 'No se pudieron cargar las alertas del negocio.');
     } finally { setLoading(false); }
   }, [canReadCatalog, canReadSales]);
 

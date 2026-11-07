@@ -376,7 +376,19 @@ class ApiError extends Error {
   constructor(status: number, message: string) { super(message); this.name = 'ApiError'; this.status = status; }
 }
 
-function extractApiErrorMessage(body: any, status: number): string {
+function defaultHttpErrorMessage(status: number): string {
+  if (status === 400) return 'La solicitud no es válida. Revisa los datos e inténtalo de nuevo.';
+  if (status === 401) return 'La sesión no es válida o venció. Inicia sesión nuevamente.';
+  if (status === 403) return 'No tienes permisos para realizar esta acción.';
+  if (status === 404) return 'El recurso solicitado no existe o fue eliminado.';
+  if (status === 409) return 'La operación choca con el estado actual de los datos. Actualiza e inténtalo de nuevo.';
+  if (status === 422) return 'El servidor rechazó los datos enviados. Revisa los campos e inténtalo de nuevo.';
+  if (status === 429) return 'Se hicieron demasiadas solicitudes. Espera un momento e inténtalo de nuevo.';
+  if (status >= 500) return `El servidor no pudo completar la solicitud (HTTP ${status}). Inténtalo de nuevo en unos segundos.`;
+  return `La solicitud falló con el código HTTP ${status}.`;
+}
+
+function extractApiErrorMessage(body: any, status: number, rawBody = ''): string {
   const detail = body?.detail ?? body?.message ?? body?.error ?? body?.msg;
   if (typeof detail === 'string' && detail.trim()) return detail;
   if (Array.isArray(detail)) {
@@ -394,7 +406,9 @@ function extractApiErrorMessage(body: any, status: number): string {
     try { return JSON.stringify(detail); } catch { /* ignore */ }
   }
   if (typeof body?.message === 'string' && body.message.trim()) return body.message;
-  return `Error HTTP ${status}`;
+  if (typeof body === 'string' && body.trim() && !body.trim().startsWith('<')) return body.trim().slice(0, 400);
+  if (rawBody.trim() && !rawBody.trim().startsWith('<') && rawBody.length <= 400) return rawBody.trim();
+  return defaultHttpErrorMessage(status);
 }
 
 async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -405,13 +419,18 @@ async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     ...init,
     headers: { 'Content-Type': 'application/json', ...(localStorage.getItem('manager_stock_auth_token') ? { Authorization: `Bearer ${localStorage.getItem('manager_stock_auth_token')}` } : {}), ...(init.headers || {}) },
   });
-  const body = await response.json().catch(() => null);
+  const rawBody = await response.text().catch(() => '');
+  let body: any = null;
+  if (rawBody) {
+    try { body = JSON.parse(rawBody); }
+    catch { body = rawBody; }
+  }
   if (response.status === 401 && localStorage.getItem('manager_stock_auth_token')) {
     localStorage.removeItem('manager_stock_auth_token');
     localStorage.removeItem('businessConfig');
     if (window.location.pathname !== '/login' && window.location.pathname !== '/register') window.location.assign('/login');
   }
-  if (!response.ok) throw new ApiError(response.status, extractApiErrorMessage(body, response.status));
+  if (!response.ok) throw new ApiError(response.status, extractApiErrorMessage(body, response.status, rawBody));
   return body as T;
 }
 
@@ -591,7 +610,7 @@ export async function getPlatformSubscriptions() {
   return api<PlatformSubscriptionRecord[]>('/platform/subscriptions');
 }
 export async function updatePlatformSubscription(businessId: string, action: 'confirm_payment' | 'cancel_request', paymentReference?: string) {
-  if (isDesktopMode()) return desktop.platform.updateSubscription(businessId);
+  if (isDesktopMode()) return desktop.platform.updateSubscription(businessId, action, paymentReference);
   return api<BusinessSubscriptionRecord>(`/platform/subscriptions/${encodeURIComponent(businessId)}`, { method: 'PATCH', body: JSON.stringify({ action, paymentReference }) });
 }
 
@@ -602,11 +621,11 @@ export async function getPlatformStats() {
 
 export async function getPlatformBusinesses() {
   if (isDesktopMode()) return desktop.platform.businesses();
-  return api<{ id: string; name: string; type: string; currency: string; active: boolean; createdAt: string; users: number }[]>('/platform/businesses');
+  return api<{ id: string; name: string; type: string; currency: string; active: boolean; createdAt: string; users: number; suspensionReason?: string; suspensionDescription?: string; suspendedAt?: string }[]>('/platform/businesses');
 }
 
 export async function setPlatformBusinessStatus(id: string, active: boolean, reason = '', description = '') {
-  if (isDesktopMode()) return desktop.platform.setBusinessStatus(id, active);
+  if (isDesktopMode()) return desktop.platform.setBusinessStatus(id, active, reason, description);
   const params = new URLSearchParams({ active: String(active) });
   if (!active) { params.set('reason', reason); params.set('description', description); }
   return api<{ id: string; active: boolean; caseId?: string | null }>(`/platform/businesses/${encodeURIComponent(id)}/status?${params.toString()}`, { method: 'PATCH' });
@@ -623,7 +642,7 @@ export interface PlatformAuditRecord {
   id: number; actorId: string; actorName: string; action: string; entityId: string; details: Record<string, unknown>; createdAt: string;
 }
 export async function getPlatformAudit(limit = 50) {
-  if (isDesktopMode()) return desktop.platform.audit() as Promise<PlatformAuditRecord[]>;
+  if (isDesktopMode()) return desktop.platform.audit(limit);
   return api<PlatformAuditRecord[]>(`/platform/audit?limit=${Math.min(200, Math.max(1, limit))}`);
 }
 export async function createPlatformUser(input: { name: string; email: string; password: string; role: 'superadmin' | 'owner' | 'business_admin' | 'cashier'; businessId?: string | null }) {
@@ -685,7 +704,7 @@ export async function getPlatformSupportCases() {
   return api<SupportCaseRecord[]>('/platform/support/cases');
 }
 export async function getPlatformSupportMessages(caseId: string) {
-  if (isDesktopMode()) return desktop.support.platformMessages();
+  if (isDesktopMode()) return desktop.support.platformMessages(caseId);
   return api<SupportMessageRecord[]>(`/platform/support/cases/${encodeURIComponent(caseId)}/messages`);
 }
 export async function sendPlatformSupportMessage(caseId: string, message: string) {

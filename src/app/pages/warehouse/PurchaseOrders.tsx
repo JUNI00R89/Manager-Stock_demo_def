@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, CirclePlus, PackageCheck, RefreshCw, Save, Send, ShoppingCart, Trash2, Truck, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../../utils/notifications';
 import { Layout } from '../../components/Layout';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -53,7 +54,7 @@ export function WarehousePurchaseOrders() {
   const loadOrders = async () => {
     setLoadingOrders(true);
     try { setOrders(await dataService.getPurchaseOrders()); }
-    catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudieron cargar las órdenes de compra.'); }
+    catch (error) { toastError(error, 'No se pudieron cargar las órdenes de compra.'); }
     finally { setLoadingOrders(false); }
   };
   const loadSecondary = async () => {
@@ -115,7 +116,7 @@ export function WarehousePurchaseOrders() {
       toast.success(`Orden ${order.id} creada en borrador.`);
       setSupplierId(''); setExpectedDate(''); setNotes(''); setLines([newLine()]);
       await loadOrders();
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo crear la orden de compra.'); }
+    } catch (error) { toastError(error, 'No se pudo crear la orden de compra.'); }
     finally { setSaving(false); }
   };
 
@@ -127,7 +128,7 @@ export function WarehousePurchaseOrders() {
       if (action === 'cancel') await dataService.cancelPurchaseOrder(order.id);
       toast.success(action === 'approve' ? 'Orden aprobada.' : action === 'send' ? 'Orden marcada como enviada al proveedor.' : 'Orden cancelada.');
       await loadOrders();
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo actualizar la orden.'); }
+    } catch (error) { toastError(error, 'No se pudo actualizar la orden.'); }
     finally { setBusyId(null); }
   };
 
@@ -156,7 +157,7 @@ export function WarehousePurchaseOrders() {
       toast.success(result.status === 'received' ? 'Orden recibida completamente. El stock y los lotes se actualizaron.' : 'Recepción parcial registrada. Puedes recibir el resto después.');
       setReceiving(null); setReceiveLines([]);
       await Promise.all([loadOrders(), loadSecondary(), reload()]);
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo registrar la recepción.'); }
+    } catch (error) { toastError(error, 'No se pudo registrar la recepción.'); }
     finally { setReceivingBusy(false); }
   };
 

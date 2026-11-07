@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Activity, ArrowDownRight, ArrowUpRight, Boxes, ChefHat, CircleDollarSign, Package, Plus, ShoppingCart, Truck, Utensils, Wallet, AlertTriangle, Clock3, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../utils/notifications';
 import { Layout } from '../components/Layout';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -45,7 +46,7 @@ export function Dashboard() {
     setLoading(true);
     const productRequest = catalogEnabled && canReadCatalog ? dataService.getProducts() : Promise.resolve([] as Product[]);
     const salesRequest = posEnabled && canReadSales ? dataService.getSales() : Promise.resolve([] as SaleRecord[]);
-    void Promise.all([productRequest, salesRequest]).then(([p, s]) => { if (active) { setProducts(p); setSales(s); } }).catch(error => toast.error(error instanceof Error ? error.message : 'No se pudieron cargar los indicadores.')).finally(() => { if (active) setLoading(false); });
+    void Promise.all([productRequest, salesRequest]).then(([p, s]) => { if (active) { setProducts(p); setSales(s); } }).catch(error => toastError(error, 'No se pudieron cargar los indicadores.')).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [catalogEnabled, posEnabled, canReadCatalog, canReadSales]);
 
@@ -71,7 +72,7 @@ export function Dashboard() {
       setPendingTransitions(previous => previous.filter(item => item.id !== transition.id));
       toast.success('Se recuperó la configuración del tipo de negocio anterior.');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo recuperar el tipo de negocio anterior.');
+      toastError(error, 'No se pudo recuperar el tipo de negocio anterior.');
     } finally { setRestoringTransition(null); }
   };
   const completed = sales.filter(s => s.status === 'completed');

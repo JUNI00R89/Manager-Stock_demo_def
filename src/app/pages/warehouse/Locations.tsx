@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MapPin, Package, Pencil, Plus, RefreshCw, Save, Trash2, Warehouse } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../../utils/notifications';
 import { Layout } from '../../components/Layout';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -67,7 +68,7 @@ export function Locations() {
       if (editingId) { await dataService.updateInventoryLocation(editingId, payload); toast.success('Ubicación actualizada.'); }
       else { await dataService.createInventoryLocation(payload); toast.success('Ubicación creada.'); }
       cancelEdit(); await load();
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo guardar la ubicación.'); }
+    } catch (error) { toastError(error, 'No se pudo guardar la ubicación.'); }
     finally { setSaving(false); }
   };
 
@@ -77,7 +78,7 @@ export function Locations() {
       const result = await dataService.deleteInventoryLocation(location.id);
       toast.success(result?.ok === false ? 'Ubicación desactivada.' : 'Ubicación eliminada.');
       await load();
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo eliminar la ubicación.'); }
+    } catch (error) { toastError(error, 'No se pudo eliminar la ubicación.'); }
     finally { setDeletingId(null); }
   };
 

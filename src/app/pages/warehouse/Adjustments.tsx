@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowDownUp, CirclePlus, Scale, Save, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../../utils/notifications';
 import { Layout } from '../../components/Layout';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -50,7 +51,7 @@ export function WarehouseAdjustments() {
       setReason(''); setNotes(''); setLines([newLine()]);
       await Promise.all([reload(), loadRecent()]);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo registrar el ajuste.');
+      toastError(error, 'No se pudo registrar el ajuste.');
     } finally { setSaving(false); }
   };
 

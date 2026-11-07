@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { CalendarDays, CircleDollarSign, Download, Eye, Plus, Search, ShoppingBag } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../utils/notifications';
 import { Layout } from '../components/Layout';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -22,7 +23,7 @@ export function Sales() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<'all' | SaleStatus>('all');
   const [loading, setLoading] = useState(true);
-  const load = async () => { try { setSales(await dataService.getSales()); } catch (error) { toast.error(error instanceof Error ? error.message : 'No fue posible cargar las ventas.'); } finally { setLoading(false); } };
+  const load = async () => { try { setSales(await dataService.getSales()); } catch (error) { toastError(error, 'No fue posible cargar las ventas.'); } finally { setLoading(false); } };
   useEffect(() => { void load(); }, []);
   const filtered = useMemo(() => sales.filter(sale => {
     const term = search.toLowerCase();

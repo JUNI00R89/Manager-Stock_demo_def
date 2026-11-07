@@ -15,6 +15,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../../utils/notifications';
 import { Layout } from '../../components/Layout';
 import { StaffSwitcher } from '../../components/restaurant/StaffSwitcher';
 import { PedidoStatusBadge } from '../../components/restaurant/PedidoStatusBadge';
@@ -206,7 +207,7 @@ export function Orders() {
         : `Pedido #${created.numero} enviado a cocina.`);
       resetNewOrder();
     } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : 'No se pudo crear el pedido.');
+      toastError(reason, 'No se pudo crear el pedido.');
     } finally {
       setCreating(false);
     }
@@ -219,7 +220,7 @@ export function Orders() {
       await repository.tomarPedido(order.id, scope, toEmployee(active));
       toast.success(`Pedido #${order.numero}: Tomado por ${active.name}`);
     } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : 'No se pudo tomar el pedido.');
+      toastError(reason, 'No se pudo tomar el pedido.');
     } finally {
       setBusyOrderId(null);
     }
@@ -232,7 +233,7 @@ export function Orders() {
       await repository.finalizarPedido(order.id, scope, toEmployee(active));
       toast.success(`Pedido #${order.numero} finalizado.`);
     } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : 'No se pudo finalizar el pedido.');
+      toastError(reason, 'No se pudo finalizar el pedido.');
     } finally {
       setBusyOrderId(null);
     }
@@ -245,7 +246,7 @@ export function Orders() {
       const result = await deliverRestaurantOrder(repository, order, toEmployee(active));
       toast.success(`Pedido #${order.numero} entregado. Venta ${result.sale?.id ? result.sale.id : 'registrada'} y stock actualizado.`);
     } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : 'No se pudo entregar el pedido.');
+      toastError(reason, 'No se pudo entregar el pedido.');
     } finally {
       setBusyOrderId(null);
     }
@@ -260,7 +261,7 @@ export function Orders() {
       setCancelTarget(null);
       setCancelReason('');
     } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : 'No se pudo cancelar el pedido.');
+      toastError(reason, 'No se pudo cancelar el pedido.');
     } finally {
       setBusyOrderId(null);
     }

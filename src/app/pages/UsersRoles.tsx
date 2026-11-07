@@ -8,6 +8,7 @@ import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { ShieldCheck, Users, UserPlus, RefreshCw, UserRound, Mail, KeyRound, CircleCheck, CircleX, LoaderCircle, Plus, Shield, Save, Camera } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../utils/notifications';
 import { ConfirmActionDialog } from '../components/ConfirmActionDialog';
 import { useAuth } from '../context/AuthContext';
 import { createBusinessUser, createCustomRole, getBusinessUsers, getCustomRoles, updateBusinessUser, type BusinessUserRecord, type CustomRoleRecord } from '../services/dataService';
@@ -73,7 +74,7 @@ export function UsersRoles() {
       const [nextUsers, nextRoles] = await Promise.all([getBusinessUsers(), getCustomRoles()]);
       setUsers(nextUsers);
       setCustomRoles(nextRoles);
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo cargar la lista de usuarios y roles.'); }
+    } catch (error) { toastError(error, 'No se pudo cargar la lista de usuarios y roles.'); }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
@@ -89,7 +90,7 @@ export function UsersRoles() {
       toast.success('Usuario creado correctamente.');
       setName(''); setEmail(''); setPassword(''); setRoleSelection('cashier'); setShowForm(false);
       await refresh();
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo crear el usuario.'); }
+    } catch (error) { toastError(error, 'No se pudo crear el usuario.'); }
     finally { setSaving(false); }
   };
 
@@ -105,7 +106,7 @@ export function UsersRoles() {
       await refresh();
       setRoleSelection(`custom:${role.id}`);
       setShowForm(true);
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo crear el rol.'); }
+    } catch (error) { toastError(error, 'No se pudo crear el rol.'); }
     finally { setSavingRole(false); }
   };
 
@@ -118,7 +119,7 @@ export function UsersRoles() {
       toast.success(`Acceso ${active ? 'reactivado' : 'suspendido'}.`);
       await refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo actualizar el usuario.');
+      toastError(error, 'No se pudo actualizar el usuario.');
       throw error;
     }
   };
@@ -130,7 +131,7 @@ export function UsersRoles() {
       else await updateBusinessUser(target.id, { role: selection as BaseRole, customRoleId: null });
       toast.success(`Rol actualizado para ${target.name}.`);
       await refresh();
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo actualizar el rol.'); }
+    } catch (error) { toastError(error, 'No se pudo actualizar el rol.'); }
     finally { setUpdatingUserId(null); }
   };
 

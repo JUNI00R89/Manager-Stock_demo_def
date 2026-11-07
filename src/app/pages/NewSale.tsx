@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ArrowLeft, Minus, Plus, Save, ShoppingCart, Trash2, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../utils/notifications';
 import { Layout } from '../components/Layout';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -30,7 +31,7 @@ export function NewSale() {
   const tax = subtotal * taxRate;
   const total = subtotal + tax;
 
-  useEffect(() => { void dataService.getProducts().then(list => setProducts(list.filter(p => p.productType !== 'ingredient' && p.productType !== 'supplies'))).catch(error => toast.error(error instanceof Error ? error.message : 'No fue posible cargar el catálogo.')); }, []);
+  useEffect(() => { void dataService.getProducts().then(list => setProducts(list.filter(p => p.productType !== 'ingredient' && p.productType !== 'supplies'))).catch(error => toastError(error, 'No fue posible cargar el catálogo.')); }, []);
   const addItem = () => {
     const product = products.find(p => p.id === selectedProductId);
     const qty = Number(quantity);
@@ -59,7 +60,7 @@ export function NewSale() {
       const sale = await dataService.createSale({ items: items.map(item => ({ productId: item.product.id, quantity: item.quantity })), customer: customer.trim() || 'Cliente general', paymentMethod, taxRate });
       toast.success('Venta registrada correctamente.', { description: `${sale.id} · ${money(sale.totalPrice)}` });
       navigate(`/sales/${sale.id}`);
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No fue posible registrar la venta.'); }
+    } catch (error) { toastError(error, 'No fue posible registrar la venta.'); }
     finally { setSaving(false); }
   };
 

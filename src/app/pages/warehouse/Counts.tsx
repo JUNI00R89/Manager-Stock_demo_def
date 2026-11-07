@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ClipboardCheck, CirclePlus, RefreshCw, Save, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../../utils/notifications';
 import { Layout } from '../../components/Layout';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -27,7 +28,7 @@ export function WarehouseCounts() {
   const loadCounts = async () => {
     setLoadingCounts(true);
     try { setCounts(await dataService.getPhysicalCounts(50)); }
-    catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudieron cargar los conteos.'); }
+    catch (error) { toastError(error, 'No se pudieron cargar los conteos.'); }
     finally { setLoadingCounts(false); }
   };
   useEffect(() => { void loadCounts(); }, []);
@@ -58,7 +59,7 @@ export function WarehouseCounts() {
       toast.success(`Conteo ${count.id} cerrado. Se generaron ${count.differenceCount} ajuste(s) por diferencia.`);
       setNotes(''); setLines([newLine()]);
       await Promise.all([loadCounts(), reload()]);
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo registrar el conteo.'); }
+    } catch (error) { toastError(error, 'No se pudo registrar el conteo.'); }
     finally { setSaving(false); }
   };
 

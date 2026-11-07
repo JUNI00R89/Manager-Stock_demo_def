@@ -19,6 +19,7 @@ import {
 import { useBusiness, BusinessConfig, DEFAULT_BUSINESS_THEMES, resolveThemeColors, type BusinessTheme } from '../context/BusinessContext';
 import { useTheme } from '../context/ThemeContext';
 import { toast } from 'sonner';
+import { toastError } from '../utils/notifications';
 import { ConfirmActionDialog } from '../components/ConfirmActionDialog';
 
 export function Settings() {
@@ -91,7 +92,7 @@ export function Settings() {
       await setConfig(updatedConfig);
       toast.success('Configuración guardada en la base de datos.');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo guardar la configuración.');
+      toastError(error, 'No se pudo guardar la configuración.');
     } finally { setSaving(false); }
   };
 
@@ -104,7 +105,7 @@ export function Settings() {
       setTheme(savedTheme.mode);
       toast.success('Apariencia guardada para este negocio.');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo guardar la apariencia.');
+      toastError(error, 'No se pudo guardar la apariencia.');
     } finally { setSaving(false); }
   };
 

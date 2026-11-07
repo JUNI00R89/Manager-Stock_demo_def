@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { ScanLine } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../../utils/notifications';
 import { Card } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
@@ -35,7 +36,7 @@ export function useWarehouseRefs() {
       setSuppliers(nextSuppliers);
       setSettings(nextSettings);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudieron cargar los datos de la bodega.');
+      toastError(error, 'No se pudieron cargar los datos de la bodega.');
     } finally {
       setLoading(false);
     }
@@ -130,7 +131,7 @@ export function BarcodeScan({ onProducts }: { onProducts: (products: Product[]) 
       setCode('');
       toast.success(result.products.length === 1 ? `Producto encontrado: ${result.products[0].name}` : `${result.products.length} productos encontrados.`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se encontró el código.');
+      toastError(error, 'No se encontró el código.');
     } finally { setBusy(false); }
   };
   return <div className="flex gap-2">

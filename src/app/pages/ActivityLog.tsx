@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Activity, RefreshCw, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../utils/notifications';
 import { Layout } from '../components/Layout';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -17,7 +18,7 @@ export function ActivityLog() {
   const load = async () => {
     setLoading(true);
     try { setRows(await dataService.getAuditLog(300)); }
-    catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo consultar la actividad.'); }
+    catch (error) { toastError(error, 'No se pudo consultar la actividad.'); }
     finally { setLoading(false); }
   };
   useEffect(() => { void load(); }, []);

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Check, Clock3, MessageCircle, RefreshCw, Send, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../utils/notifications';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { Textarea } from './ui/textarea';
@@ -19,7 +20,7 @@ const timeLabel = (value: string) => {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' });
 };
 
-export function SupportCenter({ mode }: { mode: SupportMode }) {
+export function SupportCenter({ mode, onChanged }: { mode: SupportMode; onChanged?: () => void }) {
   const [cases, setCases] = useState<SupportCaseRecord[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [messages, setMessages] = useState<SupportMessageRecord[]>([]);
@@ -49,7 +50,7 @@ export function SupportCenter({ mode }: { mode: SupportMode }) {
       const list = mode === 'platform' ? await getPlatformSupportMessages(caseId) : await getOwnerSupportMessages();
       setMessages(list);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo cargar la conversación.');
+      toastError(error, 'No se pudo cargar la conversación.');
     } finally { setLoadingMessages(false); }
   }, [mode]);
 
@@ -58,7 +59,7 @@ export function SupportCenter({ mode }: { mode: SupportMode }) {
     (async () => {
       setLoading(true);
       try { await refreshCases(); }
-      catch (error) { if (active) toast.error(error instanceof Error ? error.message : 'No se pudo cargar soporte.'); }
+      catch (error) { if (active) toastError(error, 'No se pudo cargar soporte.'); }
       finally { if (active) setLoading(false); }
     })();
     return () => { active = false; };
@@ -90,9 +91,10 @@ export function SupportCenter({ mode }: { mode: SupportMode }) {
       setDraft('');
       await refreshMessages(selectedId);
       await refreshCases();
+      onChanged?.();
       toast.success('Mensaje enviado.');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo enviar el mensaje.');
+      toastError(error, 'No se pudo enviar el mensaje.');
     } finally { setSending(false); }
   };
 
@@ -102,7 +104,8 @@ export function SupportCenter({ mode }: { mode: SupportMode }) {
       await updatePlatformSupportCase(selectedCase.id, status);
       toast.success(status === 'resolved' ? 'Caso resuelto y negocio reactivado.' : 'Estado del caso actualizado.');
       await refreshCases();
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo actualizar el caso.'); }
+      onChanged?.();
+    } catch (error) { toastError(error, 'No se pudo actualizar el caso.'); }
   };
 
   return (

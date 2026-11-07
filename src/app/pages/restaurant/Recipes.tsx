@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BookOpen, ChefHat, CirclePlus, ClipboardList, Trash2, Save, PencilLine, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../../utils/notifications';
 import { Layout } from '../../components/Layout';
 import { ConfirmActionDialog } from '../../components/ConfirmActionDialog';
 import { Card } from '../../components/ui/card';
@@ -36,7 +37,7 @@ export function Recipes() {
       setProducts(allProducts); setRecipes(allRecipes);
       try { setCosting(await dataService.getDishCosting()); } catch { setCosting([]); }
     }
-    catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudieron cargar las recetas.'); }
+    catch (error) { toastError(error, 'No se pudieron cargar las recetas.'); }
     finally { setLoading(false); }
   };
   useEffect(() => { void load(); }, []);
@@ -54,11 +55,11 @@ export function Recipes() {
     if (!Number.isFinite(yieldValue) || yieldValue <= 0) { toast.error('El rendimiento debe ser mayor que cero.'); return; }
     setSaving(true);
     try { await dataService.saveRecipe({ productId, yieldQuantity: yieldValue, instructions: instructions.trim(), ingredients: lines.map(line => ({ ingredientId: line.ingredientId, quantity: Number(line.quantity), unit: line.unit })) }); await load(); resetForm(); toast.success('Receta guardada. Las próximas ventas descontarán los ingredientes registrados.'); }
-    catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo guardar la receta.'); }
+    catch (error) { toastError(error, 'No se pudo guardar la receta.'); }
     finally { setSaving(false); }
   };
   const remove = (recipe: RecipeRecord) => setRecipeToDelete(recipe);
-  const confirmRemove = async () => { if (!recipeToDelete) return; try { await dataService.deleteRecipe(recipeToDelete.id); setRecipes(prev => prev.filter(r => r.id !== recipeToDelete.id)); if (productId === recipeToDelete.productId) resetForm(); toast.success('Receta eliminada.'); } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo eliminar la receta.'); throw error; } };
+  const confirmRemove = async () => { if (!recipeToDelete) return; try { await dataService.deleteRecipe(recipeToDelete.id); setRecipes(prev => prev.filter(r => r.id !== recipeToDelete.id)); if (productId === recipeToDelete.productId) resetForm(); toast.success('Receta eliminada.'); } catch (error) { toastError(error, 'No se pudo eliminar la receta.'); throw error; } };
 
   return <Layout><div className="mx-auto max-w-7xl space-y-6">
     <div><p className="text-sm font-semibold uppercase tracking-[.16em] text-orange-600">Negocio de comidas</p><h1 className="mt-1 text-3xl font-bold tracking-tight">Recetas y costos</h1><p className="mt-1 max-w-3xl text-muted-foreground">Define cuánto ingrediente requiere cada producto vendido. Al registrar una venta, Manager Stock descuenta los ingredientes automáticamente, con validación de existencias y trazabilidad.</p></div>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeftRight, CirclePlus, PackageCheck, RefreshCw, Send, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../../utils/notifications';
 import { Layout } from '../../components/Layout';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -37,7 +38,7 @@ export function WarehouseTransfers() {
 
   const loadTransfers = async (status?: string) => {
     try { setTransfers(await dataService.getTransfers(status)); }
-    catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudieron cargar las transferencias.'); }
+    catch (error) { toastError(error, 'No se pudieron cargar las transferencias.'); }
     finally { if (status) setStatusFilter(status); }
   };
   const loadLots = async () => {
@@ -76,7 +77,7 @@ export function WarehouseTransfers() {
       toast.success(`Transferencia ${transfer.id} creada en borrador.`);
       setNotes(''); setLines([{ ...newLine() }]); setOriginId(''); setDestinationId('');
       await Promise.all([loadTransfers(), loadLots(), reload()]);
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo crear la transferencia.'); }
+    } catch (error) { toastError(error, 'No se pudo crear la transferencia.'); }
     finally { setSaving(false); }
   };
 
@@ -88,7 +89,7 @@ export function WarehouseTransfers() {
       if (action === 'cancel') await dataService.cancelTransfer(transfer.id);
       toast.success(action === 'send' ? 'Transferencia enviada desde el origen.' : action === 'receive' ? 'Transferencia recibida en destino.' : 'Transferencia cancelada.');
       await loadTransfers();
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo actualizar la transferencia.'); }
+    } catch (error) { toastError(error, 'No se pudo actualizar la transferencia.'); }
     finally { setBusyId(null); }
   };
 

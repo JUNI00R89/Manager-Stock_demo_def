@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ArrowLeft, Building2, Save } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../utils/notifications';
 import { Layout } from '../components/Layout';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -17,7 +18,7 @@ export function NewSupplier() {
   const [products, setProducts] = useState<Product[]>([]);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({ name: '', company: '', phone: '', email: '', address: '', products: [] as string[], notes: '' });
-  useEffect(() => { void dataService.getProducts().then(setProducts).catch(error => toast.error(error instanceof Error ? error.message : 'No se pudo cargar el catálogo.')); }, []);
+  useEffect(() => { void dataService.getProducts().then(setProducts).catch(error => toastError(error, 'No se pudo cargar el catálogo.')); }, []);
   const update = (field: keyof typeof formData, value: string) => setFormData(prev => ({ ...prev, [field]: value }));
   const toggle = (id: string, checked: boolean) => setFormData(prev => ({ ...prev, products: checked ? [...prev.products, id] : prev.products.filter(p => p !== id) }));
   const submit = async (event: React.FormEvent) => {
@@ -26,7 +27,7 @@ export function NewSupplier() {
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) { toast.error('Revisa el formato del correo electrónico.'); return; }
     setSaving(true);
     try { await dataService.createSupplier({ ...formData, name: formData.name.trim(), company: formData.company.trim(), phone: formData.phone.trim(), email: formData.email.trim(), address: formData.address.trim(), notes: formData.notes.trim() }); toast.success('Proveedor registrado correctamente.'); navigate('/suppliers'); }
-    catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo guardar el proveedor.'); }
+    catch (error) { toastError(error, 'No se pudo guardar el proveedor.'); }
     finally { setSaving(false); }
   };
   return <Layout><div className="mx-auto max-w-4xl space-y-6"><div className="flex items-center gap-3"><Button variant="outline" size="icon" onClick={() => navigate('/suppliers')} className="rounded-xl"><ArrowLeft className="h-4 w-4"/></Button><div><p className="text-sm font-semibold uppercase tracking-[.16em] text-orange-600">Abastecimiento</p><h1 className="mt-1 text-3xl font-bold tracking-tight">Nuevo proveedor</h1><p className="mt-1 text-muted-foreground">Guarda datos de contacto y vincula productos que suministra.</p></div></div>

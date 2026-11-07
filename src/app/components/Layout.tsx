@@ -19,6 +19,7 @@ import { isDesktopMode } from '../services/desktop';
 import { motion, AnimatePresence } from 'motion/react';
 import { canAccessPath, roleLabel } from '../security/permissions';
 import { toast } from 'sonner';
+import { toastError } from '../utils/notifications';
 
 // Continuidad visual entre navegaciones: en el shell persistente (AppShell) la
 // interfaz no se vuelve a montar y el indicador guarda su posición en el estado.
@@ -164,7 +165,7 @@ function LayoutShell({ children }: LayoutProps) {
     try {
       await setConfig({ ...config, theme: { ...current, mode: nextMode, customized: true } });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo guardar el tema.');
+      toastError(error, 'No se pudo guardar el tema.');
     }
   };
 

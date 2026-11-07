@@ -18,6 +18,7 @@ import {
   UtensilsCrossed,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../../utils/notifications';
 import { Layout } from '../../components/Layout';
 import { StaffSwitcher } from '../../components/restaurant/StaffSwitcher';
 import { PedidoStatusBadge } from '../../components/restaurant/PedidoStatusBadge';
@@ -286,7 +287,7 @@ export function Waiter() {
       setSearch('');
       scrollToTop();
     } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : 'No se pudo enviar el pedido.');
+      toastError(reason, 'No se pudo enviar el pedido.');
     } finally {
       setSending(false);
     }
@@ -303,7 +304,7 @@ export function Waiter() {
       await deliverRestaurantOrder(repository, order, toEmployee(active));
       toast.success(`Pedido #${order.numero} entregado. Venta registrada.`);
     } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : 'No se pudo entregar el pedido.');
+      toastError(reason, 'No se pudo entregar el pedido.');
     } finally {
       setBusyOrderId(null);
     }

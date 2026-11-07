@@ -6,6 +6,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Package, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../utils/notifications';
 
 export function Register() {
   const [name, setName] = useState('');
@@ -35,7 +36,7 @@ export function Register() {
         toast.error('Error al crear la cuenta');
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo crear la cuenta. Verifica la conexión con el backend.');
+      toastError(error, 'No se pudo crear la cuenta. Verifica la conexión con el backend.');
     } finally {
       setLoading(false);
     }

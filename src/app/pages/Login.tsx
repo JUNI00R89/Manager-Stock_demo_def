@@ -6,6 +6,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Boxes, Eye, EyeOff, Loader2, ShieldCheck, ArrowUpRight, ChartNoAxesCombined, PackageCheck, Activity, Monitor } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../utils/notifications';
 import { DESKTOP_DEMO_ACCOUNTS, isDesktopMode } from '../services/desktop';
 
 export function Login() {
@@ -30,7 +31,7 @@ export function Login() {
       if (!loggedUser) throw new Error('No se pudo iniciar sesión.');
       goToApp(loggedUser);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo iniciar sesión. Verifica tus credenciales y que el backend esté ejecutándose.');
+      toastError(error, 'No se pudo iniciar sesión. Verifica tus credenciales y que el backend esté ejecutándose.');
     } finally { setLoading(false); }
   };
 
@@ -43,7 +44,7 @@ export function Login() {
       if (!loggedUser) throw new Error('No se pudo iniciar sesión con la cuenta demo.');
       goToApp(loggedUser);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo iniciar sesión con la cuenta demo.');
+      toastError(error, 'No se pudo iniciar sesión con la cuenta demo.');
     } finally { setLoading(false); }
   };
 

@@ -30,6 +30,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../../utils/notifications';
 import { dataService, type OrderRecord, type RestaurantTableRecord } from '../../services/dataService';
 import { findProductByBarcode, type Product } from '../../utils/mockData';
 import { useAuth } from '../../context/AuthContext';
@@ -121,7 +122,7 @@ export function Tables() {
       setTables(tableRows);
       setOrders(orderRows);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo cargar el salón.');
+      toastError(error, 'No se pudo cargar el salón.');
     } finally {
       setLoading(false);
     }
@@ -283,7 +284,7 @@ export function Tables() {
       }
       setFormOpen(false);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo guardar la mesa.');
+      toastError(error, 'No se pudo guardar la mesa.');
     } finally {
       setSavingTable(false);
     }
@@ -303,7 +304,7 @@ export function Tables() {
           created.push(table);
           taken.add(candidate);
         } catch (error) {
-          toast.error(error instanceof Error ? error.message : `No se pudo crear la mesa ${candidate}.`);
+          toastError(error, `No se pudo crear la mesa ${candidate}.`);
           break;
         }
         candidate += 1;
@@ -325,7 +326,7 @@ export function Tables() {
       toast.success(updated.status === 'active' ? `Mesa ${updated.number} habilitada.` : `Mesa ${updated.number} fuera de servicio.`);
       setFormOpen(false);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo cambiar el estado de la mesa.');
+      toastError(error, 'No se pudo cambiar el estado de la mesa.');
     }
   };
 
@@ -336,7 +337,7 @@ export function Tables() {
       setFormOpen(false);
       toast.success(`Mesa ${table.number} eliminada.`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo eliminar la mesa.');
+      toastError(error, 'No se pudo eliminar la mesa.');
     }
   };
 
@@ -405,7 +406,7 @@ export function Tables() {
       setShowOrderModal(false);
       setCart([]);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo guardar el pedido');
+      toastError(error, 'No se pudo guardar el pedido');
     } finally {
       setSavingOrder(false);
     }
@@ -421,7 +422,7 @@ export function Tables() {
       setOrders(refreshed);
       toast.success(`Mesa ${view.table.number} cerrada`, { description: `Total cobrado: ${money(view.total)}` });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo cerrar la mesa');
+      toastError(error, 'No se pudo cerrar la mesa');
     } finally {
       setClosingId(null);
     }

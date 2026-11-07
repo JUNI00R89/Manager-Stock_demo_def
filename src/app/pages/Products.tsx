@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { AlertTriangle, Boxes, Edit3, History, Package, Plus, Search, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../utils/notifications';
 import { Layout } from '../components/Layout';
 import { ConfirmActionDialog } from '../components/ConfirmActionDialog';
 import { Card } from '../components/ui/card';
@@ -32,7 +33,7 @@ export function Products() {
 
   const load = async () => {
     try { setProducts(await dataService.getProducts()); }
-    catch (error) { toast.error(error instanceof Error ? error.message : 'No fue posible cargar los productos.'); }
+    catch (error) { toastError(error, 'No fue posible cargar los productos.'); }
     finally { setLoading(false); }
   };
   useEffect(() => { void load(); }, []);
@@ -54,7 +55,7 @@ export function Products() {
       setProducts(await dataService.getProducts());
       toast.success('Producto retirado del catálogo.');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No fue posible retirar el producto.');
+      toastError(error, 'No fue posible retirar el producto.');
       throw error;
     }
   };

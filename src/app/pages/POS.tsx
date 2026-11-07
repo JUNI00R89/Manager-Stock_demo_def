@@ -15,6 +15,7 @@ import { dataService, type CashSessionRecord, type PaymentPartRecord } from '../
 import { useAuth } from '../context/AuthContext';
 import { useBusiness } from '../context/BusinessContext';
 import { toast } from 'sonner';
+import { toastError } from '../utils/notifications';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
 } from '../components/ui/dialog';
@@ -72,7 +73,7 @@ export function POS() {
     void dataService.getProducts().then((list) => {
       if (!active) return;
       setProducts(list.filter(p => p.productType !== 'ingredient' && p.productType !== 'supplies'));
-    }).catch(error => toast.error(error instanceof Error ? error.message : 'No se pudo cargar el catálogo.'));
+    }).catch(error => toastError(error, 'No se pudo cargar el catálogo.'));
     return () => { active = false; };
   }, []);
 
@@ -82,7 +83,7 @@ export function POS() {
       if (!active) return;
       setCashSession(session);
       setShowOpenTurn(!session || session.status !== 'open');
-    }).catch(error => toast.error(error instanceof Error ? error.message : 'No se pudo consultar el turno de caja.'));
+    }).catch(error => toastError(error, 'No se pudo consultar el turno de caja.'));
     return () => { active = false; };
   }, []);
 
@@ -94,7 +95,7 @@ export function POS() {
       const session = await dataService.openCashSession(amount, user?.name || 'Usuario local');
       setCashSession(session); setShowOpenTurn(false); setPosMode('open');
       toast.success('Turno de caja abierto.', { description: `Base inicial: ${money(amount)}` });
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo abrir el turno.'); }
+    } catch (error) { toastError(error, 'No se pudo abrir el turno.'); }
     finally { setSavingSession(false); }
   };
 
@@ -108,7 +109,7 @@ export function POS() {
       const result = await dataService.closeCashSession(cashSession.id, amount);
       toast.success('Turno de caja cerrado.', { description: `Esperado: ${money(result.expectedAmount || 0)} · Diferencia: ${money(result.difference || 0)}` });
       setCashSession(null); setShowCloseTurn(false); setShowOpenTurn(true); setOpeningAmount(''); setClosingAmount(''); setPosMode('closed'); clearCart();
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo cerrar caja.'); }
+    } catch (error) { toastError(error, 'No se pudo cerrar caja.'); }
     finally { setSavingSession(false); }
   };
 
@@ -208,7 +209,7 @@ export function POS() {
       setShowReceipt(true);
       toast.success('Venta guardada correctamente', { description: `${sale.id} · ${money(sale.totalPrice)}` });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No fue posible guardar la venta.');
+      toastError(error, 'No fue posible guardar la venta.');
     } finally {
       setProcessingPayment(false);
     }

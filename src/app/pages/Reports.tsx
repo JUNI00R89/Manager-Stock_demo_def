@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Activity, BarChart3, CalendarDays, CircleDollarSign, Download, Package, RefreshCw, TrendingUp } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { toast } from 'sonner';
+import { toastError } from '../utils/notifications';
 import { Layout } from '../components/Layout';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -31,7 +32,7 @@ export function Reports() {
   const load = async () => {
     setLoading(true);
     try { setSales(await dataService.getSales()); }
-    catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudieron cargar los reportes.'); }
+    catch (error) { toastError(error, 'No se pudieron cargar los reportes.'); }
     finally { setLoading(false); }
   };
   useEffect(() => { void load(); }, []);

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ArrowUpFromLine, CirclePlus, PackageMinus, Save, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../../utils/notifications';
 import { Layout } from '../../components/Layout';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -78,7 +79,7 @@ export function WarehouseExits({ mode }: { mode: 'exit' | 'waste' }) {
       setLines([newLine()]); setReason(''); setNotes('');
       await Promise.all([reload(), loadLots(), loadRecent()]);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : `No se pudo registrar la ${isWaste ? 'merma' : 'salida'}.`);
+      toastError(error, `No se pudo registrar la ${isWaste ? 'merma' : 'salida'}.`);
     } finally { setSaving(false); }
   };
 

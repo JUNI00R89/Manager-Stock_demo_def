@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
+import { toastError } from '../../utils/notifications';
 import { Layout } from '../../components/Layout';
 import { StaffSwitcher } from '../../components/restaurant/StaffSwitcher';
 import { ConfirmActionDialog } from '../../components/ConfirmActionDialog';
@@ -139,7 +140,7 @@ export function RestaurantSettingsPage() {
       setTableDialogOpen(false);
       toast.success(editingTable ? 'Mesa actualizada.' : 'Mesa creada.');
     } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : 'No se pudo guardar la mesa.');
+      toastError(reason, 'No se pudo guardar la mesa.');
     } finally {
       setSavingTable(false);
     }
@@ -150,7 +151,7 @@ export function RestaurantSettingsPage() {
       await dataService.updateTable(table.id, { status: table.status === 'active' ? 'inactive' : 'active' });
       await refreshTables();
     } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : 'No se pudo cambiar la mesa.');
+      toastError(reason, 'No se pudo cambiar la mesa.');
     }
   };
 
@@ -162,7 +163,7 @@ export function RestaurantSettingsPage() {
       await refreshTables();
       toast.success('Mesa eliminada.');
     } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : 'No se pudo eliminar la mesa.');
+      toastError(reason, 'No se pudo eliminar la mesa.');
       throw reason;
     }
   };

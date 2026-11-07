@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { ArrowLeft, Boxes, Check, PackageCheck, Plus, Save, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../utils/notifications';
 import { Layout } from '../components/Layout';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -73,7 +74,7 @@ export function NewProduct() {
       if (!active) return;
       if (!product) { toast.error('El producto no existe.'); navigate('/products', { replace: true }); return; }
       setFormData({ name: product.name, sku: product.sku, category: product.category, price: String(product.price), cost: String(product.cost || 0), stock: String(product.stock), minStock: String(product.minStock), description: product.description || '', productType: isFoodBusiness ? 'sale_item' : (product.productType || 'sale_item'), unit: product.unit || 'unidad', supplierId: product.supplierId || '', barcode: product.barcode || '', trackLots: Boolean(product.trackLots), defaultLocationId: product.defaultLocationId || '' });
-    }).catch(error => toast.error(error instanceof Error ? error.message : 'No se pudo cargar el producto.')).finally(() => setLoading(false));
+    }).catch(error => toastError(error, 'No se pudo cargar el producto.')).finally(() => setLoading(false));
     return () => { active = false; };
   }, [id, navigate, isFoodBusiness]);
 
@@ -98,7 +99,7 @@ export function NewProduct() {
       setCategoryName(''); setCategoryDescription(''); setShowCategoryForm(false);
       toast.success('Categoría creada y seleccionada.');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo crear la categoría.');
+      toastError(error, 'No se pudo crear la categoría.');
     } finally { setSavingCategory(false); }
   };
 
@@ -117,7 +118,7 @@ export function NewProduct() {
       else await dataService.createProduct(payload);
       toast.success(isEditing ? 'Producto actualizado correctamente.' : 'Producto guardado en el inventario.');
       navigate('/products');
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo guardar el producto.'); }
+    } catch (error) { toastError(error, 'No se pudo guardar el producto.'); }
     finally { setSaving(false); }
   };
 

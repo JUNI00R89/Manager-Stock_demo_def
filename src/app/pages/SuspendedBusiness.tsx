@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { AlertTriangle, Building2, CalendarClock, LogOut, RefreshCw, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../utils/notifications';
 import { useAuth } from '../context/AuthContext';
 import { getSuspensionStatus, type SuspensionStatusRecord } from '../services/dataService';
 import { Button } from '../components/ui/button';
@@ -20,7 +21,7 @@ export function SuspendedBusiness() {
       setStatus(next);
       if (next.active) navigate('/dashboard', { replace: true });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo consultar el estado de la cuenta.');
+      toastError(error, 'No se pudo consultar el estado de la cuenta.');
     } finally { setLoading(false); }
   }, [navigate]);
   useEffect(() => {

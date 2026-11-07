@@ -5,6 +5,7 @@ import {
   ClipboardList, FileBarChart, PackageMinus, RefreshCw, Scale, ShoppingCart, Warehouse,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../../utils/notifications';
 import { Layout } from '../../components/Layout';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -46,7 +47,7 @@ export function WarehouseOverview() {
       setOverview(nextOverview);
       setAlerts(nextAlerts.alerts);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo cargar el resumen de bodega.');
+      toastError(error, 'No se pudo cargar el resumen de bodega.');
     } finally { setLoading(false); }
   };
   useEffect(() => { void load(); }, []);

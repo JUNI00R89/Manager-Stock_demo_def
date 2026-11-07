@@ -10,6 +10,7 @@ import {
 import type { Habitacion, ReservaHotel } from '../../utils/mockData';
 import { createHotelReservation, getHotelReservations, getHotelRooms, updateHotelReservationStatus, type HotelReservationRecord, type HotelRoomRecord } from '../../services/dataService';
 import { toast } from 'sonner';
+import { toastError } from '../../utils/notifications';
 
 const ESTADO_COLORS: Record<ReservaHotel['estado'], string> = {
   confirmada: 'bg-blue-400 dark:bg-blue-600',
@@ -65,7 +66,7 @@ export function Availability() {
         checkIn: reservation.checkIn, checkOut: reservation.checkOut, estado: reservation.status === 'confirmed' ? 'confirmada' : reservation.status === 'checkin' ? 'checkin' : reservation.status === 'checkout' ? 'checkout' : 'cancelada',
         anticipo: reservation.advance, totalCargos: reservation.totalCharges, noches: reservation.nights,
       })));
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudieron cargar las reservas del hotel.'); }
+    } catch (error) { toastError(error, 'No se pudieron cargar las reservas del hotel.'); }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { void load(); }, [load]);
@@ -99,12 +100,12 @@ export function Availability() {
 
   const handleCheckIn = async (reservaId: string) => {
     try { await updateHotelReservationStatus(reservaId, 'checkin'); toast.success('Check-in realizado.'); await load(); setSelectedReserva(null); }
-    catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo registrar el check-in.'); }
+    catch (error) { toastError(error, 'No se pudo registrar el check-in.'); }
   };
 
   const handleCheckOut = async (reservaId: string) => {
     try { await updateHotelReservationStatus(reservaId, 'checkout'); toast.success('Check-out completado.'); await load(); setSelectedReserva(null); }
-    catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo registrar el check-out.'); }
+    catch (error) { toastError(error, 'No se pudo registrar el check-out.'); }
   };
 
   const handleNewReservaSubmit = async () => {
@@ -121,7 +122,7 @@ export function Availability() {
       setShowNewReserva(false);
       setNewReserva({ huesped: '', habitacionId: '', checkIn: '', checkOut: '', anticipo: '' });
       await load();
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo crear la reserva.'); }
+    } catch (error) { toastError(error, 'No se pudo crear la reserva.'); }
     finally { setSavingReserva(false); }
   };
 

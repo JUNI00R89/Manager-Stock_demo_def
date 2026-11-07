@@ -12,6 +12,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card } from '../components/ui/card';
 import { toast } from 'sonner';
+import { toastError } from '../utils/notifications';
 
 // ─── Business type cards ─────────────────────────────────────────────────────
 
@@ -240,7 +241,7 @@ export function BusinessSetup() {
       toast.success('Configuración del negocio guardada.');
       navigate('/dashboard', { replace: true });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo guardar la configuración en la base de datos.');
+      toastError(error, 'No se pudo guardar la configuración en la base de datos.');
     } finally {
       setSavingConfig(false);
     }

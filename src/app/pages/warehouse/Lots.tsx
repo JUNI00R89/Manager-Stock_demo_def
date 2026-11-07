@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Boxes, CalendarClock, Download, PackageMinus, RefreshCw, Search } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../../utils/notifications';
 import { Layout } from '../../components/Layout';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -30,7 +31,7 @@ export function WarehouseLots() {
   const load = async () => {
     setLoading(true);
     try { setLots(await dataService.getInventoryLots({ includeEmpty: false })); }
-    catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudieron cargar los lotes.'); }
+    catch (error) { toastError(error, 'No se pudieron cargar los lotes.'); }
     finally { setLoading(false); }
   };
   useEffect(() => { void load(); }, []);

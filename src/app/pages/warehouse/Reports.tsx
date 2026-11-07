@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, ArrowDownUp, Boxes, CalendarClock, Download, FileBarChart, PackageMinus, RefreshCw, Timer } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../../utils/notifications';
 import { Layout } from '../../components/Layout';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -17,7 +18,7 @@ export function WarehouseReports() {
   const load = async () => {
     setLoading(true);
     try { setReport(await dataService.getInventoryReports(Number(periodDays) || 30, Number(noMovementDays) || 60)); }
-    catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudieron cargar los reportes de inventario.'); }
+    catch (error) { toastError(error, 'No se pudieron cargar los reportes de inventario.'); }
     finally { setLoading(false); }
   };
   useEffect(() => { void load(); }, []);

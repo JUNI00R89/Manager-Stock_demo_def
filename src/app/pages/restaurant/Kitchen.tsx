@@ -13,6 +13,7 @@ import {
   Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../../utils/notifications';
 import { Layout } from '../../components/Layout';
 import { StaffSwitcher } from '../../components/restaurant/StaffSwitcher';
 import { PedidoStatusBadge } from '../../components/restaurant/PedidoStatusBadge';
@@ -116,7 +117,7 @@ export function Kitchen() {
       toast.success(`Pedido #${order.numero}: Tomado por ${active.name}`);
     } catch (reason) {
       if (reason instanceof PedidoConflictoError) toast.error(reason.message);
-      else toast.error(reason instanceof Error ? reason.message : 'No se pudo tomar el pedido.');
+      else toastError(reason, 'No se pudo tomar el pedido.');
     } finally {
       setBusyOrderId(null);
     }
@@ -132,7 +133,7 @@ export function Kitchen() {
       await repository.finalizarPedido(order.id, scope, toEmployee(active));
       toast.success(`Pedido #${order.numero} finalizado por ${active.name}.`);
     } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : 'No se pudo finalizar el pedido.');
+      toastError(reason, 'No se pudo finalizar el pedido.');
     } finally {
       setBusyOrderId(null);
     }

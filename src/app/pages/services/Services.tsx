@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { CalendarPlus, Clock, Scissors, UserRound, Plus, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../../utils/notifications';
 import { createServiceAppointment, createServiceCatalogItem, createServiceProfessional, getServiceProfessionals, getServicesCatalog, type ServiceCatalogRecord, type ServiceProfessionalRecord } from '../../services/dataService';
 
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
@@ -25,7 +26,7 @@ export function Services() {
       const [serviceRows, professionalRows] = await Promise.all([getServicesCatalog(), getServiceProfessionals()]);
       setServices(serviceRows); setProfessionals(professionalRows);
       setAppointment(current => ({ ...current, serviceId: current.serviceId || serviceRows[0]?.id || '', professionalId: current.professionalId || professionalRows[0]?.id || '' }));
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo cargar el módulo de servicios.'); }
+    } catch (error) { toastError(error, 'No se pudo cargar el módulo de servicios.'); }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { void load(); }, [load]);
@@ -33,19 +34,19 @@ export function Services() {
   const submitService = async (event: FormEvent) => {
     event.preventDefault(); setSaving(true);
     try { await createServiceCatalogItem({ name: serviceForm.name.trim(), durationMinutes: Number(serviceForm.durationMinutes), price: Number(serviceForm.price), category: serviceForm.category.trim() }); setServiceForm({ name: '', durationMinutes: '30', price: '0', category: 'Servicios principales' }); toast.success('Servicio creado.'); await load(); }
-    catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo crear el servicio.'); }
+    catch (error) { toastError(error, 'No se pudo crear el servicio.'); }
     finally { setSaving(false); }
   };
   const submitProfessional = async (event: FormEvent) => {
     event.preventDefault(); setSaving(true);
     try { await createServiceProfessional({ name: professionalForm.name.trim(), specialty: professionalForm.specialty.trim() }); setProfessionalForm({ name: '', specialty: '' }); toast.success('Profesional creado.'); await load(); }
-    catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo crear el profesional.'); }
+    catch (error) { toastError(error, 'No se pudo crear el profesional.'); }
     finally { setSaving(false); }
   };
   const submitAppointment = async (event: FormEvent) => {
     event.preventDefault(); setSaving(true);
     try { await createServiceAppointment({ ...appointment, clientName: appointment.clientName.trim(), clientPhone: appointment.clientPhone.trim() }); toast.success('Cita agendada correctamente.'); setAppointment(current => ({ ...current, clientName: '', clientPhone: '', notes: '' })); }
-    catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo agendar la cita. Revisa disponibilidad y permisos.'); }
+    catch (error) { toastError(error, 'No se pudo agendar la cita. Revisa disponibilidad y permisos.'); }
     finally { setSaving(false); }
   };
 

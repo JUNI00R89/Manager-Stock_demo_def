@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Building2, Mail, MapPin, Phone, Plus, Search, Trash2, Truck } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../utils/notifications';
 import { Layout } from '../components/Layout';
 import { ConfirmActionDialog } from '../components/ConfirmActionDialog';
 import { Card } from '../components/ui/card';
@@ -13,11 +14,11 @@ import type { Supplier } from '../utils/mockData';
 
 export function Suppliers() {
   const navigate = useNavigate(); const [suppliers, setSuppliers] = useState<Supplier[]>([]); const [search, setSearch] = useState(''); const [loading, setLoading] = useState(true); const [supplierToRemove, setSupplierToRemove] = useState<Supplier | null>(null);
-  const load = async () => { try { setSuppliers(await dataService.getSuppliers()); } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudieron cargar los proveedores.'); } finally { setLoading(false); } };
+  const load = async () => { try { setSuppliers(await dataService.getSuppliers()); } catch (error) { toastError(error, 'No se pudieron cargar los proveedores.'); } finally { setLoading(false); } };
   useEffect(() => { void load(); }, []);
   const filtered = useMemo(() => suppliers.filter(s => `${s.name} ${s.company} ${s.email} ${s.phone}`.toLowerCase().includes(search.toLowerCase())), [suppliers, search]);
   const remove = (supplier: Supplier) => setSupplierToRemove(supplier);
-  const confirmRemove = async () => { if (!supplierToRemove) return; try { await dataService.deleteSupplier(supplierToRemove.id); setSuppliers(await dataService.getSuppliers()); toast.success('Proveedor retirado.'); } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo retirar el proveedor.'); throw error; } };
+  const confirmRemove = async () => { if (!supplierToRemove) return; try { await dataService.deleteSupplier(supplierToRemove.id); setSuppliers(await dataService.getSuppliers()); toast.success('Proveedor retirado.'); } catch (error) { toastError(error, 'No se pudo retirar el proveedor.'); throw error; } };
   return <Layout><div className="mx-auto max-w-7xl space-y-6">
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-semibold uppercase tracking-[.16em] text-orange-600">Abastecimiento</p><h1 className="mt-1 text-3xl font-bold tracking-tight">Proveedores</h1><p className="mt-1 text-muted-foreground">Centraliza contactos, datos de entrega y productos suministrados.</p></div><Button onClick={() => navigate('/suppliers/new')} className="h-11 rounded-xl bg-orange-600 text-white hover:bg-orange-700"><Plus className="mr-2 h-4 w-4"/>Nuevo proveedor</Button></div>
     <div className="grid gap-4 sm:grid-cols-2"><Card className="rounded-2xl border-border/70 p-5 shadow-sm"><div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Proveedores activos</span><Building2 className="h-5 w-5 text-orange-600"/></div><p className="mt-3 text-3xl font-bold">{suppliers.length}</p><p className="mt-1 text-xs text-muted-foreground">Contactos registrados para abastecimiento</p></Card><Card className="rounded-2xl border-border/70 p-5 shadow-sm"><div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Con productos asociados</span><Truck className="h-5 w-5 text-emerald-600"/></div><p className="mt-3 text-3xl font-bold">{suppliers.filter(s => s.products.length).length}</p><p className="mt-1 text-xs text-muted-foreground">Proveedores relacionados con el catálogo</p></Card></div>

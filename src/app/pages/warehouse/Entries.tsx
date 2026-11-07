@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowDownToLine, ArrowUpFromLine, CirclePlus, PackageCheck, Save, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../../utils/notifications';
 import { Layout } from '../../components/Layout';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -97,7 +98,7 @@ export function WarehouseEntries() {
       setReference(''); setInvoiceRef(''); setNotes(''); setLines([newLine()]); setSupplierId('');
       await Promise.all([reload(), loadRecent()]);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo registrar la entrada.');
+      toastError(error, 'No se pudo registrar la entrada.');
     } finally { setSaving(false); }
   };
 

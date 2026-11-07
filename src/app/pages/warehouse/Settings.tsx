@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Save, Settings as SettingsIcon } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../../utils/notifications';
 import { Layout } from '../../components/Layout';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -37,7 +38,7 @@ export function WarehouseSettings() {
       const updated = await dataService.updateInventorySettings({ allowNegativeStock, expiryAlertDays, lowStockAlerts, defaultLocationId: defaultLocationId || null });
       toast.success('Configuración de bodega guardada.');
       await Promise.all([reload(), reload()]);
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo guardar la configuración.'); }
+    } catch (error) { toastError(error, 'No se pudo guardar la configuración.'); }
     finally { setSaving(false); }
   };
 

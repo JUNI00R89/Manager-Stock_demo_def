@@ -7,6 +7,7 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Bed, Users, Calendar, DollarSign, CheckCircle, Clock, Wrench, Plus, RefreshCw, X, Save } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../../utils/notifications';
 import { createHotelRoom, getHotelReservations, getHotelRooms, updateHotelReservationStatus, type HotelReservationRecord, type HotelRoomRecord } from '../../services/dataService';
 
 const ROOM_TYPES: Record<string, string> = { single: 'Individual', simple: 'Individual', double: 'Doble', suite: 'Suite', deluxe: 'Deluxe', familiar: 'Familiar' };
@@ -38,7 +39,7 @@ export function Rooms() {
       const [roomRows, reservationRows] = await Promise.all([getHotelRooms(), getHotelReservations()]);
       setRooms(roomRows); setReservations(reservationRows);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudieron cargar las habitaciones.');
+      toastError(error, 'No se pudieron cargar las habitaciones.');
     } finally { setLoading(false); setRefreshing(false); }
   }, []);
   useEffect(() => { void load(); }, [load]);
@@ -65,7 +66,7 @@ export function Rooms() {
       toast.success('Habitación creada.');
       setShowForm(false); setForm({ roomNumber: '', roomType: 'double', floor: '1', capacity: '2', pricePerNight: '120000' });
       await load(true);
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo crear la habitación.'); }
+    } catch (error) { toastError(error, 'No se pudo crear la habitación.'); }
     finally { setSaving(false); }
   };
 
@@ -74,7 +75,7 @@ export function Rooms() {
       await updateHotelReservationStatus(reservation.id, status);
       toast.success(status === 'checkin' ? 'Check-in registrado.' : 'Check-out registrado.');
       await load(true);
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo actualizar la reserva.'); }
+    } catch (error) { toastError(error, 'No se pudo actualizar la reserva.'); }
   };
 
   return <Layout>

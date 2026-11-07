@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { ArrowLeft, CalendarDays, CircleDollarSign, Package, Printer, RotateCcw, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../utils/notifications';
 import { Layout } from '../components/Layout';
 import { ConfirmActionDialog } from '../components/ConfirmActionDialog';
 import { Card } from '../components/ui/card';
@@ -19,13 +20,13 @@ export function SaleDetail() {
   const { user } = useAuth();
   const canCancelSale = user?.customRoleId ? Boolean(user.permissions?.includes('sales.cancel')) : user?.role === 'owner' || user?.role === 'business_admin';
   const [sale, setSale] = useState<SaleRecord | undefined>(); const [loading, setLoading] = useState(true); const [cancelling, setCancelling] = useState(false); const [showCancelConfirm, setShowCancelConfirm] = useState(false);
-  const load = async () => { try { setSale(await dataService.getSale(id || '')); } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo cargar la venta.'); } finally { setLoading(false); } };
+  const load = async () => { try { setSale(await dataService.getSale(id || '')); } catch (error) { toastError(error, 'No se pudo cargar la venta.'); } finally { setLoading(false); } };
   useEffect(() => { void load(); }, [id]);
   const cancel = async () => {
     if (!sale || sale.status === 'cancelled') return;
     setCancelling(true);
     try { setSale(await dataService.cancelSale(sale.id)); toast.success('Venta anulada y existencias repuestas.'); }
-    catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo anular la venta.'); throw error; }
+    catch (error) { toastError(error, 'No se pudo anular la venta.'); throw error; }
     finally { setCancelling(false); }
   };
   if (loading) return <Layout><Card className="mx-auto max-w-5xl rounded-2xl p-12 text-center text-muted-foreground">Cargando detalle de venta…</Card></Layout>;

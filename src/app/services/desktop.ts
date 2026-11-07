@@ -17,6 +17,7 @@ import type {
   CustomRoleRecord,
   HotelReservationRecord,
   HotelRoomRecord,
+  PlatformAuditRecord,
   PlatformSubscriptionRecord,
   PlatformUserRecord,
   ProductCategoryRecord,
@@ -82,6 +83,12 @@ export interface DesktopDemoAccount {
   password: string;
 }
 
+interface DesktopBusinessMeta {
+  reason?: string;
+  description?: string;
+  suspendedAt?: string;
+}
+
 export const DESKTOP_DEMO_ACCOUNTS: DesktopDemoAccount[] = [
   { label: 'Hotel Senderos', detail: 'Hotel', email: 'owner.hotel@managerstock.test', password: 'HotelDemo2026!' },
   { label: 'Sabores del Parque', detail: 'Comidas', email: 'owner.comidas@managerstock.test', password: 'ComidasDemo2026!' },
@@ -103,8 +110,12 @@ const ROLES_PREFIX = 'manager_stock_desktop_roles_v1';
 const CATEGORIES_PREFIX = 'manager_stock_desktop_categories_v1';
 const USER_STATUS_PREFIX = 'manager_stock_desktop_user_status_v1';
 const PLATFORM_STATUS_PREFIX = 'manager_stock_desktop_business_status_v1';
+const PLATFORM_BUSINESS_META_PREFIX = 'manager_stock_desktop_business_meta_v1';
+const PLATFORM_AUDIT_KEY = 'manager_stock_desktop_platform_audit_v1';
 const SUBSCRIPTION_PREFIX = 'manager_stock_desktop_subscription_v1';
 const SUPPORT_KEY = 'manager_stock_desktop_support_v1';
+const SUPPORT_CASES_KEY = 'manager_stock_desktop_support_cases_v1';
+const SUPPORT_MESSAGES_KEY = 'manager_stock_desktop_support_messages_v1';
 
 const PLANS: SubscriptionPlanRecord[] = [
   { id: 'free', name: 'Gratis', priceCOP: 0, maxUsers: 1, maxProducts: 100 },
@@ -198,6 +209,99 @@ function readRegisteredUsers(): DesktopUser[] {
 
 function writeRegisteredUsers(users: DesktopUser[]) {
   writeJson(REGISTERED_USERS_KEY, users);
+}
+
+function readPlatformAuditEntries(): PlatformAuditRecord[] {
+  const entries = readJson<PlatformAuditRecord[]>(PLATFORM_AUDIT_KEY, []);
+  return Array.isArray(entries) ? entries : [];
+}
+
+function appendPlatformAudit(action: string, entityId: string, details: Record<string, unknown> = {}) {
+  const entries = readPlatformAuditEntries();
+  const actor = readCurrentDesktopUser();
+  const nextId = Math.max(Date.now(), ...entries.map(entry => Number(entry.id) || 0), 0) + 1;
+  const entry: PlatformAuditRecord = {
+    id: nextId,
+    actorId: actor?.id || 'local',
+    actorName: actor?.name || 'Administrador local',
+    action,
+    entityId,
+    details,
+    createdAt: new Date().toISOString(),
+  };
+  writeJson(PLATFORM_AUDIT_KEY, [entry, ...entries].slice(0, 500));
+}
+
+function readSupportCases(): SupportCaseRecord[] {
+  const cases = readJson<SupportCaseRecord[]>(SUPPORT_CASES_KEY, []);
+  return Array.isArray(cases) ? cases : [];
+}
+
+function writeSupportCases(cases: SupportCaseRecord[]) {
+  writeJson(SUPPORT_CASES_KEY, cases);
+}
+
+function readSupportMessages(): Record<string, SupportMessageRecord[]> {
+  const messages = readJson<Record<string, SupportMessageRecord[]>>(SUPPORT_MESSAGES_KEY, {});
+  return messages && typeof messages === 'object' && !Array.isArray(messages) ? messages : {};
+}
+
+function writeSupportMessages(messages: Record<string, SupportMessageRecord[]>) {
+  writeJson(SUPPORT_MESSAGES_KEY, messages);
+}
+
+function latestSupportCase(businessId: string): SupportCaseRecord | null {
+  return readSupportCases()
+    .filter(item => item.businessId === businessId)
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0] || null;
+}
+
+function openSupportCase(businessId: string, businessName: string, reason: string, description: string): SupportCaseRecord {
+  const cases = readSupportCases();
+  const now = new Date().toISOString();
+  const existing = cases.find(item => item.businessId === businessId && !['resolved', 'closed'].includes(item.status));
+  if (existing) {
+    const updated = { ...existing, businessName, reason: reason || existing.reason, description: description || existing.description, updatedAt: now, unreadCount: existing.unreadCount || 0 };
+    writeSupportCases(cases.map(item => item.id === existing.id ? updated : item));
+    return updated;
+  }
+  const created: SupportCaseRecord = {
+    id: `SUP-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+    businessId,
+    businessName,
+    reason: reason || 'Suspensión administrativa',
+    description: description || '',
+    status: 'open',
+    createdAt: now,
+    updatedAt: now,
+    unreadCount: 0,
+  };
+  writeSupportCases([...cases, created]);
+  const messages = readSupportMessages();
+  messages[created.id] = [];
+  writeSupportMessages(messages);
+  return created;
+}
+
+function resolveOpenSupportCases(businessId: string, status: SupportCaseRecord['status']) {
+  const cases = readSupportCases();
+  const now = new Date().toISOString();
+  writeSupportCases(cases.map(item => item.businessId === businessId && !['resolved', 'closed'].includes(item.status) ? { ...item, status, updatedAt: now } : item));
+}
+
+function setLocalBusinessActive(businessId: string, active: boolean) {
+  const statuses = readJson<Record<string, boolean>>(PLATFORM_STATUS_PREFIX, {});
+  writeJson(PLATFORM_STATUS_PREFIX, { ...statuses, [businessId]: active });
+  if (active) {
+    const meta = readJson<Record<string, DesktopBusinessMeta>>(PLATFORM_BUSINESS_META_PREFIX, {});
+    delete meta[businessId];
+    writeJson(PLATFORM_BUSINESS_META_PREFIX, meta);
+  }
+}
+
+function desktopBusinessName(businessId: string, fallback = 'Mi negocio') {
+  const config = readJson<{ name?: string }>(configKey(businessId), null);
+  return config?.name || seedCache?.businesses?.[businessId]?.name || fallback;
 }
 
 function toAuthUser(user: DesktopUser): AuthUser {
@@ -752,14 +856,11 @@ export const desktop = {
       if (!plan) throw new Error('Plan no válido.');
       if (!seedCache) await ensureSeedLoaded();
       const current = subscriptionFor(businessId);
-      const updated: BusinessSubscriptionRecord = {
-        ...current,
-        plan,
-        status: 'active',
-        pendingPlan: null,
-        startedAt: current.startedAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
+      const now = new Date().toISOString();
+      if (current.plan.id === plan.id && current.status === 'active') return current;
+      const updated: BusinessSubscriptionRecord = plan.id === 'free'
+        ? { ...current, plan, status: 'active', pendingPlan: null, startedAt: current.startedAt || now, updatedAt: now, expiresAt: null }
+        : { ...current, status: 'pending_payment', pendingPlan: plan, updatedAt: now };
       writeJson(subscriptionKey(businessId), updated);
       return updated;
     },
@@ -795,7 +896,14 @@ export const desktop = {
         });
       });
       const statuses = readJson<Record<string, boolean>>(PLATFORM_STATUS_PREFIX, {});
-      return [...map.values()].map(business => ({ ...business, active: statuses[business.id] ?? business.active }));
+      const meta = readJson<Record<string, DesktopBusinessMeta>>(PLATFORM_BUSINESS_META_PREFIX, {});
+      return [...map.values()].map(business => ({
+        ...business,
+        active: statuses[business.id] ?? business.active,
+        suspensionReason: meta[business.id]?.reason || '',
+        suspensionDescription: meta[business.id]?.description || '',
+        suspendedAt: meta[business.id]?.suspendedAt || '',
+      }));
     },
     async stats() {
       const businesses = await this.businesses();
@@ -827,7 +935,9 @@ export const desktop = {
         .map(publicBusinessUser)
         .filter(user => !term || [user.name, user.email, user.businessName || ''].some(value => value.toLowerCase().includes(term)));
     },
-    async audit(): Promise<any[]> { return []; },
+    async audit(limit = 100): Promise<PlatformAuditRecord[]> {
+      return readPlatformAuditEntries().slice(0, Math.max(1, limit));
+    },
     async subscriptions(): Promise<PlatformSubscriptionRecord[]> {
       const businesses = await this.businesses();
       return businesses.map(business => ({
@@ -835,13 +945,58 @@ export const desktop = {
         businessName: business.name,
       }));
     },
-    async updateSubscription(businessId: string): Promise<BusinessSubscriptionRecord> {
-      return subscriptionFor(businessId);
+    async updateSubscription(businessId: string, action: 'confirm_payment' | 'cancel_request', paymentReference = ''): Promise<BusinessSubscriptionRecord> {
+      const current = subscriptionFor(businessId);
+      if (current.status !== 'pending_payment' || !current.pendingPlan) {
+        throw new Error('No existe una solicitud de pago pendiente para este negocio.');
+      }
+      const now = new Date().toISOString();
+      if (action === 'confirm_payment') {
+        const reference = paymentReference.trim();
+        if (reference.length < 4) throw new Error('Registra una referencia de pago verificada antes de activar el plan.');
+        const plan = current.pendingPlan;
+        const updated: BusinessSubscriptionRecord = {
+          ...current,
+          plan,
+          status: 'active',
+          pendingPlan: null,
+          startedAt: now,
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          updatedAt: now,
+        };
+        writeJson(subscriptionKey(businessId), updated);
+        appendPlatformAudit('subscription_payment_manually_verified', businessId, { planId: plan.id, paymentReference: reference, verificationMode: 'manual_by_superadmin' });
+        return updated;
+      }
+      const cancelledPlanId = current.pendingPlan.id;
+      const updated: BusinessSubscriptionRecord = {
+        ...current,
+        status: 'active',
+        pendingPlan: null,
+        updatedAt: now,
+      };
+      writeJson(subscriptionKey(businessId), updated);
+      appendPlatformAudit('subscription_request_cancelled', businessId, { cancelledPlanId });
+      return updated;
     },
-    async setBusinessStatus(id: string, active: boolean) {
-      const statuses = readJson<Record<string, boolean>>(PLATFORM_STATUS_PREFIX, {});
-      writeJson(PLATFORM_STATUS_PREFIX, { ...statuses, [id]: active });
-      return { id, active, caseId: null };
+    async setBusinessStatus(id: string, active: boolean, reason = '', description = '') {
+      const seed = await ensureSeedLoaded().catch(() => null);
+      const businessName = seed?.businesses?.[id]?.name || desktopBusinessName(id, id);
+      setLocalBusinessActive(id, active);
+      if (active) {
+        resolveOpenSupportCases(id, 'resolved');
+      } else {
+        const meta = readJson<Record<string, DesktopBusinessMeta>>(PLATFORM_BUSINESS_META_PREFIX, {});
+        meta[id] = {
+          reason: reason.trim(),
+          description: description.trim(),
+          suspendedAt: new Date().toISOString(),
+        };
+        writeJson(PLATFORM_BUSINESS_META_PREFIX, meta);
+        openSupportCase(id, businessName, reason.trim(), description.trim());
+      }
+      appendPlatformAudit(active ? 'activate' : 'suspend', `business:${id}`, { active, reason: active ? '' : reason.trim(), description: active ? '' : description.trim() });
+      return { id, active, caseId: active ? null : latestSupportCase(id)?.id || null };
     },
     async createUser(input: { name: string; email: string; password: string; role: AuthUser['role']; businessId?: string | null }): Promise<PlatformUserRecord> {
       const email = normalizedEmail(input.email);
@@ -859,11 +1014,15 @@ export const desktop = {
         createdAt: new Date().toISOString(),
       };
       writeRegisteredUsers([...readRegisteredUsers(), user]);
-      return publicBusinessUser(user);
+      const created = publicBusinessUser(user);
+      appendPlatformAudit('create_user', user.id, { role: user.role, businessId: user.businessId, email: user.email, name: user.name });
+      return created;
     },
     async setUserStatus(id: string, active: boolean) {
       const statuses = readJson<Record<string, boolean>>(USER_STATUS_PREFIX, {});
       writeJson(USER_STATUS_PREFIX, { ...statuses, [id]: active });
+      const target = allUsersWithSeed().find(user => user.id === id);
+      appendPlatformAudit(active ? 'activate_user' : 'suspend_user', id, { active, name: target?.name || '', email: target?.email || '' });
       return { id, active };
     },
   },
@@ -872,23 +1031,37 @@ export const desktop = {
     async suspension(): Promise<SuspensionStatusRecord> {
       const user = readCurrentDesktopUser();
       const businessId = user?.businessId || '';
+      const seed = await ensureSeedLoaded().catch(() => null);
+      const businessName = seed?.businesses?.[businessId]?.name || desktopBusinessName(businessId, user?.name || 'Mi negocio');
+      const statuses = readJson<Record<string, boolean>>(PLATFORM_STATUS_PREFIX, {});
+      const meta = readJson<Record<string, DesktopBusinessMeta>>(PLATFORM_BUSINESS_META_PREFIX, {});
+      const caseItem = latestSupportCase(businessId);
+      const active = statuses[businessId] ?? true;
       return {
         businessId,
-        businessName: user?.name || 'Mi negocio',
-        active: true,
-        reason: '',
-        description: '',
-        suspendedAt: null,
-        case: null,
-        messages: [],
+        businessName,
+        active,
+        reason: active ? '' : meta[businessId]?.reason || caseItem?.reason || '',
+        description: active ? '' : meta[businessId]?.description || caseItem?.description || '',
+        suspendedAt: active ? null : meta[businessId]?.suspendedAt || null,
+        case: caseItem,
+        messages: caseItem ? readSupportMessages()[caseItem.id] || [] : [],
       };
     },
-    async ownerCase(): Promise<SupportCaseRecord | null> { return null; },
+    async ownerCase(): Promise<SupportCaseRecord | null> {
+      const user = readCurrentDesktopUser();
+      return user?.businessId ? latestSupportCase(user.businessId) : null;
+    },
     async ownerMessages(): Promise<SupportMessageRecord[]> {
+      const user = readCurrentDesktopUser();
+      const caseItem = user?.businessId ? latestSupportCase(user.businessId) : null;
+      if (caseItem) return readSupportMessages()[caseItem.id] || [];
       return readJson<SupportMessageRecord[]>(SUPPORT_KEY, []);
     },
     async sendOwnerMessage(message: string): Promise<SupportMessageRecord> {
       const user = readCurrentDesktopUser();
+      const caseItem = user?.businessId ? latestSupportCase(user.businessId) : null;
+      if (!caseItem) throw new Error('No existe un caso de soporte activo para este negocio.');
       const created: SupportMessageRecord = {
         id: Date.now(),
         senderId: user?.id || 'local',
@@ -898,14 +1071,57 @@ export const desktop = {
         createdAt: new Date().toISOString(),
         readAt: null,
       };
-      writeJson(SUPPORT_KEY, [...readJson<SupportMessageRecord[]>(SUPPORT_KEY, []), created]);
+      const messages = readSupportMessages();
+      messages[caseItem.id] = [...(messages[caseItem.id] || []), created];
+      writeSupportMessages(messages);
+      const cases = readSupportCases();
+      writeSupportCases(cases.map(item => item.id === caseItem.id ? {
+        ...item,
+        status: item.status === 'open' ? 'in_review' : item.status,
+        updatedAt: created.createdAt,
+        unreadCount: (item.unreadCount || 0) + 1,
+      } : item));
       return created;
     },
-    async platformCases(): Promise<SupportCaseRecord[]> { return []; },
-    async platformMessages(): Promise<SupportMessageRecord[]> { return []; },
-    async sendPlatformMessage(caseId: string, message: string): Promise<SupportMessageRecord> {
-      return { id: Date.now(), senderId: 'local', senderRole: 'superadmin', senderName: 'Soporte local', message, createdAt: new Date().toISOString(), readAt: null };
+    async platformCases(): Promise<SupportCaseRecord[]> {
+      return [...readSupportCases()].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
     },
-    async updatePlatformCase(caseId: string, status: SupportCaseRecord['status']) { return { id: caseId, status }; },
+    async platformMessages(caseId: string): Promise<SupportMessageRecord[]> {
+      return readSupportMessages()[caseId] || [];
+    },
+    async sendPlatformMessage(caseId: string, message: string): Promise<SupportMessageRecord> {
+      const caseItem = readSupportCases().find(item => item.id === caseId);
+      if (!caseItem) throw new Error('No se encontró el caso de soporte.');
+      const user = readCurrentDesktopUser();
+      const created: SupportMessageRecord = {
+        id: Date.now(),
+        senderId: user?.id || 'local',
+        senderRole: 'superadmin',
+        senderName: user?.name || 'Soporte local',
+        message,
+        createdAt: new Date().toISOString(),
+        readAt: null,
+      };
+      const messages = readSupportMessages();
+      messages[caseId] = [...(messages[caseId] || []), created];
+      writeSupportMessages(messages);
+      writeSupportCases(readSupportCases().map(item => item.id === caseId ? {
+        ...item,
+        status: item.status === 'open' ? 'in_review' : item.status,
+        updatedAt: created.createdAt,
+        unreadCount: 0,
+      } : item));
+      appendPlatformAudit('support_reply', caseId, { businessId: caseItem.businessId, messageLength: message.length });
+      return created;
+    },
+    async updatePlatformCase(caseId: string, status: SupportCaseRecord['status']) {
+      const caseItem = readSupportCases().find(item => item.id === caseId);
+      if (!caseItem) throw new Error('No se encontró el caso de soporte.');
+      const now = new Date().toISOString();
+      writeSupportCases(readSupportCases().map(item => item.id === caseId ? { ...item, status, updatedAt: now } : item));
+      if (status === 'resolved') setLocalBusinessActive(caseItem.businessId, true);
+      appendPlatformAudit('support_case_status', caseId, { businessId: caseItem.businessId, status, reactivated: status === 'resolved' });
+      return { id: caseId, status };
+    },
   },
 };

@@ -5,6 +5,7 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Check, Crown, LoaderCircle, RefreshCw, ShieldCheck, Users, Package, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
+import { toastError } from '../utils/notifications';
 import { getBusinessSubscription, getSubscriptionPlans, selectSubscriptionPlan, type BusinessSubscriptionRecord, type SubscriptionPlanRecord } from '../services/dataService';
 
 const money = (value: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(value);
@@ -23,7 +24,7 @@ export function Subscription() {
   const load = useCallback(async () => {
     setLoading(true);
     try { const [available, current] = await Promise.all([getSubscriptionPlans(), getBusinessSubscription()]); setPlans(available); setSubscription(current); }
-    catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo consultar la suscripción.'); }
+    catch (error) { toastError(error, 'No se pudo consultar la suscripción.'); }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { void load(); }, [load]);
@@ -34,7 +35,7 @@ export function Subscription() {
       setSubscription(result);
       if (plan.id === 'free') toast.success('Se activó el plan Gratis.');
       else toast.info(`Solicitud registrada para el plan ${plan.name}. No se ha realizado ningún cobro; el plan requiere integrar y confirmar un proveedor de pagos.`);
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo solicitar el cambio de plan.'); }
+    } catch (error) { toastError(error, 'No se pudo solicitar el cambio de plan.'); }
     finally { setBusyPlan(null); }
   };
 
