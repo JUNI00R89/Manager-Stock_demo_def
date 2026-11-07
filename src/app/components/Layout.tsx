@@ -1,4 +1,4 @@
-import { ReactNode, createContext, useContext, useState, useEffect, useLayoutEffect } from 'react';
+import { ReactNode, createContext, useContext, useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../context/AuthContext';
 import { useBusiness, DEFAULT_BUSINESS_THEMES, applyTheme } from '../context/BusinessContext';
@@ -76,6 +76,12 @@ function LayoutShell({ children }: LayoutProps) {
   const [lowStockCount, setLowStockCount] = useState(0);
   const [databaseConnected, setDatabaseConnected] = useState<boolean | null>(null);
 
+  // El marco es persistente: el <main> no se remonta al navegar. Guardamos su
+  // referencia para reiniciar el scroll en cada ruta y evitar que una pantalla
+  // nueva aparezca a mitad de página (tarjetas cortadas o fuera de vista).
+  const mainRef = useRef<HTMLElement | null>(null);
+  const previousPathname = useRef(location.pathname);
+
   useEffect(() => {
     localStorage.setItem('sidebarCollapsed', String(sidebarCollapsed));
   }, [sidebarCollapsed]);
@@ -105,7 +111,41 @@ function LayoutShell({ children }: LayoutProps) {
 
   useEffect(() => {
     setMobileSidebarOpen(false);
+    setShowMoreMenu(false);
+    // Al cambiar de ruta el desempate por etiqueta deja de ser válido. Sin
+    // limpiarlo, después de visitar un enlace que comparte ruta (Pedidos /
+    // Domicilios) el resaltado podía quedarse en el enlace equivocado.
+    if (previousPathname.current !== location.pathname) {
+      previousPathname.current = location.pathname;
+      setActiveNavLabel(null);
+    }
   }, [location.pathname]);
+
+  // El contenido conserva su posición porque el shell no se remonta. Se
+  // reinicia antes de pintar para que cada pantalla empiece desde arriba.
+  useLayoutEffect(() => {
+    if (mainRef.current) mainRef.current.scrollTop = 0;
+  }, [location.pathname]);
+
+  // Drawer móvil: bloquea el scroll del contenido de fondo y permite cerrarlo
+  // con Escape. El overlay visual ya existía; esto evita que la página de atrás
+  // se mueva mientras el menú está abierto.
+  useEffect(() => {
+    if (!mobileSidebarOpen && !showMoreMenu) return;
+    const main = mainRef.current;
+    const previousOverflowY = main?.style.overflowY ?? '';
+    if (main) main.style.overflowY = 'hidden';
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setMobileSidebarOpen(false);
+      setShowMoreMenu(false);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      if (main) main.style.overflowY = previousOverflowY;
+    };
+  }, [mobileSidebarOpen, showMoreMenu]);
 
   const handleLogout = () => {
     logout();
@@ -297,9 +337,22 @@ function LayoutShell({ children }: LayoutProps) {
    * producía ningún cambio visible.
    */
   const activeNavItems = navItems.filter(item => isActive(item.path));
-  const activeNavItem = activeNavItems.find(item => item.label === activeNavLabel) ?? activeNavItems[0] ?? null;
+  // Si la ruta actual coincide con un módulo y con una de sus secciones
+  // (/warehouse y /warehouse/entries), gana siempre la ruta más específica.
+  // Antes se elegía el primer elemento del menú, así que al recargar una
+  // subpágina el resaltado se quedaba en el módulo padre.
+  const activeNavItem = activeNavItems.reduce<NavItem | null>((selected, item) => {
+    if (!selected) return item;
+    if (item.path.length !== selected.path.length) {
+      return item.path.length > selected.path.length ? item : selected;
+    }
+    return item.label === activeNavLabel ? item : selected;
+  }, null);
   const isActiveNavItem = (item: NavItem) =>
     activeNavItem !== null && activeNavItem.path === item.path && activeNavItem.label === item.label;
+  // Firma estable del menú: sirve para volver a medir el indicador cuando
+  // cambian los enlaces (permisos o tipo de negocio) aunque el número sea igual.
+  const navSignature = navItems.map(item => `${item.path}|${item.label}`).join(';');
 
   /**
    * El indicador vive dentro del <nav> que tiene scroll, así que su `top` se
@@ -310,18 +363,33 @@ function LayoutShell({ children }: LayoutProps) {
    */
   useLayoutEffect(() => {
     const measure = () => {
-      const link = document.querySelector<HTMLElement>('[data-sidebar-active="true"]');
       const nav = document.querySelector<HTMLElement>('[data-sidebar-nav="true"]');
-      if (!link || !nav || link.offsetParent === null) {
+      if (!nav) {
         setSidebarIndicator(null);
         return;
       }
-      // Si el ítem activo quedó fuera del área visible, se trae a la vista
-      // (solo hace scroll cuando hace falta) antes de posicionar el indicador.
-      link.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-      const linkRect = link.getBoundingClientRect();
+      const link = nav.querySelector<HTMLElement>('[data-sidebar-active="true"]');
+      if (!link || link.offsetParent === null) {
+        setSidebarIndicator(null);
+        return;
+      }
+
+      // Trae el enlace activo a la vista desplazando solo el <nav>. Usar
+      // scrollIntoView también podía desplazar el contenido principal y dejar
+      // la pantalla a mitad de página.
       const navRect = nav.getBoundingClientRect();
-      const to = { top: linkRect.top - navRect.top + nav.scrollTop, height: linkRect.height };
+      const linkRect = link.getBoundingClientRect();
+      const linkTop = linkRect.top - navRect.top + nav.scrollTop;
+      const linkBottom = linkTop + linkRect.height;
+      const edge = 8;
+      if (linkTop < nav.scrollTop + edge) {
+        nav.scrollTop = Math.max(0, linkTop - edge);
+      } else if (linkBottom > nav.scrollTop + nav.clientHeight - edge) {
+        nav.scrollTop = Math.max(0, linkBottom - nav.clientHeight + edge);
+      }
+
+      const measuredRect = link.getBoundingClientRect();
+      const to = { top: measuredRect.top - navRect.top + nav.scrollTop, height: measuredRect.height };
       const from = lastSidebarIndicator;
       lastSidebarIndicator = to;
       setSidebarIndicator(previous => (
@@ -332,9 +400,36 @@ function LayoutShell({ children }: LayoutProps) {
     // misma ruta (Domicilios sobre Pedidos) la URL no cambia, pero el ítem
     // activo sí, y hay que volver a medir.
     measure();
+    const nav = document.querySelector<HTMLElement>('[data-sidebar-nav="true"]');
+    const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    if (nav) resizeObserver?.observe(nav);
     window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
-  }, [location.pathname, sidebarCollapsed, navItems.length, activeNavLabel]);
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [location.pathname, sidebarCollapsed, activeNavItem?.path, activeNavItem?.label, navSignature]);
+
+  // El drawer móvil siempre empezaba arriba: si la ruta activa estaba al final
+  // del menú (Configuración de bodega), había que bajar a buscarla. Al abrirlo,
+  // desplazamos solo su propia lista hasta el enlace activo.
+  useLayoutEffect(() => {
+    if (!mobileSidebarOpen) return;
+    const drawer = document.querySelector<HTMLElement>('[data-mobile-sidebar="true"]');
+    const nav = drawer?.querySelector<HTMLElement>('nav');
+    const link = nav?.querySelector<HTMLElement>('[data-mobile-nav-active="true"]');
+    if (!nav || !link) return;
+    const navRect = nav.getBoundingClientRect();
+    const linkRect = link.getBoundingClientRect();
+    const linkTop = linkRect.top - navRect.top + nav.scrollTop;
+    const linkBottom = linkTop + linkRect.height;
+    const edge = 8;
+    if (linkTop < nav.scrollTop + edge) {
+      nav.scrollTop = Math.max(0, linkTop - edge);
+    } else if (linkBottom > nav.scrollTop + nav.clientHeight - edge) {
+      nav.scrollTop = Math.max(0, linkBottom - nav.clientHeight + edge);
+    }
+  }, [mobileSidebarOpen, location.pathname, activeNavItem?.path, activeNavItem?.label]);
 
   // La barra inferior recuerda el último índice activo para poder deslizarse.
   useLayoutEffect(() => {
@@ -396,9 +491,17 @@ function LayoutShell({ children }: LayoutProps) {
                     <Link
                       key={`${item.path}|${item.label}`}
                       to={item.path}
-                      onClick={() => setActiveNavLabel(item.label)}
+                      onClick={() => {
+                        setActiveNavLabel(item.label);
+                        // Cierra el drawer incluso cuando el enlace comparte
+                        // ruta con otro (Pedidos / Domicilios): la URL no cambia,
+                        // pero el menú móvil debe desaparecer al elegir.
+                        setMobileSidebarOpen(false);
+                        setShowMoreMenu(false);
+                      }}
                       title={collapsed ? item.label : undefined}
                       data-sidebar-active={active && withIndicator ? 'true' : undefined}
+                      data-mobile-nav-active={active ? 'true' : undefined}
                       style={active ? { color: 'var(--nav-active-fg)' } : undefined}
                       className={`
                         flex items-center gap-3 rounded-xl text-sm font-medium transition-colors duration-200 group relative
@@ -465,6 +568,10 @@ function LayoutShell({ children }: LayoutProps) {
               onClick={() => setMobileSidebarOpen(false)}
             />
             <motion.aside
+              role="dialog"
+              aria-modal="true"
+              aria-label="Menú de navegación"
+              data-mobile-sidebar="true"
               initial={{ x: -260 }}
               animate={{ x: 0 }}
               exit={{ x: -260 }}
@@ -473,7 +580,7 @@ function LayoutShell({ children }: LayoutProps) {
             >
               <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                 <span className="font-bold text-sm text-foreground">Menú</span>
-                <button onClick={() => setMobileSidebarOpen(false)} className="p-2 rounded-lg hover:bg-accent">
+                <button onClick={() => setMobileSidebarOpen(false)} aria-label="Cerrar menú" className="p-2 rounded-lg hover:bg-accent">
                   <X size={18} />
                 </button>
               </div>
@@ -492,6 +599,8 @@ function LayoutShell({ children }: LayoutProps) {
           {/* Mobile hamburger */}
           <button
             onClick={() => setMobileSidebarOpen(true)}
+            aria-label="Abrir menú"
+            aria-expanded={mobileSidebarOpen}
             className="lg:hidden p-2 rounded-full hover:bg-accent text-muted-foreground"
           >
             <Menu size={20} />
@@ -561,7 +670,7 @@ function LayoutShell({ children }: LayoutProps) {
         </header>
 
         {/* Content: cada pantalla se monta al navegar y sus tarjetas/bloques entran animados */}
-        <main className="flex-1 overflow-y-auto">
+        <main ref={mainRef} className="flex-1 overflow-y-auto">
           <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 ${hideGlobalMobileNav ? 'pb-0' : 'pb-24'} lg:pb-6`}>{children}</div>
         </main>
       </div>
@@ -590,6 +699,8 @@ function LayoutShell({ children }: LayoutProps) {
                 <button
                   key="more"
                   onClick={() => setShowMoreMenu(m => !m)}
+                  aria-label="Más opciones"
+                  aria-expanded={showMoreMenu}
                   className={`flex-1 flex flex-col items-center justify-center py-2 min-h-[56px] text-muted-foreground`}
                 >
                   <MoreHorizontal size={22} />
@@ -634,11 +745,14 @@ function LayoutShell({ children }: LayoutProps) {
               onClick={() => setShowMoreMenu(false)}
             />
             <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Más opciones de navegación"
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="lg:hidden fixed bottom-0 left-0 right-0 bg-sidebar border-t border-sidebar-border z-50 rounded-t-2xl pb-safe"
+              className="lg:hidden fixed bottom-0 left-0 right-0 max-h-[85vh] overflow-y-auto bg-sidebar border-t border-sidebar-border z-50 rounded-t-2xl pb-safe"
             >
               <div className="p-4">
                 <div className="w-10 h-1 bg-border rounded-full mx-auto mb-4" />

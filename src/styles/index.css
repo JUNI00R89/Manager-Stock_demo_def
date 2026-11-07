@@ -30,27 +30,27 @@
 
 /* ── Animaciones de bloques ─────────────────────────────────────────────────
    Mismo lenguaje que la referencia:
-   · hidden → show: opacity 0→1, blur(12px)→0, y 12→0.
+   · hidden → show: opacity 0→1 y y 12→0.
+   · Sin animar `filter`: combinado con el backdrop-filter de las tarjetas
+     producía parpadeos y tarjetas borrosas en equipos con poca GPU.
    · fill-mode "backwards" (no "forwards"): al terminar, cada bloque recupera
      sus propios estilos (hover, transforms de motion, etc.).
    · Escalonado 80 ms y tope en el bloque 12: en listas largas el resto se
      muestra ya montado, así no se animan decenas de elementos a la vez.
-   · will-change solo en los bloques que realmente entran animados (máx. 12).
    · Todo se desactiva con prefers-reduced-motion al final del archivo. */
 @keyframes ms-reveal {
-  from { opacity: 0; filter: blur(12px); transform: translateY(12px); }
-  to { opacity: 1; filter: blur(0px); transform: none; }
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
 }
-/* Entrada sin blur, para tarjetas anidadas (evita desenfoques en listas densas). */
+/* Entrada más corta, para tarjetas anidadas (evita desplazamientos largos). */
 @keyframes ms-rise {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: none; }
 }
 
-/* Tarjetas de la vista: entran con blur + desplazamiento en cascada. */
+/* Tarjetas de la vista: entran con un desplazamiento corto en cascada. */
 [data-slot="card"]:not([data-slot="card"] *) {
   animation: ms-reveal 0.6s cubic-bezier(0.22, 1, 0.36, 1) backwards;
-  will-change: opacity, filter, transform;
 }
 [data-slot="card"]:nth-child(1) { animation-delay: 0s; }
 [data-slot="card"]:nth-child(2) { animation-delay: 0.08s; }
@@ -64,12 +64,11 @@
 [data-slot="card"]:nth-child(10) { animation-delay: 0.72s; }
 [data-slot="card"]:nth-child(11) { animation-delay: 0.8s; }
 [data-slot="card"]:nth-child(12) { animation-delay: 0.88s; }
-[data-slot="card"]:nth-child(n + 13) { animation: none; will-change: auto; }
+[data-slot="card"]:nth-child(n + 13) { animation: none; }
 /* Tarjetas dentro de otra tarjeta: entrada corta y sin espera. */
 [data-slot="card"] [data-slot="card"] {
   animation: ms-rise 0.4s cubic-bezier(0.16, 1, 0.3, 1) backwards;
   animation-delay: 0s;
-  will-change: auto;
 }
 
 /* Listas, filas y bloques que no son tarjetas: .stagger-in en el contenedor. */

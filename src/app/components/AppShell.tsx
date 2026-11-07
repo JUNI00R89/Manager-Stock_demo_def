@@ -27,8 +27,8 @@ export function AppShell() {
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={location.pathname}
-            initial={{ opacity: 0, filter: 'blur(12px)', y: 12 }}
-            animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
             exit={pageExit}
             transition={{ duration: 0.5, ease: EASE_OUT }}
           >
