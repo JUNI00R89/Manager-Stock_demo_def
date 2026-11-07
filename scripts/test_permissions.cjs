@@ -1,0 +1,37 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const ts = require('typescript');
+const compiled = ts.transpileModule(fs.readFileSync('src/app/security/permissions.ts','utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
+const context={exports:{}};
+vm.runInNewContext(compiled,context);
+const {canAccessPath:access,canPerformAction:action}=context.exports;
+const hotel={type:'hotel',features:{rooms:true,reservations:true,pos:false,inventory:false}};
+const food={type:'restaurant',features:{tables:true,inventory:true,pos:true},foodConfig:{activeModules:['menu']}};
+for(const path of ['/hotel/rooms','/hotel/availability','/hotel/housekeeping']){
+ assert.equal(access(path,'cashier',hotel,['hotel.view']),true,path);
+ assert.equal(access(path,'cashier',hotel,['orders.manage']),false,path);
+ assert.equal(access(path,'owner',food),false,path);
+}
+for(const path of ['/restaurant/waiter','/restaurant/kitchen','/restaurant/orders','/restaurant/tables','/restaurant/settings']) assert.equal(access(path,'owner',food),false,path);
+food.foodConfig.activeModules=['pedidos'];
+assert.equal(access('/restaurant/kitchen','cashier',food,['orders.view']),true);
+assert.equal(access('/restaurant/tables','cashier',food,['orders.view']),true);
+assert.equal(access('/restaurant/waiter','cashier',food,['orders.view']),false);
+assert.equal(access('/restaurant/catalog','owner',food),false);
+assert.equal(access('/services','owner',hotel),false);
+assert.equal(access('/services/appointments','owner',hotel),false);
+assert.equal(access('/services','cashier',{type:'services',features:{services:true}},['services.view']),true);
+assert.equal(access('/inventory/movements','owner',hotel),false);
+assert.equal(access('/pos','owner',hotel),false);
+assert.equal(access('/products','owner',{type:'retail',features:{pos:true,inventory:false}}),true);
+assert.equal(action({role:'cashier',customRoleId:'reader',permissions:['hotel.view']},'hotel.manage'),false);
+assert.equal(action({role:'cashier',customRoleId:'manager',permissions:['hotel.manage']},'cash.manage'),false);
+assert.equal(action({role:'cashier',customRoleId:'collector',permissions:['cash.manage']},'cash.manage'),true);
+assert.equal(action({role:'owner'},'hotel.manage'),true);
+assert.equal(action({role:'cashier'},'sales.create'),true);
+assert.equal(action({role:'cashier'},'hotel.manage'),false);
+assert.equal(access('/products/new','owner',{type:'retail',features:{pos:true,inventory:false}}),false);
+assert.equal(access('/products/123/edit','owner',{type:'retail',features:{pos:true,inventory:false}}),false);
+assert.equal(action(null,'hotel.manage'),false);
+console.log('OK: navigation by business/modules, custom roles and employee actions');

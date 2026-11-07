@@ -127,6 +127,8 @@ CREATE TABLE IF NOT EXISTS hotel_rooms (
   status TEXT NOT NULL DEFAULT 'available' CHECK(status IN ('available','occupied','reserved','maintenance','cleaning')),
   amenities_json TEXT NOT NULL DEFAULT '[]',
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  cleaning_status TEXT NOT NULL DEFAULT 'inspeccionada',
+  cleaning_assignee TEXT NOT NULL DEFAULT '',
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(business_id, room_number)
 );
@@ -149,6 +151,47 @@ CREATE TABLE IF NOT EXISTS hotel_reservations (
   CHECK(check_out > check_in)
 );
 CREATE INDEX IF NOT EXISTS idx_hotel_reservations_business_dates ON hotel_reservations(business_id,check_in,check_out,status);
+
+CREATE TABLE IF NOT EXISTS hotel_charges (
+  id TEXT PRIMARY KEY,
+  business_id TEXT NOT NULL REFERENCES businesses(id),
+  reservation_id TEXT NOT NULL REFERENCES hotel_reservations(id) ON DELETE CASCADE,
+  product_id TEXT NOT NULL REFERENCES products(id),
+  product_name TEXT NOT NULL,
+  quantity REAL NOT NULL CHECK(quantity > 0),
+  unit_price REAL NOT NULL CHECK(unit_price >= 0),
+  total REAL NOT NULL CHECK(total >= 0),
+  idempotency_key TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','cancelled')),
+  note TEXT NOT NULL DEFAULT '',
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  cancelled_at TEXT,
+  UNIQUE(business_id, reservation_id, idempotency_key)
+);
+CREATE INDEX IF NOT EXISTS idx_hotel_charges_reservation ON hotel_charges(business_id,reservation_id);
+
+CREATE TABLE IF NOT EXISTS hotel_payments (
+  id TEXT PRIMARY KEY,
+  business_id TEXT NOT NULL REFERENCES businesses(id),
+  reservation_id TEXT NOT NULL REFERENCES hotel_reservations(id),
+  cash_session_id TEXT NOT NULL REFERENCES cash_sessions(id),
+  amount REAL NOT NULL CHECK(amount > 0),
+  method TEXT NOT NULL CHECK(method IN ('cash','card','transfer','digital')),
+  reference TEXT NOT NULL DEFAULT '',
+  idempotency_key TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(business_id,reservation_id,idempotency_key)
+);
+CREATE INDEX IF NOT EXISTS idx_hotel_payments_cash ON hotel_payments(cash_session_id,method);
+CREATE TABLE IF NOT EXISTS hotel_account_closures (
+  reservation_id TEXT PRIMARY KEY REFERENCES hotel_reservations(id),
+  business_id TEXT NOT NULL REFERENCES businesses(id),
+  receipt_id TEXT NOT NULL UNIQUE,
+  closed_at TEXT NOT NULL,
+  receipt_json TEXT NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS service_catalog (
   id TEXT PRIMARY KEY,
@@ -503,7 +546,9 @@ CREATE TABLE IF NOT EXISTS orders (
   total REAL NOT NULL DEFAULT 0,
   table_number INTEGER,
   waiter TEXT NOT NULL DEFAULT '',
+  restaurant_metadata TEXT NOT NULL DEFAULT '{}',
   stock_consumed INTEGER NOT NULL DEFAULT 0 CHECK(stock_consumed IN (0,1)),
+  sale_id TEXT REFERENCES sales(id),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

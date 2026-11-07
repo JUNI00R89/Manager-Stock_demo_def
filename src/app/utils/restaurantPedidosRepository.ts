@@ -382,6 +382,7 @@ class LocalPedidosRepository implements PedidosRepository {
   }
 }
 
+import { SharedPedidosRepository } from './sharedPedidosRepository';
 import { getFirebasePedidosRepository } from './firebasePedidosRepository';
 
 let repository: PedidosRepository | null = null;
@@ -390,7 +391,7 @@ export function getPedidosRepository(): PedidosRepository {
   if (import.meta.env.VITE_RESTAURANT_BACKEND === 'firebase') {
     return getFirebasePedidosRepository();
   }
-  if (!repository) repository = new LocalPedidosRepository();
+  if (!repository) repository = new SharedPedidosRepository(new LocalPedidosRepository());
   return repository;
 }
 

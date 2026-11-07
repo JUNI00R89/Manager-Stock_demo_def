@@ -169,12 +169,12 @@ function LayoutShell({ children }: LayoutProps) {
         { path: '/restaurant/settings', icon: Settings, label: 'Ajustes del restaurante', group: 'tipo' },
       );
     }
-    if (config?.features.rooms) {
+    if (config?.type === 'hotel' && (config.features.rooms || config.features.reservations)) {
       items.push({ path: '/hotel/rooms', icon: Bed, label: 'Habitaciones', group: 'tipo' });
       items.push({ path: '/hotel/availability', icon: CalendarDays, label: 'Disponibilidad', group: 'tipo' });
       items.push({ path: '/hotel/housekeeping', icon: Building2, label: 'Limpieza', group: 'tipo' });
     }
-    if (config?.type === 'services' && config.features.services) {
+    if (config?.type === 'services' && (config.features.services || config.features.reservations)) {
       items.push({ path: '/services', icon: Scissors, label: 'Servicios', group: 'tipo' });
       items.push({ path: '/services/appointments', icon: CalendarDays, label: 'Agenda de citas', group: 'tipo' });
     }
@@ -244,8 +244,8 @@ function LayoutShell({ children }: LayoutProps) {
     const type: NavItem[] = [];
     if (config?.features.pos) type.push({ path: '/pos', icon: Store, label: 'POS', group: 'ventas' });
     if (config?.features.tables) type.push({ path: '/restaurant/tables', icon: UtensilsCrossed, label: 'Mesas', group: 'tipo' });
-    if (config?.features.rooms) type.push({ path: '/hotel/rooms', icon: Bed, label: 'Hab.', group: 'tipo' });
-    if (config?.type === 'services' && config.features.services) type.push({ path: '/services', icon: Scissors, label: 'Servicios', group: 'tipo' });
+    if (config?.type === 'hotel' && (config.features.rooms || config.features.reservations)) type.push({ path: '/hotel/rooms', icon: Bed, label: 'Hab.', group: 'tipo' });
+    if (config?.type === 'services' && (config.features.services || config.features.reservations)) type.push({ path: '/services', icon: Scissors, label: 'Servicios', group: 'tipo' });
     const foodMenuEnabled = false;
     if (config?.features.inventory || foodMenuEnabled) type.push({ path: '/products', icon: Package, label: foodMenuEnabled ? 'Menú' : 'Productos', group: 'inventario' });
 

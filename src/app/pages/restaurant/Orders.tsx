@@ -1,3 +1,4 @@
+import { canPerformAction } from '../../security/permissions';
 import { useMemo, useState } from 'react';
 import {
   Ban,
@@ -67,6 +68,7 @@ function tableName(table: { id: string; number: number }, names: Record<string, 
 
 export function Orders() {
   const { user } = useAuth();
+  const canCollect = canPerformAction(user, 'sales.create');
   const { config } = useBusiness();
   const scope = useRestaurantScope();
   const businessId = useRestaurantBusinessId();
@@ -74,7 +76,7 @@ export function Orders() {
   const { settings } = useRestaurantSettings(scope);
   const { activeStaff, toEmployee } = useRestaurantStaff(scope, user?.name || '');
   const active = activeStaff('admin');
-  const { orders, loading, repository } = useRestaurantOrders(ordersScope);
+  const { orders, loading, error: ordersError, repository } = useRestaurantOrders(ordersScope);
   const { tables } = useRestaurantTables();
   const { activeMenu, setActive, setDirectSale, loading: menuLoading } = useRestaurantCatalog(scope);
   const now = useNow(30_000);
@@ -268,6 +270,7 @@ export function Orders() {
 
   return (
     <Layout>
+      {ordersError && <p role="alert" className="mb-3 rounded border border-red-200 p-3 text-red-600">{ordersError}</p>}
       <header className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Administración · {formatJornadaTitle(jornada, settings.startTime)}</p>
@@ -363,7 +366,7 @@ export function Orders() {
                 now={now}
                 busy={busyOrderId === order.id}
                 primaryLabel="Entregar"
-                onPrimary={() => deliverOrder(order)}
+                onPrimary={canCollect ? () => deliverOrder(order) : undefined}
                 onCancel={() => { setCancelTarget(order); setCancelReason(''); }}
               />
             ))}
@@ -554,7 +557,7 @@ function AdminOrderCard({
   now: Date;
   busy: boolean;
   primaryLabel: string;
-  onPrimary: () => void;
+  onPrimary?: () => void;
   onCancel: () => void;
 }) {
   const itemCount = order.items.reduce((sum, item) => sum + item.cantidad, 0);
@@ -585,14 +588,14 @@ function AdminOrderCard({
       )}
 
       <div className="mt-3 flex gap-2">
-        <Button
+        {onPrimary && <Button
           className={`h-11 flex-1 ${primaryLabel === 'Entregar' ? 'bg-emerald-600 text-white hover:bg-emerald-700' : ''}`}
           onClick={onPrimary}
           disabled={busy}
         >
           {primaryLabel === 'Tomar' ? <PlayIcon /> : primaryLabel === 'Finalizar' ? <CheckCircle2 size={17} /> : <CheckCircle2 size={17} />}
           {busy ? 'Procesando…' : primaryLabel}
-        </Button>
+        </Button>}
         <button
           type="button"
           onClick={onCancel}

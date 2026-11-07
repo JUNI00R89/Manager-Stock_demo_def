@@ -164,3 +164,91 @@ MANAGER-STOCK/
 ## Diálogos y confirmaciones de interfaz
 
 Las preguntas y confirmaciones administrativas usan modales centrados, no cuadros nativos del navegador. La ventana para suspender negocios solicita un motivo obligatorio y una descripción opcional; las acciones críticas en productos, proveedores, ventas, usuarios y configuración también usan el componente compartido `ConfirmActionDialog`. Las notificaciones no bloqueantes aparecen en la esquina inferior derecha. Consulta `docs/VENTANAS_Y_CONFIRMACIONES.md` para el detalle.
+
+
+## Pedidos compartidos y limpieza persistente
+
+En el modo habitual (FastAPI) y en la demostración de escritorio, Mesas, Mesero,
+Cocina y Pedidos utilizan el mismo servicio de comandas. Las vistas de cocina y
+mesero consultan actualizaciones cada dos segundos. Los artículos de venta directa
+se guardan con la comanda y no aparecen entre los productos para preparar.
+Los pedidos antiguos del repositorio local siguen disponibles en el navegador
+original; no se importan automáticamente al servidor. La opción explícita
+`VITE_RESTAURANT_BACKEND=firebase` conserva su integración experimental separada.
+
+El tablero de limpieza utiliza las habitaciones del negocio y guarda el estado y
+el nombre del responsable. El checkout de una estancia iniciada marca la habitación
+como sucia; una reserva posterior se conserva. La API exige `hotel.manage` para
+actualizar la limpieza y comprueba que el estado no cambió desde la última lectura.
+
+Pruebas de regresión adicionales (bases temporales):
+
+```sh
+python backend/tests/test_checkout_regressions.py
+python backend/tests/test_restaurant_hotel_regressions.py
+```
+
+## Consumos en la cuenta de una habitación
+
+En **Hotel → Habitaciones → Cuenta y consumos**, selecciona la estancia activa,
+el producto y la cantidad para cargarlo a la cuenta. El cargo guarda el nombre y
+precio del producto de ese momento, descuenta inventario y se suma al alojamiento.
+El resumen muestra alojamiento, consumos, anticipo y saldo pendiente; registrar un
+consumo no registra un pago ni una venta de caja.
+
+Los consumos pertenecen a la reserva, por lo que no se trasladan al siguiente
+huésped de la habitación. Durante una estancia con check-in se pueden anular cargos;
+la anulación conserva el historial y devuelve las existencias. Después del checkout
+la cuenta se consulta desde el selector de estancias y mantiene sus importes.
+Los reintentos de una misma carga no duplican el consumo. La funcionalidad está
+implementada tanto para FastAPI/SQLite como para la demostración local de escritorio.
+
+```sh
+python backend/tests/test_hotel_charges.py
+```
+
+## Abonos, caja y cierre del hotel
+
+Desde **Cuenta y consumos → Pagos y cierre de cuenta**:
+
+1. Abre tu turno con la base de efectivo o utiliza tu turno abierto.
+2. Registra el importe recibido, el medio de pago y una referencia opcional.
+   Puedes registrar varios abonos en efectivo, tarjeta, transferencia o pago digital.
+3. Cuando el saldo llegue a cero, elige **Cerrar cuenta y registrar salida**.
+   Se conserva un comprobante interno descargable en HTML, imprimible desde el navegador.
+4. Cierra el turno indicando el efectivo contado. El efectivo esperado incluye la base,
+   las ventas en efectivo y los abonos del hotel en efectivo de ese turno.
+
+Los medios distintos de efectivo quedan en el historial de pagos; su confirmación
+se realiza fuera de la aplicación. El anticipo previo de la reserva reduce el saldo
+pero no vuelve a entrar en el turno actual. Los cobros del hotel se guardan en su
+propio registro y no generan una segunda venta POS ni una factura fiscal.
+El comprobante conserva los importes y datos del cierre. Una cuenta cerrada no admite
+nuevos cargos, pagos ni reapertura. Los reintentos conservan su identificador para
+no duplicar cobros si se pierde una respuesta de red.
+
+Cobrar y cerrar requiere `hotel.manage` y `cash.manage`; abrir caja funciona también
+cuando el hotel tiene POS desactivado. Cada pago requiere un turno propio abierto.
+No se permiten sobrepagos ni anulaciones de consumos que dejen saldo a favor.
+La devolución o reversión de pagos todavía no está implementada.
+
+## Pantallas y acciones según el negocio y el empleado
+
+La navegación y las rutas comprueban el tipo de negocio, los módulos activos y
+los permisos del empleado. Los roles personalizados con `hotel.view` pueden
+consultar habitaciones, cuentas, disponibilidad y limpieza. Las acciones de gestión
+requieren sus permisos correspondientes; la creación de habitaciones sigue reservada
+al propietario. En servicios y cocina, los empleados de consulta ven los datos
+sin controles de edición. Cobrar pedidos requiere permiso de ventas.
+
+Desactivar **Pedidos** oculta y bloquea las pantallas operativas de restaurante;
+desactivar **Menú** oculta su catálogo. La API mantiene sus propias comprobaciones.
+
+Validación adicional:
+
+```sh
+python backend/tests/test_hotel_payments.py
+node scripts/test_permissions.cjs
+npx tsc --noEmit
+npm run build
+```

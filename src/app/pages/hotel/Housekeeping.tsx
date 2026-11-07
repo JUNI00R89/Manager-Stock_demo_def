@@ -1,13 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Layout } from '../../components/Layout';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Building2, CheckCircle2, Clock, AlertTriangle, User, RefreshCw } from 'lucide-react';
-import { mockHabitaciones, type Habitacion } from '../../utils/mockData';
+import { getHotelRooms, updateHousekeeping, type HotelRoomRecord, type CleaningStatus } from '../../services/dataService';
+import { useAuth } from '../../context/AuthContext';
 import { toast } from 'sonner';
 
-type EstadoLimpieza = Habitacion['estadoLimpieza'];
+type EstadoLimpieza = CleaningStatus;
 
 const LIMPIEZA_CONFIG: Record<EstadoLimpieza, { label: string; color: string; bg: string; icon: React.ElementType; next: EstadoLimpieza | null }> = {
   sucia:         { label: 'Sucia',         color: 'text-red-600',    bg: 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800',    icon: AlertTriangle, next: 'en_limpieza' },
@@ -16,38 +17,44 @@ const LIMPIEZA_CONFIG: Record<EstadoLimpieza, { label: string; color: string; bg
   inspeccionada: { label: 'Inspeccionada', color: 'text-green-600',  bg: 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800', icon: CheckCircle2,  next: null },
 };
 
-const PERSONAL = ['Ana García', 'Pedro López', 'María Torres', 'Juan Soto'];
 
 export function Housekeeping() {
-  const [habitaciones, setHabitaciones] = useState<Habitacion[]>(mockHabitaciones);
+  const { user } = useAuth();
+  const canManage = user?.role === 'owner' || user?.role === 'business_admin' || user?.permissions?.includes('hotel.manage');
+  const [rooms, setRooms] = useState<HotelRoomRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
   const [filterPiso, setFilterPiso] = useState<number | 'todos'>('todos');
   const [filterEstado, setFilterEstado] = useState<EstadoLimpieza | 'todos'>('todos');
-  const [asignaciones, setAsignaciones] = useState<Record<string, string>>({});
-
-  const pisos = Array.from(new Set(mockHabitaciones.map(h => h.piso))).sort();
-
-  const filtered = habitaciones.filter(h => {
-    const matchPiso = filterPiso === 'todos' || h.piso === filterPiso;
-    const matchEstado = filterEstado === 'todos' || h.estadoLimpieza === filterEstado;
-    return matchPiso && matchEstado;
-  });
-
-  const advanceState = (id: string) => {
-    setHabitaciones(prev => prev.map(h => {
-      if (h.id !== id) return h;
-      const next = LIMPIEZA_CONFIG[h.estadoLimpieza].next;
-      if (!next) return h;
-      const cfg = LIMPIEZA_CONFIG[next];
-      toast.success(`Hab. ${h.numero} → ${cfg.label}`);
-      return { ...h, estadoLimpieza: next };
-    }));
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { setRooms(await getHotelRooms()); setError(''); }
+    catch (e) { setError(e instanceof Error ? e.message : 'No se pudieron cargar las habitaciones.'); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+  const habitaciones = rooms.map(room => ({ ...room, numero: room.roomNumber, piso: room.floor, tipo: room.roomType,
+    capacidad: room.capacity, estadoLimpieza: room.cleaningStatus || (room.status === 'cleaning' ? 'sucia' : 'inspeccionada') as EstadoLimpieza }));
+  const pisos = Array.from(new Set(habitaciones.map(h => h.piso))).sort((a, b) => a - b);
+  const filtered = habitaciones.filter(h => (filterPiso === 'todos' || h.piso === filterPiso) && (filterEstado === 'todos' || h.estadoLimpieza === filterEstado));
+  const save = async (id: string, next: EstadoLimpieza, assignee?: string) => {
+    const room = habitaciones.find(row => row.id === id);
+    if (!room || busy || !canManage) return;
+    setBusy(id);
+    try {
+      const updated = await updateHousekeeping(id, { cleaningStatus: next, cleaningAssignee: assignee ?? room.cleaningAssignee ?? '', expectedStatus: room.estadoLimpieza });
+      setRooms(prev => prev.map(row => row.id === id ? updated : row));
+      toast.success(`Hab. ${room.numero}: limpieza guardada`);
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'No se pudo guardar la limpieza.'); }
+    finally { setBusy(null); }
   };
-
-  const asignar = (id: string, personal: string) => {
-    setAsignaciones(prev => ({ ...prev, [id]: personal }));
-    const hab = habitaciones.find(h => h.id === id);
-    toast.success(`Hab. ${hab?.numero} asignada a ${personal}`);
-    if (hab?.estadoLimpieza === 'sucia') advanceState(id);
+  const advanceState = (id: string) => {
+    const room = habitaciones.find(row => row.id === id);
+    if (!room) return;
+    const next = LIMPIEZA_CONFIG[room.estadoLimpieza].next;
+    if (next) void save(id, next);
   };
 
   const counts: Record<EstadoLimpieza, number> = {
@@ -67,11 +74,14 @@ export function Housekeeping() {
             </h1>
             <p className="text-sm text-muted-foreground mt-0.5">Estado de habitaciones por piso</p>
           </div>
-          <Button variant="outline" size="sm" onClick={() => setHabitaciones(mockHabitaciones)} className="self-start sm:self-auto">
+          <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading || !!busy} className="self-start sm:self-auto">
             <RefreshCw size={16} className="mr-1.5" /> Actualizar
           </Button>
         </div>
 
+        {loading && <p role="status">Cargando habitaciones…</p>}
+        {error && <p role="alert" className="text-red-600">{error}</p>}
+        {!loading && !error && !habitaciones.length && <p>No hay habitaciones registradas. Crea las habitaciones desde el módulo de Habitaciones.</p>}
         {/* Summary */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {(Object.entries(LIMPIEZA_CONFIG) as [EstadoLimpieza, typeof LIMPIEZA_CONFIG[EstadoLimpieza]][]).map(([estado, cfg]) => {
@@ -119,7 +129,7 @@ export function Housekeeping() {
                 {habitsPiso.map(hab => {
                   const cfg = LIMPIEZA_CONFIG[hab.estadoLimpieza];
                   const Icon = cfg.icon;
-                  const personal = asignaciones[hab.id];
+                  const personal = hab.cleaningAssignee;
 
                   return (
                     <Card key={hab.id} className={`p-4 border ${cfg.bg}`}>
@@ -141,20 +151,17 @@ export function Housekeeping() {
                       )}
 
                       <div className="flex gap-2">
-                        {cfg.next && (
-                          <Button size="sm" onClick={() => advanceState(hab.id)} className="flex-1 h-8 text-xs bg-orange-500 hover:bg-orange-600 text-white">
+                        {cfg.next && canManage && (
+                          <Button size="sm" disabled={!!busy} onClick={() => advanceState(hab.id)} className="flex-1 h-8 text-xs bg-orange-500 hover:bg-orange-600 text-white">
                             <Icon size={12} className="mr-1" /> {LIMPIEZA_CONFIG[cfg.next].label}
                           </Button>
                         )}
-                        {hab.estadoLimpieza === 'sucia' && !personal && (
-                          <select
-                            onChange={e => e.target.value && asignar(hab.id, e.target.value)}
-                            defaultValue=""
-                            className="flex-1 h-8 px-2 rounded-md border border-border bg-background text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-orange-500"
-                          >
-                            <option value="">Asignar...</option>
-                            {PERSONAL.map(p => <option key={p} value={p}>{p}</option>)}
-                          </select>
+                        {canManage && (
+                          <div className="flex flex-col gap-1">
+                            <input aria-label={`Responsable de habitación ${hab.numero}`} placeholder="Responsable" className="w-full rounded border p-1 text-sm" value={drafts[hab.id] ?? personal ?? ''} onChange={e => setDrafts(prev => ({ ...prev, [hab.id]: e.target.value }))} maxLength={120} />
+                            <Button size="sm" variant="outline" disabled={!!busy} onClick={() => void save(hab.id, hab.estadoLimpieza, drafts[hab.id] ?? personal ?? '')}>Guardar responsable</Button>
+                            {hab.estadoLimpieza === 'inspeccionada' && <Button size="sm" variant="outline" disabled={!!busy} onClick={() => void save(hab.id, 'sucia')}>Marcar sucia</Button>}
+                          </div>
                         )}
                         {hab.estadoLimpieza === 'inspeccionada' && (
                           <div className="flex-1 flex items-center justify-center gap-1 text-green-600 text-xs font-semibold">

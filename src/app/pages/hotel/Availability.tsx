@@ -1,3 +1,6 @@
+import { HotelAccountDialog } from './HotelAccountDialog';
+import { useAuth } from '../../context/AuthContext';
+import { canPerformAction } from '../../security/permissions';
 import { useCallback, useEffect, useState } from 'react';
 import { Layout } from '../../components/Layout';
 import { Card } from '../../components/ui/card';
@@ -46,6 +49,8 @@ function isoDate(d: Date) {
 }
 
 export function Availability() {
+  const { user } = useAuth();
+  const canManage = canPerformAction(user, 'hotel.manage');
   const [startDate, setStartDate] = useState(() => new Date());
   const [habitaciones, setHabitaciones] = useState<Habitacion[]>([]);
   const [reservas, setReservas] = useState<ReservaHotel[]>([]);
@@ -70,6 +75,8 @@ export function Availability() {
   }, []);
   useEffect(() => { void load(); }, [load]);
   const [selectedReserva, setSelectedReserva] = useState<ReservaHotel | null>(null);
+  const [billingId, setBillingId] = useState<string | null>(null);
+  const [accountReservations, setAccountReservations] = useState<HotelReservationRecord[]>([]);
   const [showNewReserva, setShowNewReserva] = useState(false);
   const [newReserva, setNewReserva] = useState({ huesped: '', habitacionId: '', checkIn: '', checkOut: '', anticipo: '' });
 
@@ -103,8 +110,8 @@ export function Availability() {
   };
 
   const handleCheckOut = async (reservaId: string) => {
-    try { await updateHotelReservationStatus(reservaId, 'checkout'); toast.success('Check-out completado.'); await load(); setSelectedReserva(null); }
-    catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo registrar el check-out.'); }
+    try { setAccountReservations(await getHotelReservations()); setBillingId(reservaId); setSelectedReserva(null); }
+    catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo cargar la cuenta.'); }
   };
 
   const handleNewReservaSubmit = async () => {
@@ -139,9 +146,9 @@ export function Availability() {
             </h1>
             <p className="text-sm text-muted-foreground mt-0.5">Vista Gantt de reservas por habitación</p>
           </div>
-          <Button onClick={() => setShowNewReserva(v => !v)} className="bg-orange-500 hover:bg-orange-600 text-white self-start sm:self-auto">
+          {canManage && <Button onClick={() => setShowNewReserva(v => !v)} className="bg-orange-500 hover:bg-orange-600 text-white self-start sm:self-auto">
             <Plus size={18} className="mr-2" /> Nueva reserva
-          </Button>
+          </Button>}
         </div>
 
         {/* KPI chips */}
@@ -330,14 +337,14 @@ export function Availability() {
                 </Badge>
               </div>
               <div className="flex gap-2 mt-5">
-                {selectedReserva.estado === 'confirmada' && (
+                {canManage && selectedReserva.estado === 'confirmada' && (
                   <Button onClick={() => handleCheckIn(selectedReserva.id)} className="flex-1 bg-green-600 hover:bg-green-700 text-white">
                     <CheckCircle2 size={16} className="mr-2" /> Check-in
                   </Button>
                 )}
                 {selectedReserva.estado === 'checkin' && (
                   <Button onClick={() => handleCheckOut(selectedReserva.id)} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white">
-                    <Clock size={16} className="mr-2" /> Check-out
+                    <Clock size={16} className="mr-2" /> Cuenta y cobro
                   </Button>
                 )}
                 <Button variant="outline" onClick={() => setSelectedReserva(null)} className="flex-1">Cerrar</Button>
@@ -346,6 +353,7 @@ export function Availability() {
           </div>
         )}
       </div>
+      {billingId && <HotelAccountDialog reservations={accountReservations.filter(r => r.id === billingId)} initialId={billingId} onClose={() => setBillingId(null)} onSaved={() => void load()} />}
     </Layout>
   );
 }

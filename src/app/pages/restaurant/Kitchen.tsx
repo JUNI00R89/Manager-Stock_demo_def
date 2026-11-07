@@ -1,3 +1,4 @@
+import { canPerformAction } from '../../security/permissions';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bell,
@@ -35,6 +36,7 @@ type KitchenTab = 'en_curso' | 'finalizados';
 
 export function Kitchen() {
   const { user } = useAuth();
+  const canManage = canPerformAction(user, 'orders.manage');
   const { config } = useBusiness();
   const scope = useRestaurantScope();
   const businessId = useRestaurantBusinessId();
@@ -42,7 +44,7 @@ export function Kitchen() {
   const { settings } = useRestaurantSettings(scope);
   const { activeStaff, toEmployee } = useRestaurantStaff(scope, user?.name || '');
   const active = activeStaff('cocina');
-  const { orders, loading, repository } = useRestaurantOrders(ordersScope);
+  const { orders, loading, error: ordersError, repository } = useRestaurantOrders(ordersScope);
   const now = useNow(15_000);
   const [tab, setTab] = useState<KitchenTab>('en_curso');
   const [busyOrderId, setBusyOrderId] = useState<string | null>(null);
@@ -140,6 +142,7 @@ export function Kitchen() {
 
   return (
     <Layout>
+      {ordersError && <p role="alert" className="mb-3 rounded border border-red-200 p-3 text-red-600">{ordersError}</p>}
       <header className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Cocina · {formatDayMonth(now)} · {formatTime(now)}</p>
@@ -168,11 +171,11 @@ export function Kitchen() {
             {soundOn ? <Bell size={16} className="text-primary" /> : <BellOff size={16} className="text-muted-foreground" />}
             Sonido
           </label>
-          <StaffSwitcher scope={scope} role="cocina" currentUserName={user?.name || ''} />
+          {canManage && <StaffSwitcher scope={scope} role="cocina" currentUserName={user?.name || ''} />}
         </div>
       </header>
 
-      {!active && (
+      {canManage && !active && (
         <div className="mt-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-800 dark:text-amber-200">
           No hay un usuario de cocina activo. Asígnalo en Ajustes &gt; Usuarios.
         </div>
@@ -222,7 +225,7 @@ export function Kitchen() {
                 expectedMinutes={settings.expectedMinutes}
                 currency={config?.currency}
                 now={now}
-                onTake={() => takeOrder(order)}
+                onTake={canManage ? () => takeOrder(order) : undefined}
               />
             ))}
           </KitchenColumn>
@@ -246,7 +249,7 @@ export function Kitchen() {
                 expectedMinutes={settings.expectedMinutes}
                 currency={config?.currency}
                 now={now}
-                onFinish={() => finishOrder(order)}
+                onFinish={canManage ? () => finishOrder(order) : undefined}
               />
             ))}
           </KitchenColumn>

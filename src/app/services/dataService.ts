@@ -5,7 +5,7 @@ export type SaleStatus = 'completed' | 'pending' | 'cancelled';
 export type PaymentMethod = 'cash' | 'card' | 'digital' | 'split' | 'transfer';
 export type PaymentPartMethod = 'cash' | 'card' | 'digital' | 'transfer';
 export interface PaymentPartRecord { method: PaymentPartMethod; amount: number; }
-export interface CashSessionRecord { id: string; openedBy: string; openingAmount: number; closingAmount?: number | null; expectedAmount?: number | null; difference?: number | null; status: 'open' | 'closed'; openedAt: string; closedAt?: string | null; }
+export interface CashSessionRecord { openedByUserId?: string; id: string; openedBy: string; openingAmount: number; closingAmount?: number | null; expectedAmount?: number | null; difference?: number | null; status: 'open' | 'closed'; openedAt: string; closedAt?: string | null; }
 
 export interface SaleItemInput {
   productId: string;
@@ -48,6 +48,8 @@ export interface SaleRecord {
 }
 
 export interface CreateSaleInput {
+  /** Order lines are resolved by the server; items contains only extras. */
+  orderIds?: string[];
   items: SaleItemInput[];
   customer?: string;
   paymentMethod?: PaymentMethod;
@@ -95,6 +97,8 @@ export interface OrderItemRecord {
 }
 
 export interface OrderRecord {
+  restaurantMetadata?: Record<string, any>;
+  saleId?: string;
   id: string;
   channel: OrderChannel;
   customer: string;
@@ -111,6 +115,7 @@ export interface OrderRecord {
 }
 
 export interface CreateOrderInput {
+  restaurantMetadata?: Record<string, any>;
   channel: OrderChannel;
   customer?: string;
   phone?: string;
@@ -329,6 +334,9 @@ export interface ProductSubstitutionRecord {
 }
 
 interface LocalDatabase {
+  hotelCharges?: HotelChargeRecord[];
+  hotelPayments?: HotelPaymentRecord[];
+  hotelClosures?: Record<string, HotelReceipt>;
   version: 1;
   products: Product[];
   suppliers: Supplier[];
@@ -492,7 +500,9 @@ export async function restoreBusinessTypeTransition(id: string) {
 }
 
 export type HotelRoomStatus = 'available' | 'occupied' | 'reserved' | 'maintenance' | 'cleaning';
+export type CleaningStatus = 'sucia' | 'en_limpieza' | 'lista' | 'inspeccionada';
 export interface HotelRoomRecord {
+  cleaningStatus?: CleaningStatus; cleaningAssignee?: string;
   id: string; number: string; roomNumber: string; type: string; roomType: string; floor: number;
   capacity: number; pricePerNight: number; status: HotelRoomStatus; amenities: string[];
   createdAt?: string | null; updatedAt?: string | null;
@@ -510,8 +520,15 @@ export async function createHotelRoom(input: Omit<HotelRoomRecord, 'id' | 'numbe
   if (isDesktopMode()) return desktop.hotel.createRoom(input);
   return api<HotelRoomRecord>('/hotel/rooms', { method: 'POST', body: JSON.stringify(input) });
 }
+export async function updateHousekeeping(id: string, input: { cleaningStatus: CleaningStatus; cleaningAssignee: string; expectedStatus?: string }) {
+  if (isDesktopMode()) return desktop.hotel.updateHousekeeping(id, input);
+  return api<HotelRoomRecord>(`/hotel/rooms/${encodeURIComponent(id)}/housekeeping`, { method: 'PATCH', body: JSON.stringify(input) });
+}
 export async function getHotelReservations() {
-  if (isDesktopMode()) return desktop.hotel.reservations();
+  if (isDesktopMode()) {
+    const charges = readLocal().hotelCharges || [];
+    return (await desktop.hotel.reservations()).map(row => ({ ...row, totalCharges: money(row.totalCharges + charges.filter(c => c.reservationId === row.id && c.status === 'active').reduce((sum, c) => sum + c.total, 0)) }));
+  }
   return api<HotelReservationRecord[]>('/hotel/reservations');
 }
 export async function createHotelReservation(input: { roomId: string; guestName: string; guestEmail?: string; guestPhone?: string; checkIn: string; checkOut: string; advance?: number }) {
@@ -519,8 +536,145 @@ export async function createHotelReservation(input: { roomId: string; guestName:
   return api<HotelReservationRecord>('/hotel/reservations', { method: 'POST', body: JSON.stringify(input) });
 }
 export async function updateHotelReservationStatus(id: string, status: HotelReservationStatus) {
-  if (isDesktopMode()) return desktop.hotel.updateReservationStatus(id, status);
+  if (isDesktopMode()) return localHotelWrite(async () => {
+    const db = readLocal();
+    if (db.hotelClosures?.[id] && status !== 'checkout') throw new ApiError(409, 'La cuenta está cerrada; la estancia no se puede reabrir.');
+    if (status === 'cancelled' && db.hotelPayments?.some(p => p.reservationId === id)) throw new ApiError(409, 'La reserva tiene pagos registrados y no se puede cancelar.');
+    return desktop.hotel.updateReservationStatus(id, status);
+  });
   return api<HotelReservationRecord>(`/hotel/reservations/${encodeURIComponent(id)}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
+}
+
+export interface HotelChargeRecord {
+  id: string; reservationId: string; productId: string; productName: string;
+  quantity: number; unitPrice: number; total: number; status: 'active' | 'cancelled';
+  note: string; createdAt: string; cancelledAt?: string | null; idempotencyKey: string;
+}
+export interface HotelPaymentRecord {
+  id: string; amount: number; method: PaymentPartMethod; reference: string; cashSessionId: string;
+  createdAt: string; idempotencyKey: string; reservationId?: string;
+}
+export interface HotelReceipt extends Omit<HotelAccount, 'receipt'> { businessName: string; currency: string; }
+export interface HotelPaymentInput { amount: number; method: PaymentPartMethod; reference: string; cashSessionId: string; idempotencyKey: string; }
+export interface HotelAccount {
+  payments: HotelPaymentRecord[]; paidTotal: number; closedAt?: string | null; receiptId?: string | null; receipt?: HotelReceipt | null;
+  reservation: HotelReservationRecord; charges: HotelChargeRecord[];
+  accommodationTotal: number; consumptionTotal: number; total: number; advance: number; balance: number;
+}
+export interface HotelChargeInput { productId: string; quantity: number; note?: string; idempotencyKey: string; }
+export async function getHotelProducts(): Promise<Product[]> {
+  if (isDesktopMode()) return (await dataService.getProducts()).filter(p => !p.productType || p.productType === 'sale_item');
+  return api<Product[]>('/hotel/products');
+}
+export async function getHotelAccount(id: string): Promise<HotelAccount> {
+  if (!isDesktopMode()) return api<HotelAccount>(`/hotel/reservations/${encodeURIComponent(id)}/account`);
+  const reservation = (await desktop.hotel.reservations()).find(r => r.id === id);
+  if (!reservation) throw new ApiError(422, 'Reserva no encontrada.');
+  const charges = (readLocal().hotelCharges || []).filter(c => c.reservationId === id);
+  const consumptionTotal = money(charges.filter(c => c.status === 'active').reduce((sum, c) => sum + c.total, 0));
+  const total = money(reservation.totalCharges + consumptionTotal);
+  const db = readLocal();
+  const payments = (db.hotelPayments || []).filter(p => p.reservationId === id);
+  const paidTotal = money(payments.reduce((sum,p) => sum+p.amount,0));
+  const receipt = db.hotelClosures?.[id];
+  return { payments, paidTotal, closedAt: receipt?.closedAt, receiptId: receipt?.receiptId, receipt, reservation: { ...reservation, totalCharges: total, ...(receipt ? { status: 'checkout' as const } : {}) }, charges, accommodationTotal: reservation.totalCharges, consumptionTotal, total, advance: reservation.advance, balance: money(Math.max(0, total - reservation.advance - paidTotal)) };
+}
+async function localHotelWrite<T>(action: () => Promise<T>): Promise<T> {
+  if (navigator.locks) return navigator.locks.request(`hotel-charges:${localKey()}`, action);
+  return action();
+}
+async function requireHotelManage() {
+  const user = await desktop.auth.me();
+  if (!['owner', 'business_admin'].includes(user.role) && !user.permissions?.includes('hotel.manage')) throw new ApiError(422, 'No tienes permiso para gestionar consumos.');
+}
+export async function addHotelCharge(id: string, input: HotelChargeInput): Promise<HotelAccount> {
+  if (!isDesktopMode()) return api<HotelAccount>(`/hotel/reservations/${encodeURIComponent(id)}/charges`, { method: 'POST', body: JSON.stringify(input) });
+  return localHotelWrite(async () => {
+    await requireHotelManage();
+    const account = await getHotelAccount(id);
+    const previous = account.charges.find(c => c.idempotencyKey === input.idempotencyKey);
+    if (previous) {
+      if (previous.productId !== input.productId || previous.quantity !== input.quantity || previous.note !== (input.note || '').trim()) throw new ApiError(422, 'La solicitud ya se utilizó para otro consumo.');
+      return account;
+    }
+    if (account.closedAt) throw new ApiError(409, 'La cuenta ya está cerrada.');
+    if (account.reservation.status !== 'checkin') throw new ApiError(422, 'Solo puedes cargar consumos a una estancia con check-in activo.');
+    const db = readLocal();
+    const product = db.products.find(p => p.id === input.productId && (!p.productType || p.productType === 'sale_item'));
+    if (!product) throw new ApiError(422, 'Producto no disponible en este hotel.');
+    validateLocalQuantity(product, input.quantity);
+    if (product.stock < input.quantity) throw new ApiError(422, 'Stock insuficiente para este consumo.');
+    const charge: HotelChargeRecord = { ...input, id: uniqueId('HC'), reservationId: id, productName: product.name, unitPrice: product.price, total: money(product.price * input.quantity), status: 'active', note: (input.note || '').trim(), createdAt: new Date().toISOString() };
+    const before = product.stock;
+    product.stock = money(before - input.quantity);
+    db.hotelCharges = [...(db.hotelCharges || []), charge];
+    db.movements.unshift({ id: uniqueId('MOV'), productId: product.id, productName: product.name, movementType: 'consumption', quantityDelta: -input.quantity, stockBefore: before, stockAfter: product.stock, note: `Consumo habitación ${account.reservation.roomNumber}`, createdAt: charge.createdAt, referenceType: 'hotel_charge', referenceId: charge.id });
+    writeLocal(db);
+    return getHotelAccount(id);
+  });
+}
+export async function cancelHotelCharge(id: string, chargeId: string): Promise<HotelAccount> {
+  if (!isDesktopMode()) return api<HotelAccount>(`/hotel/reservations/${encodeURIComponent(id)}/charges/${encodeURIComponent(chargeId)}/cancel`, { method: 'POST' });
+  return localHotelWrite(async () => {
+    await requireHotelManage();
+    const account = await getHotelAccount(id);
+    const db = readLocal();
+    const charge = (db.hotelCharges || []).find(c => c.reservationId === id && c.id === chargeId);
+    if (!charge) throw new ApiError(422, 'Consumo no encontrado.');
+    if (charge.status === 'cancelled') return account;
+    if (account.closedAt) throw new ApiError(409, 'La cuenta ya está cerrada.');
+    if (account.reservation.status !== 'checkin') throw new ApiError(422, 'La estancia está cerrada; no puedes modificar sus consumos.');
+    if (money(account.total - charge.total) < money(account.advance + account.paidTotal)) throw new ApiError(409, 'La anulación requiere gestionar una devolución del saldo a favor.');
+    const product = db.products.find(p => p.id === charge.productId);
+    if (!product) throw new ApiError(422, 'No se encontró el producto para devolver sus existencias.');
+    const before = product.stock;
+    product.stock = money(before + charge.quantity);
+    charge.status = 'cancelled'; charge.cancelledAt = new Date().toISOString();
+    db.movements.unshift({ id: uniqueId('MOV'), productId: product.id, productName: product.name, movementType: 'adjustment', quantityDelta: charge.quantity, stockBefore: before, stockAfter: product.stock, note: `Anulación de consumo habitación ${account.reservation.roomNumber}`, createdAt: charge.cancelledAt, referenceType: 'hotel_charge', referenceId: charge.id });
+    writeLocal(db);
+    return getHotelAccount(id);
+  });
+}
+
+async function requireHotelCashManage() {
+  await requireHotelManage();
+  const user = await desktop.auth.me();
+  if (!['owner','business_admin'].includes(user.role) && !user.permissions?.includes('cash.manage')) throw new ApiError(403, 'Necesitas permiso de caja para cobrar.');
+  return user;
+}
+export async function addHotelPayment(id: string, input: HotelPaymentInput): Promise<HotelAccount> {
+  if (!isDesktopMode()) return api<HotelAccount>(`/hotel/reservations/${encodeURIComponent(id)}/payments`, { method: 'POST', body: JSON.stringify(input) });
+  return localHotelWrite(async () => {
+    const user = await requireHotelCashManage();
+    const account = await getHotelAccount(id);
+    const previous = account.payments.find(p => p.idempotencyKey === input.idempotencyKey);
+    if (previous) {
+      if (previous.amount !== input.amount || previous.method !== input.method || previous.reference !== input.reference.trim() || previous.cashSessionId !== input.cashSessionId) throw new ApiError(409, 'La solicitud ya corresponde a otro pago.');
+      return account;
+    }
+    if (account.closedAt || account.reservation.status === 'cancelled') throw new ApiError(409, 'La cuenta está cerrada o cancelada.');
+    if (!['cash','card','transfer','digital'].includes(input.method) || input.idempotencyKey.length < 8 || input.reference.length > 200 || !Number.isFinite(input.amount) || input.amount > 1e9 || input.amount <= 0 || Math.abs(input.amount-money(input.amount)) > 0.000001 || input.amount > account.balance) throw new ApiError(422, 'El importe debe ser positivo, tener máximo dos decimales y no superar el saldo.');
+    const db = readLocal();
+    if (!db.cashSession || db.cashSession.status !== 'open' || db.cashSession.id !== input.cashSessionId || db.cashSession.openedByUserId !== user.id) throw new ApiError(409, 'Abre tu propio turno de caja antes de registrar el pago.');
+    db.hotelPayments = [...(db.hotelPayments || []), { ...input, reference: input.reference.trim(), id: uniqueId('HP'), reservationId: id, createdAt: new Date().toISOString() }];
+    writeLocal(db);
+    return getHotelAccount(id);
+  });
+}
+export async function closeHotelAccount(id: string): Promise<HotelAccount> {
+  if (!isDesktopMode()) return api<HotelAccount>(`/hotel/reservations/${encodeURIComponent(id)}/close`, { method: 'POST' });
+  return localHotelWrite(async () => {
+    await requireHotelCashManage();
+    const account = await getHotelAccount(id);
+    if (!account.closedAt) {
+      if (!['checkin','checkout'].includes(account.reservation.status) || account.balance > 0) throw new ApiError(409, 'La estancia debe estar iniciada y sin saldo pendiente.');
+      const config = await desktop.config.get<{name: string}>();
+      const receipt: HotelReceipt = { ...account, businessName: config?.name || 'Hotel', currency: 'COP', receiptId: uniqueId('HOT'), closedAt: new Date().toISOString() };
+      const db = readLocal(); db.hotelClosures = { ...db.hotelClosures, [id]: receipt }; writeLocal(db);
+    }
+    await desktop.hotel.updateReservationStatus(id,'checkout');
+    return getHotelAccount(id);
+  });
 }
 
 export interface ServiceCatalogRecord { id: string; nombre: string; name: string; duracion: number; durationMinutes: number; precio: number; price: number; categoria: string; category: string; color: string; active: boolean; }
@@ -732,6 +886,13 @@ function canFallbackToLocal(error: unknown): boolean { return networkError(error
 function uniqueId(prefix: string) { return `${prefix}-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`; }
 function money(value: number) { return Math.round((value + Number.EPSILON) * 100) / 100; }
 
+function validateLocalQuantity(product: Product, quantity: number) {
+  if (!Number.isFinite(quantity) || quantity <= 0) throw new Error('La cantidad debe ser mayor que cero.');
+  const discrete = ['unidad', 'porcion', 'paquete', 'tajada', 'caja', 'pieza', 'par', 'botella', 'lata', 'servicio'];
+  const unit = (product.unit || 'unidad').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (discrete.includes(unit) && !Number.isInteger(quantity)) throw new Error('La cantidad debe ser entera para esta unidad de medida.');
+}
+
 export const dataService = {
   currency: CURRENCY,
   defaultTaxRate: DEFAULT_TAX_RATE,
@@ -872,18 +1033,28 @@ export const dataService = {
     }
     {
       const db = readLocal();
+      const previous = db.sales.find(s => s.idempotencyKey === request.idempotencyKey || s.id === request.idempotencyKey);
+      if (previous) return previous;
+      if (request.orderIds?.length && request.status !== 'completed') throw new Error('El cobro de pedidos debe ser una venta completada.');
+      const linkedOrders = [...new Set(request.orderIds || [])].map(id => {
+        const order = db.orders.find(row => row.id === id);
+        if (!order) throw new Error('Pedido no encontrado.');
+        if (order.saleId || ['delivered', 'cancelled'].includes(order.status)) throw new Error('El pedido ya fue cobrado o cerrado.');
+        return order;
+      });
+      request.items = [...request.items, ...linkedOrders.flatMap(order => order.items.map(item => ({ productId: item.productId, quantity: item.quantity })))];
       if (!request.items.length) throw new Error('Agrega al menos un producto a la venta.');
       if (request.globalDiscountPercent < 0 || request.globalDiscountPercent > 100) throw new Error('El descuento general debe estar entre 0 y 100 %.');
       if (request.taxRate < 0 || request.taxRate > 0.3) throw new Error('La tasa de impuesto debe estar entre 0 y 30 %.');
       if (request.items.some(item => !Number.isFinite(item.quantity) || item.quantity <= 0 || (item.discountPercent || 0) < 0 || (item.discountPercent || 0) > 100)) throw new Error('Revisa las cantidades y descuentos de los productos.');
-      const previous = db.sales.find(s => s.idempotencyKey === request.idempotencyKey || s.id === request.idempotencyKey);
-      if (previous) return previous;
+
       if (request.cashSessionId && (db.cashSession?.id !== request.cashSessionId || db.cashSession.status !== 'open')) throw new Error('El turno de caja no está abierto. Abre una caja antes de cobrar.');
       const quantityByProduct = new Map<string, number>();
       request.items.forEach(item => quantityByProduct.set(item.productId, (quantityByProduct.get(item.productId) || 0) + item.quantity));
       const rows = request.items.map(item => {
         const product = db.products.find(p => p.id === item.productId);
         if (!product) throw new Error(`No se encontró el producto ${item.productId}.`);
+        validateLocalQuantity(product, item.quantity);
         if (product.productType === 'ingredient' || product.productType === 'supplies') throw new Error(`${product.name} es un insumo y no se puede vender directamente.`);
         if (product.stock < (quantityByProduct.get(item.productId) || item.quantity)) throw new Error(`Stock insuficiente para ${product.name}. Disponible: ${product.stock}; solicitado: ${quantityByProduct.get(item.productId) || item.quantity}.`);
         return { input: item, product };
@@ -914,6 +1085,7 @@ export const dataService = {
         db.movements.unshift({ id: uniqueId('MOV'), productId: product.id, productName: product.name, saleId: created.id, movementType: 'sale', quantityDelta: -input.quantity, stockBefore: before, stockAfter: product.stock, note: `Venta ${created.id}`, createdAt: created.date });
       });
       created.inventoryEffects = inventoryEffects;
+      linkedOrders.forEach(order => { order.status = 'delivered'; order.saleId = created.id; });
       db.sales.unshift(created); writeLocal(db); return created;
     }
   },
@@ -953,7 +1125,13 @@ export const dataService = {
       const db = readLocal(); db.cashSession = session; writeLocal(db); return session;
     } catch (error) {
       if (!canFallbackToLocal(error)) throw error;
-      return readLocal().cashSession;
+      const db = readLocal();
+      const user = await desktop.auth.me();
+      const session = db.cashSession;
+      if (!session || (session.openedByUserId && session.openedByUserId !== user.id)) return null;
+      const cashSales = db.sales.filter(s => s.cashSessionId === session.id && s.status === 'completed').reduce((sum,s) => sum + (s.payments?.filter(p => p.method === 'cash').reduce((v,p) => v+p.amount,0) ?? (s.paymentMethod === 'cash' ? s.totalPrice : 0)),0);
+      const hotelCash = (db.hotelPayments || []).filter(p => p.cashSessionId === session.id && p.method === 'cash').reduce((sum,p) => sum+p.amount,0);
+      return { ...session, expectedAmount: money(session.openingAmount + cashSales + hotelCash) };
     }
   },
   async openCashSession(openingAmount: number, openedBy: string): Promise<CashSessionRecord> {
@@ -972,10 +1150,13 @@ export const dataService = {
         throw new Error('No se pudo confirmar la apertura de caja. Actualiza el estado de caja antes de volver a intentarlo.');
       }
     }
-    const db = readLocal();
-    if (db.cashSession?.status === 'open') throw new Error('Ya hay un turno local abierto.');
-    const session: CashSessionRecord = { id: uniqueId('CAJ'), openedBy, openingAmount: money(openingAmount), expectedAmount: money(openingAmount), status: 'open', openedAt: new Date().toISOString() };
-    db.cashSession = session; writeLocal(db); return session;
+    return localHotelWrite(async () => {
+      const userId = (await desktop.auth.me()).id;
+      const db = readLocal();
+      if (db.cashSession?.status === 'open') throw new Error('Ya hay un turno local abierto.');
+      const session: CashSessionRecord = { openedByUserId: userId, id: uniqueId('CAJ'), openedBy, openingAmount: money(openingAmount), expectedAmount: money(openingAmount), status: 'open', openedAt: new Date().toISOString() };
+      db.cashSession = session; writeLocal(db); return session;
+    });
   },
   async closeCashSession(id: string, closingAmount: number): Promise<CashSessionRecord> {
     if (!Number.isFinite(closingAmount) || closingAmount < 0) throw new Error('El efectivo contado no puede ser negativo.');
@@ -993,12 +1174,15 @@ export const dataService = {
         throw new Error('No se pudo confirmar el cierre de caja. Consulta el estado del turno antes de repetirlo.');
       }
     }
-    const db = readLocal(); const session = db.cashSession;
-    if (!session || session.id !== id || session.status !== 'open') throw new Error('No se encontró un turno local abierto.');
-    const cashSales = db.sales.filter(s => s.cashSessionId === id && s.status === 'completed').reduce((sum, sale) => sum + (sale.payments?.filter(p => p.method === 'cash').reduce((total, payment) => total + payment.amount, 0) ?? (sale.paymentMethod === 'cash' ? sale.totalPrice : 0)), 0);
-    const expected = money(session.openingAmount + cashSales);
-    const closed: CashSessionRecord = { ...session, closingAmount: money(closingAmount), expectedAmount: expected, difference: money(closingAmount - expected), status: 'closed', closedAt: new Date().toISOString() };
-    db.cashSession = null; writeLocal(db); return closed;
+    return localHotelWrite(async () => {
+      const db = readLocal(); const session = db.cashSession;
+      if (!session || session.id !== id || session.status !== 'open') throw new Error('No se encontró un turno local abierto.');
+      const cashSales = db.sales.filter(s => s.cashSessionId === id && s.status === 'completed').reduce((sum, sale) => sum + (sale.payments?.filter(p => p.method === 'cash').reduce((total, payment) => total + payment.amount, 0) ?? (sale.paymentMethod === 'cash' ? sale.totalPrice : 0)), 0);
+      const hotelCash = (db.hotelPayments || []).filter(p => p.cashSessionId === id && p.method === 'cash').reduce((sum,p) => sum+p.amount,0);
+      const expected = money(session.openingAmount + cashSales + hotelCash);
+      const closed: CashSessionRecord = { ...session, closingAmount: money(closingAmount), expectedAmount: expected, difference: money(closingAmount - expected), status: 'closed', closedAt: new Date().toISOString() };
+      db.cashSession = null; writeLocal(db); return closed;
+    });
   },
   async getSuppliers(): Promise<Supplier[]> {
     try {
@@ -1140,6 +1324,7 @@ export const dataService = {
       for (const item of items) {
         const product = db.products.find(p => p.id === item.productId && p.productType !== 'ingredient' && p.productType !== 'supplies');
         if (!product) throw new Error('Hay un producto que ya no está disponible.');
+        validateLocalQuantity(product, item.quantity);
         total += product.price * item.quantity;
         order.items.push({ productId: product.id, productName: product.name, quantity: item.quantity, unitPrice: product.price, notes: item.notes });
       }
@@ -1154,7 +1339,7 @@ export const dataService = {
   async getOrders(): Promise<OrderRecord[]> {
     try {
       const data = await api<any[]>('/orders');
-      const normalized = data.map(row => ({ id: row.id, channel: row.channel, customer: row.customer, phone: row.phone, address: row.address, status: row.status, notes: row.notes, total: row.total, created_at: row.created_at, tableId: row.table_id || row.tableId || null, tableNumber: row.table_number || row.tableNumber || null, waiter: row.waiter || '', items: (row.items || []).map((item: any) => ({ productId: item.product_id || item.productId, productName: item.product_name || item.productName, quantity: item.quantity, unitPrice: item.unit_price || item.unitPrice, notes: item.notes })) })) as OrderRecord[];
+      const normalized = data.map(row => ({ id: row.id, saleId: row.sale_id || undefined, restaurantMetadata: typeof row.restaurant_metadata === 'string' ? JSON.parse(row.restaurant_metadata) : {}, channel: row.channel, customer: row.customer, phone: row.phone, address: row.address, status: row.status, notes: row.notes, total: row.total, created_at: row.created_at, tableId: row.table_id || row.tableId || null, tableNumber: row.table_number || row.tableNumber || null, waiter: row.waiter || '', items: (row.items || []).map((item: any) => ({ productId: item.product_id || item.productId, productName: item.product_name || item.productName, quantity: item.quantity, unitPrice: item.unit_price || item.unitPrice, notes: item.notes })) })) as OrderRecord[];
       const db = readLocal(); db.orders = normalized; writeLocal(db); return normalized;
     } catch (error) {
       if (!canFallbackToLocal(error)) throw error;
@@ -1182,17 +1367,27 @@ export const dataService = {
     const items = input.items.map(item => {
       const product = db.products.find(p => p.id === item.productId && p.productType !== 'ingredient' && p.productType !== 'supplies');
       if (!product) throw new Error('Hay un producto que ya no está disponible.');
+      validateLocalQuantity(product, item.quantity);
       const recipe = db.recipes.find(r => r.productId === product.id);
       if (!recipe && product.stock < item.quantity) throw new Error(`Stock insuficiente para ${product.name}.`);
       return { productId: product.id, productName: product.name, quantity: item.quantity, unitPrice: product.price, notes: item.notes };
     });
-    const created: OrderRecord = { id: uniqueId('PED'), channel: input.channel, customer: input.customer || 'Cliente general', phone: input.phone || '', address: input.address || '', status: 'received', notes: input.notes || '', total: money(items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0)), created_at: new Date().toISOString(), items, tableId: input.tableId || null, tableNumber: input.tableNumber || null, waiter: input.waiter || '' };
+    const created: OrderRecord = { restaurantMetadata: { ...input.restaurantMetadata, numero: Math.max(0, ...db.orders.map(o => Number(o.restaurantMetadata?.numero) || 0)) + 1 }, id: uniqueId('PED'), channel: input.channel, customer: input.customer || 'Cliente general', phone: input.phone || '', address: input.address || '', status: 'received', notes: input.notes || '', total: money(items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0)), created_at: new Date().toISOString(), items, tableId: input.tableId || null, tableNumber: input.tableNumber || null, waiter: input.waiter || '' };
     db.orders.unshift(created); writeLocal(db); return created;
   },
-  async updateOrderStatus(id: string, status: OrderRecord['status']): Promise<void> {
-    try { await api(`/orders/${encodeURIComponent(id)}/status?status=${encodeURIComponent(status)}`, { method: 'PATCH' }); }
+  async updateOrderStatus(id: string, status: OrderRecord['status'], options: { expectedStatus?: string; actorId?: string; actorName?: string; reason?: string } = {}): Promise<void> {
+    const params = new URLSearchParams({ status, ...options });
+    try { await api(`/orders/${encodeURIComponent(id)}/status?${params}`, { method: 'PATCH' }); }
     catch (error) { if (!canFallbackToLocal(error)) throw error; }
-    const db = readLocal(); const order = db.orders.find(o => o.id === id); if (order) order.status = status; writeLocal(db);
+    const db = readLocal(); const order = db.orders.find(o => o.id === id);
+    if (isDesktopMode() && order?.saleId) throw new Error('El pedido ya fue cobrado. Gestiona su venta desde el historial.');
+    if (isDesktopMode() && order && options.expectedStatus && order.status !== options.expectedStatus) throw new Error('El pedido cambió de estado. Actualiza antes de continuar.');
+    if (order) {
+      order.status = status;
+      const prefix = { preparing: 'tomado', ready: 'finalizado', cancelled: 'cancelado', delivered: 'entregado', received: '' }[status];
+      if (prefix) order.restaurantMetadata = { ...order.restaurantMetadata, [`${prefix}PorId`]: options.actorId, [`${prefix}PorNombre`]: options.actorName, [`${prefix}En`]: new Date().toISOString(), motivoCancelacion: options.reason };
+    }
+    writeLocal(db);
   },
   async getInventoryMovements(limit = 10000, productId?: string, filters?: { types?: string; search?: string; dateFrom?: string; dateTo?: string; locationId?: string }): Promise<InventoryMovementRecord[]> {
     try {

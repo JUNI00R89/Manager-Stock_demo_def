@@ -1,3 +1,5 @@
+import { useAuth } from '../../context/AuthContext';
+import { canPerformAction } from '../../security/permissions';
 import { useCallback, useEffect, useState } from 'react';
 import { Layout } from '../../components/Layout';
 import { Card } from '../../components/ui/card';
@@ -25,6 +27,8 @@ const HOURS = ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '1
 const DAYS_OF_WEEK = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
 export function Appointments() {
+  const { user } = useAuth();
+  const canManage = canPerformAction(user, 'services.manage');
   const [viewMode, setViewMode] = useState<ViewMode>('semana');
   const [selectedPro, setSelectedPro] = useState<string | 'todos'>('todos');
   const [selectedCita, setSelectedCita] = useState<Cita | null>(null);
@@ -262,7 +266,7 @@ export function Appointments() {
                 </div>
                 <p className="text-xl font-bold text-orange-600">${svc?.precio}</p>
               </div>
-              <div className="flex gap-2 mt-5">
+              <div style={{ display: canManage ? undefined : 'none' }} className="flex gap-2 mt-5">
                 {selectedCita.estado === 'reservada' && (
                   <Button size="sm" className="flex-1 bg-[var(--brand-primary)] text-white hover:opacity-90" onClick={() => void setAppointmentStatus(selectedCita, 'confirmed')}>
                     <Check size={14} className="mr-1" /> Confirmar

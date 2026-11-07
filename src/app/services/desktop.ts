@@ -452,6 +452,19 @@ export const desktop = {
       writeJson(roomsKey(businessId), rooms);
       return rooms;
     },
+    async updateHousekeeping(id: string, input: { cleaningStatus: import('./dataService').CleaningStatus; cleaningAssignee: string; expectedStatus?: string }): Promise<HotelRoomRecord> {
+      const rooms = await this.rooms();
+      const room = rooms.find(row => row.id === id);
+      if (!room) throw new Error('Habitación no encontrada.');
+      const current = room.cleaningStatus || (room.status === 'cleaning' ? 'sucia' : 'inspeccionada');
+      if (input.expectedStatus && input.expectedStatus !== current) throw new Error('La limpieza cambió. Actualiza el tablero.');
+      const reservations = await this.reservations();
+      const reserved = reservations.some(r => r.roomId === id && r.status === 'confirmed' && r.checkOut > new Date().toISOString().slice(0, 10));
+      const updated: HotelRoomRecord = { ...room, cleaningStatus: input.cleaningStatus, cleaningAssignee: input.cleaningAssignee.trim(), updatedAt: new Date().toISOString(),
+        status: ['occupied', 'maintenance'].includes(room.status) ? room.status : input.cleaningStatus === 'inspeccionada' ? (reserved ? 'reserved' : 'available') : 'cleaning' };
+      writeJson(roomsKey(requireBusinessId()), rooms.map(row => row.id === id ? updated : row));
+      return updated;
+    },
     async createRoom(input: any): Promise<HotelRoomRecord> {
       const businessId = requireBusinessId();
       const rooms = await this.rooms();
@@ -468,6 +481,8 @@ export const desktop = {
         capacity: Number(input.capacity) || 1,
         pricePerNight: Number(input.pricePerNight) || 0,
         status: input.status || 'available',
+        cleaningStatus: input.status === 'cleaning' ? 'sucia' : 'inspeccionada',
+        cleaningAssignee: '',
         amenities: Array.isArray(input.amenities) ? input.amenities : [],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -521,8 +536,16 @@ export const desktop = {
       const updated = { ...reservation, status };
       writeJson(reservationsKey(businessId), reservations.map(item => item.id === id ? updated : item));
       const rooms = await this.rooms();
-      const roomStatus = status === 'checkin' ? 'occupied' : status === 'confirmed' ? 'reserved' : 'available';
-      writeJson(roomsKey(businessId), rooms.map(room => room.id === reservation.roomId ? { ...room, status: roomStatus } : room));
+      const dirty = status === 'checkout' && reservation.status === 'checkin';
+      const nextReservations = reservations.map(item => item.id === id ? updated : item);
+      const occupied = nextReservations.some(item => item.roomId === reservation.roomId && item.status === 'checkin');
+      const reserved = nextReservations.some(item => item.roomId === reservation.roomId && item.status === 'confirmed' && item.checkOut > new Date().toISOString().slice(0, 10));
+      writeJson(roomsKey(businessId), rooms.map(room => {
+        if (room.id !== reservation.roomId) return room;
+        let roomStatus: HotelRoomRecord['status'] = ['maintenance', 'cleaning'].includes(room.status) ? room.status : occupied ? 'occupied' : reserved ? 'reserved' : 'available';
+        if (dirty && roomStatus === 'available') roomStatus = 'cleaning';
+        return { ...room, status: roomStatus, ...(dirty ? { cleaningStatus: 'sucia' as const, cleaningAssignee: '' } : {}) };
+      }));
       return updated;
     },
   },
