@@ -1,3 +1,4 @@
+import { canPerformAction } from '../../security/permissions';
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { Layout } from '../../components/Layout';
 import { Card } from '../../components/ui/card';
@@ -34,6 +35,7 @@ import { toastError } from '../../utils/notifications';
 import { dataService, type OrderRecord, type RestaurantTableRecord } from '../../services/dataService';
 import { findProductByBarcode, type Product } from '../../utils/mockData';
 import { useAuth } from '../../context/AuthContext';
+import { useBusiness } from '../../context/BusinessContext';
 
 const money = (value: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(value);
 
@@ -91,7 +93,11 @@ const elapsedLabel = (iso: string | null) => {
 };
 
 export function Tables() {
+  const { config } = useBusiness();
   const { user } = useAuth();
+  const canCollect = canPerformAction(user, 'sales.create');
+  const canEditTables = user?.role === 'owner' || user?.role === 'business_admin' || (!!user?.customRoleId && canPerformAction(user, 'orders.manage'));
+  const canManage = canPerformAction(user, 'orders.manage');
   const [tables, setTables] = useState<RestaurantTableRecord[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<OrderRecord[]>([]);
@@ -342,6 +348,7 @@ export function Tables() {
   };
 
   const openTable = (view: TableView) => {
+    if (!canManage) return;
     if (view.inactive) return;
     setSelectedTable(view.table);
     setCart([]);
@@ -359,40 +366,15 @@ export function Tables() {
     }
     setSavingOrder(true);
     try {
-      const kitchenItems = cart.filter((item) => item.sendToKitchen);
-      const billOnlyItems = cart.filter((item) => !item.sendToKitchen);
-
-      if (billOnlyItems.length > 0) {
-        const existingBillOnly = readBillOnly(selectedTable.id);
-        const mergedBillOnly = existingBillOnly.map((item) => ({ ...item }));
-        billOnlyItems.forEach((newItem) => {
-          const existing = mergedBillOnly.find((i) => i.productId === newItem.productId);
-          if (existing) existing.quantity += newItem.quantity;
-          else mergedBillOnly.push({ ...newItem });
-        });
-        writeBillOnly(selectedTable.id, mergedBillOnly);
-      }
-
-      if (kitchenItems.length > 0) {
-        const openOrder = activeOrders.find(
-          (order) => Number(order.tableNumber) === selectedTable.number && (order.status === 'received' || order.status === 'preparing')
-        );
-        const items = kitchenItems.map((item) => ({ productId: item.productId, quantity: item.quantity }));
-        if (openOrder) {
-          await dataService.addOrderItems(openOrder.id, items);
-        } else {
-          await dataService.createOrder({
-            channel: 'table',
-            customer: customerName.trim() || `Mesa ${selectedTable.number}`,
-            phone: '',
-            address: '',
-            notes: `Mesa ${selectedTable.number}`,
-            tableId: selectedTable.id,
-            tableNumber: selectedTable.number,
-            items,
-          });
-        }
-      }
+      const kitchenItems = cart.filter(item => item.sendToKitchen);
+      const billOnlyItems = cart.filter(item => !item.sendToKitchen);
+      await dataService.createOrder({
+        channel: 'table', customer: customerName.trim() || `Mesa ${selectedTable.number}`,
+        tableId: selectedTable.id, tableNumber: selectedTable.number,
+        waiter: user?.name || '',
+        items: cart.map(item => ({ productId: item.productId, quantity: item.quantity })),
+        restaurantMetadata: { mesaId: selectedTable.id, meseroId: user?.id || '', directProductIds: billOnlyItems.map(item => item.productId) },
+      });
 
       const refreshed = await dataService.getOrders();
       setOrders(refreshed);
@@ -416,11 +398,29 @@ export function Tables() {
     if (!view.occupied) return;
     setClosingId(view.table.id);
     try {
-      await Promise.all(view.orders.map((order) => dataService.updateOrderStatus(order.id, 'delivered')));
+      // Keep the same key after an ambiguous network failure, including bills
+      // containing only drinks. Clear it only once the sale is confirmed.
+      const keyName = `table_checkout_${view.table.id}`;
+      let key = localStorage.getItem(keyName);
+      if (!key) {
+        key = crypto.randomUUID();
+        localStorage.setItem(keyName, key);
+      }
+      const session = await dataService.getCurrentCashSession();
+      const sale = await dataService.createSale({
+        orderIds: view.orders.map(order => order.id),
+        items: view.billOnly.map(item => ({ productId: item.productId, quantity: item.quantity })),
+        customer: `Mesa ${view.table.number}`,
+        paymentMethod: 'cash',
+        taxRate: config?.taxRate,
+        cashSessionId: session?.id,
+        idempotencyKey: key,
+      });
       writeBillOnly(view.table.id, []);
-      const refreshed = await dataService.getOrders();
-      setOrders(refreshed);
-      toast.success(`Mesa ${view.table.number} cerrada`, { description: `Total cobrado: ${money(view.total)}` });
+      localStorage.removeItem(keyName);
+      setOrders(prev => prev.filter(order => !view.orders.some(closed => closed.id === order.id)));
+      toast.success(`Mesa ${view.table.number} cerrada`, { description: `Total cobrado en efectivo: ${money(sale.totalPrice)}` });
+      void dataService.getOrders().then(setOrders).catch(() => undefined);
     } catch (error) {
       toastError(error, 'No se pudo cerrar la mesa');
     } finally {
@@ -467,7 +467,7 @@ export function Tables() {
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
               Actualizar
             </Button>
-            <Button onClick={openCreate}>
+            <Button style={{ display: canEditTables ? undefined : 'none' }} onClick={openCreate}>
               <Plus className="h-4 w-4" />
               Nueva mesa
             </Button>
@@ -522,7 +522,7 @@ export function Tables() {
           <Card className="border-dashed p-10 text-center">
             <UtensilsCrossed className="mx-auto h-8 w-8 text-primary" />
             <p className="mt-3 text-sm text-muted-foreground">Aún no hay mesas. Crea la primera para empezar a tomar pedidos en el salón.</p>
-            <Button className="mt-4" onClick={openCreate}>
+            <Button style={{ display: canEditTables ? undefined : 'none' }} className="mt-4" onClick={openCreate}>
               <Plus className="h-4 w-4" />
               Crear mesas
             </Button>
@@ -551,6 +551,7 @@ export function Tables() {
                         size="icon"
                         variant="ghost"
                         className="h-7 w-7"
+                        style={{ display: canEditTables ? undefined : 'none' }}
                         aria-label={`Editar mesa ${view.table.number}`}
                         onClick={(event) => {
                           event.stopPropagation();
@@ -582,6 +583,7 @@ export function Tables() {
                       <Button
                         size="sm"
                         className="w-full bg-rose-600 hover:bg-rose-700"
+                        style={{ display: canCollect ? undefined : 'none' }}
                         disabled={closingId === view.table.id}
                         onClick={(event) => {
                           event.stopPropagation();
@@ -589,7 +591,7 @@ export function Tables() {
                         }}
                       >
                         <Receipt size={14} className="mr-1" />
-                        {closingId === view.table.id ? 'Cerrando...' : 'Cerrar Cuenta'}
+                        {closingId === view.table.id ? 'Cobrando...' : 'Cobrar en efectivo'}
                       </Button>
                     </div>
                   )}

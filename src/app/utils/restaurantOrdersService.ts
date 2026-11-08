@@ -30,7 +30,8 @@ export async function deliverRestaurantOrder(
       // La caja es opcional para propietarios y administradores.
     }
     sale = await dataService.createSale({
-      items: order.items.map((item) => ({
+      orderIds: order.source === 'shared' ? [order.id] : undefined,
+      items: order.source === 'shared' ? [] : order.items.map((item) => ({
         productId: item.productId,
         quantity: item.cantidad,
       })),

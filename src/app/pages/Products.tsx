@@ -23,8 +23,8 @@ export function Products() {
   const { user } = useAuth();
   const isCustomRole = Boolean(user?.customRoleId);
   const canViewInventory = canAccessPath('/warehouse/movements', user?.role, config, isCustomRole ? user?.permissions ?? [] : undefined);
-  const canCreateProduct = isCustomRole ? Boolean(user?.permissions?.includes('catalog.create')) : user?.role === 'owner' || user?.role === 'business_admin';
-  const canEditProduct = isCustomRole ? Boolean(user?.permissions?.includes('catalog.edit')) : user?.role === 'owner' || user?.role === 'business_admin';
+  const canCreateProduct = canAccessPath('/products/new', user?.role, config, isCustomRole ? user?.permissions ?? [] : undefined);
+  const canEditProduct = canAccessPath('/products/current/edit', user?.role, config, isCustomRole ? user?.permissions ?? [] : undefined);
   const [products, setProducts] = useState<Product[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Todas');

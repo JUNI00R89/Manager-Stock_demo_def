@@ -23,6 +23,7 @@ import { Waiter } from './pages/restaurant/Waiter';
 import { Orders } from './pages/restaurant/Orders';
 import { Catalog as RestaurantCatalog } from './pages/restaurant/Catalog';
 import { RestaurantSettingsPage } from './pages/restaurant/Settings';
+import { HotelIncome } from './pages/hotel/Income';
 import { Rooms } from './pages/hotel/Rooms';
 import { Availability } from './pages/hotel/Availability';
 import { Housekeeping } from './pages/hotel/Housekeeping';
@@ -164,6 +165,7 @@ export const router = createBrowserRouter([
       { path: 'restaurant/catalog', element: <RestaurantCatalog /> },
       { path: 'restaurant/recipes', element: <Recipes /> },
       { path: 'restaurant/settings', element: <RestaurantSettingsPage /> },
+      { path: 'hotel/income', element: <HotelIncome /> },
       { path: 'hotel/rooms', element: <Rooms /> },
       { path: 'hotel/availability', element: <Availability /> },
       { path: 'hotel/housekeeping', element: <Housekeeping /> },

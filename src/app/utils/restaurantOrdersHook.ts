@@ -17,6 +17,11 @@ export function useRestaurantOrders(scope: string) {
       if (!active) return;
       setOrders(rows);
       setLoading(false);
+      setError(null);
+    }, (reason) => {
+      if (!active) return;
+      setError(reason instanceof Error ? reason.message : 'No se pudieron actualizar los pedidos.');
+      setLoading(false);
     });
     repository.listar(scope)
       .then((rows) => {

@@ -1,3 +1,8 @@
+import { ReservationCalendar, calendarDate, shiftDate } from './ReservationCalendar';
+import { ConfirmActionDialog } from '../../components/ConfirmActionDialog';
+import { HotelAccountDialog } from './HotelAccountDialog';
+import { useAuth } from '../../context/AuthContext';
+import { canPerformAction } from '../../security/permissions';
 import { useCallback, useEffect, useState } from 'react';
 import { Layout } from '../../components/Layout';
 import { Card } from '../../components/ui/card';
@@ -8,7 +13,7 @@ import {
   CheckCircle2, X, Clock
 } from 'lucide-react';
 import type { Habitacion, ReservaHotel } from '../../utils/mockData';
-import { createHotelReservation, getHotelReservations, getHotelRooms, updateHotelReservationStatus, type HotelReservationRecord, type HotelRoomRecord } from '../../services/dataService';
+import { moveHotelReservation, createHotelReservation, getHotelReservations, getHotelRooms, updateHotelReservationStatus, type HotelReservationRecord, type HotelRoomRecord } from '../../services/dataService';
 import { toast } from 'sonner';
 import { toastError } from '../../utils/notifications';
 
@@ -43,10 +48,12 @@ function formatDate(d: Date) {
 }
 
 function isoDate(d: Date) {
-  return d.toISOString().split('T')[0];
+  return calendarDate(d);
 }
 
 export function Availability() {
+  const { user } = useAuth();
+  const canManage = canPerformAction(user, 'hotel.manage');
   const [startDate, setStartDate] = useState(() => new Date());
   const [habitaciones, setHabitaciones] = useState<Habitacion[]>([]);
   const [reservas, setReservas] = useState<ReservaHotel[]>([]);
@@ -71,6 +78,8 @@ export function Availability() {
   }, []);
   useEffect(() => { void load(); }, [load]);
   const [selectedReserva, setSelectedReserva] = useState<ReservaHotel | null>(null);
+  const [billingId, setBillingId] = useState<string | null>(null);
+  const [accountReservations, setAccountReservations] = useState<HotelReservationRecord[]>([]);
   const [showNewReserva, setShowNewReserva] = useState(false);
   const [newReserva, setNewReserva] = useState({ huesped: '', habitacionId: '', checkIn: '', checkOut: '', anticipo: '' });
 
@@ -80,22 +89,24 @@ export function Availability() {
   const prevPeriod = () => { const d = new Date(startDate); d.setDate(d.getDate() - 7); setStartDate(d); };
   const nextPeriod = () => { const d = new Date(startDate); d.setDate(d.getDate() + 7); setStartDate(d); };
 
-  const getReservaForCell = (habitacionId: string, day: Date): ReservaHotel | null => {
-    const dayStr = isoDate(day);
-    return reservas.find(r =>
-      r.habitacionId === habitacionId &&
-      r.estado !== 'cancelada' &&
-      r.checkIn <= dayStr &&
-      r.checkOut > dayStr
-    ) || null;
+  const [pendingMove, setPendingMove] = useState<{reservation: ReservaHotel; roomId: string; checkIn: string} | null>(null);
+  const [moving, setMoving] = useState(false);
+  const proposeMove = (move: {reservation: ReservaHotel; roomId: string; checkIn: string}) => {
+    const room = habitaciones.find(r => r.id === move.roomId);
+    const end = shiftDate(move.checkIn,move.reservation.noches);
+    if (!room || ['mantenimiento','limpieza'].includes(room.estado)) { toast.error('La habitación no está disponible.'); return; }
+    if (reservas.some(r => r.id !== move.reservation.id && r.habitacionId === move.roomId && ['confirmada','checkin'].includes(r.estado) && r.checkIn < end && r.checkOut > move.checkIn)) { toast.error('Ya existe una reserva durante ese periodo.'); return; }
+    setPendingMove(move);
   };
-
-  const getReservaStart = (r: ReservaHotel, days: Date[]) => {
-    return days.findIndex(d => isoDate(d) === r.checkIn);
-  };
-
-  const getReservaEnd = (r: ReservaHotel, days: Date[]) => {
-    return days.findIndex(d => isoDate(d) === r.checkOut);
+  const saveMove = async () => {
+    if (!pendingMove || moving) return;
+    setMoving(true);
+    try {
+      const {reservation,roomId,checkIn} = pendingMove;
+      await moveHotelReservation(reservation.id,{roomId,checkIn,expectedRoomId:reservation.habitacionId,expectedCheckIn:reservation.checkIn,expectedCheckOut:reservation.checkOut});
+      toast.success('Reserva movida.'); setPendingMove(null); await load();
+    } catch(error) { toast.error(error instanceof Error ? error.message : 'No se pudo mover la reserva.'); setPendingMove(null); await load(); }
+    finally { setMoving(false); }
   };
 
   const handleCheckIn = async (reservaId: string) => {
@@ -104,8 +115,8 @@ export function Availability() {
   };
 
   const handleCheckOut = async (reservaId: string) => {
-    try { await updateHotelReservationStatus(reservaId, 'checkout'); toast.success('Check-out completado.'); await load(); setSelectedReserva(null); }
-    catch (error) { toastError(error, 'No se pudo registrar el check-out.'); }
+    try { setAccountReservations(await getHotelReservations()); setBillingId(reservaId); setSelectedReserva(null); }
+    catch (error) { toastError(error, 'No se pudo cargar la cuenta.'); }
   };
 
   const handleNewReservaSubmit = async () => {
@@ -131,7 +142,7 @@ export function Availability() {
 
   return (
     <Layout>
-      <div className="space-y-5">
+      <div className="min-w-0 space-y-5">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
           <div>
@@ -140,9 +151,9 @@ export function Availability() {
             </h1>
             <p className="text-sm text-muted-foreground mt-0.5">Vista Gantt de reservas por habitación</p>
           </div>
-          <Button onClick={() => setShowNewReserva(v => !v)} className="bg-orange-500 hover:bg-orange-600 text-white self-start sm:self-auto">
+          {canManage && <Button onClick={() => setShowNewReserva(v => !v)} className="bg-orange-500 hover:bg-orange-600 text-white self-start sm:self-auto">
             <Plus size={18} className="mr-2" /> Nueva reserva
-          </Button>
+          </Button>}
         </div>
 
         {/* KPI chips */}
@@ -215,79 +226,20 @@ export function Availability() {
         <Card className="border border-border overflow-hidden">
           {/* Navigation */}
           <div className="flex items-center gap-3 p-4 border-b border-border bg-accent/30">
-            <Button variant="outline" size="sm" onClick={prevPeriod} className="h-8 w-8 p-0"><ChevronLeft size={16} /></Button>
+            <Button aria-label="Semana anterior" disabled={moving || !!pendingMove} variant="outline" size="sm" onClick={prevPeriod} className="h-8 w-8 p-0"><ChevronLeft size={16} /></Button>
             <span className="text-sm font-semibold text-foreground flex-1 text-center">
               {days[0].toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })}
             </span>
-            <Button variant="outline" size="sm" onClick={nextPeriod} className="h-8 w-8 p-0"><ChevronRight size={16} /></Button>
+            <Button aria-label="Semana siguiente" disabled={moving || !!pendingMove} variant="outline" size="sm" onClick={nextPeriod} className="h-8 w-8 p-0"><ChevronRight size={16} /></Button>
           </div>
 
-          {!loading && habitaciones.length === 0 ? <div className="p-8 text-center text-sm text-muted-foreground">No hay habitaciones registradas. Crea habitaciones desde Gestión de habitaciones o carga los datos de demostración.</div> : <div className="overflow-x-auto">
-            <table className="w-full border-collapse" style={{ minWidth: `${140 + numDays * 52}px` }}>
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left px-4 py-2 text-xs font-semibold text-muted-foreground bg-accent/30 sticky left-0 z-10 w-36">Habitación</th>
-                  {days.map((day, i) => {
-                    const isToday = isoDate(day) === isoDate(new Date());
-                    return (
-                      <th key={i} className={`text-center py-2 text-[10px] font-medium w-13 ${isToday ? 'text-orange-600 font-bold' : 'text-muted-foreground'}`} style={{ width: 52 }}>
-                        {formatDate(day)}
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
-              <tbody>
-                {habitaciones.map((hab, hi) => (
-                  <tr key={hab.id} className={`border-b border-border ${hi % 2 === 0 ? '' : 'bg-muted/20'}`}>
-                    <td className="px-4 py-2 sticky left-0 bg-card z-10 border-r border-border">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                          hab.estado === 'disponible' ? 'bg-green-500' :
-                          hab.estado === 'ocupada' ? 'bg-orange-500' :
-                          hab.estado === 'limpieza' ? 'bg-blue-500' : hab.estado === 'reservada' ? 'bg-indigo-500' : 'bg-gray-400'
-                        }`} />
-                        <div>
-                          <p className="text-xs font-semibold text-foreground">Hab. {hab.numero}</p>
-                          <p className="text-[10px] text-muted-foreground">{TIPO_LABELS[hab.tipo]} · P{hab.piso}</p>
-                        </div>
-                      </div>
-                    </td>
-                    {days.map((day, di) => {
-                      const reserva = getReservaForCell(hab.id, day);
-                      const isStart = reserva && isoDate(day) === reserva.checkIn;
-                      const isToday = isoDate(day) === isoDate(new Date());
-
-                      return (
-                        <td
-                          key={di}
-                          className={`relative h-10 border-r border-border/40 cursor-pointer ${isToday ? 'bg-orange-50/50 dark:bg-orange-950/10' : ''}`}
-                          onClick={() => reserva && setSelectedReserva(reserva)}
-                        >
-                          {reserva && (
-                            <div
-                              className={`absolute inset-y-1 left-0 right-0 ${ESTADO_COLORS[reserva.estado]} rounded-sm mx-0.5 flex items-center overflow-hidden`}
-                              title={`${reserva.huesped} · ${ESTADO_LABELS[reserva.estado]}`}
-                            >
-                              {isStart && (
-                                <span className="text-white text-[9px] font-semibold px-1.5 truncate whitespace-nowrap">{reserva.huesped.split(' ')[0]}</span>
-                              )}
-                            </div>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>}
+          {!loading && habitaciones.length === 0 ? <div className="p-8 text-center text-sm text-muted-foreground">No hay habitaciones registradas. Crea habitaciones desde Gestión de habitaciones o carga los datos de demostración.</div> : <ReservationCalendar rooms={habitaciones} reservations={reservas} days={days} canMove={canManage && !loading && !moving && !pendingMove} onSelect={setSelectedReserva} onMove={proposeMove} />}
         </Card>
 
         {/* Reserva detail modal */}
         {selectedReserva && (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setSelectedReserva(null)}>
-            <Card className="w-full max-w-md p-6 border border-border" onClick={e => e.stopPropagation()}>
+            <Card className="max-h-[90dvh] w-full max-w-md overflow-y-auto p-4 sm:p-6 border border-border" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-bold text-foreground text-lg">Detalles de Reserva</h3>
                 <button onClick={() => setSelectedReserva(null)} className="p-1 hover:text-red-500 text-muted-foreground">
@@ -330,15 +282,15 @@ export function Availability() {
                   {ESTADO_LABELS[selectedReserva.estado]}
                 </Badge>
               </div>
-              <div className="flex gap-2 mt-5">
-                {selectedReserva.estado === 'confirmada' && (
+              <div className="flex flex-wrap gap-2 mt-5">
+                {canManage && selectedReserva.estado === 'confirmada' && (
                   <Button onClick={() => handleCheckIn(selectedReserva.id)} className="flex-1 bg-green-600 hover:bg-green-700 text-white">
                     <CheckCircle2 size={16} className="mr-2" /> Check-in
                   </Button>
                 )}
                 {selectedReserva.estado === 'checkin' && (
                   <Button onClick={() => handleCheckOut(selectedReserva.id)} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white">
-                    <Clock size={16} className="mr-2" /> Check-out
+                    <Clock size={16} className="mr-2" /> Cuenta y cobro
                   </Button>
                 )}
                 <Button variant="outline" onClick={() => setSelectedReserva(null)} className="flex-1">Cerrar</Button>
@@ -347,6 +299,8 @@ export function Availability() {
           </div>
         )}
       </div>
+      <ConfirmActionDialog open={!!pendingMove} onOpenChange={open=>{if(!open&&!moving)setPendingMove(null);}} title="Mover reserva" description={pendingMove ? `${pendingMove.reservation.huesped}: de habitación ${habitaciones.find(r=>r.id===pendingMove.reservation.habitacionId)?.numero} (${pendingMove.reservation.checkIn} → ${pendingMove.reservation.checkOut}) a habitación ${habitaciones.find(r=>r.id===pendingMove.roomId)?.numero} (${pendingMove.checkIn} → ${shiftDate(pendingMove.checkIn,pendingMove.reservation.noches)}). Se conservan ${pendingMove.reservation.noches} noches y el precio acordado.` : ''} confirmLabel="Guardar movimiento" onConfirm={saveMove}/>
+      {billingId && <HotelAccountDialog reservations={accountReservations.filter(r => r.id === billingId)} initialId={billingId} onClose={() => setBillingId(null)} onSaved={() => void load()} />}
     </Layout>
   );
 }

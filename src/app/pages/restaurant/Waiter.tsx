@@ -1,3 +1,4 @@
+import { canPerformAction } from '../../security/permissions';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
@@ -73,6 +74,7 @@ function tableDisplayName(table: { id: string; number: number }, names: Record<s
 
 export function Waiter() {
   const { user } = useAuth();
+  const canCollect = canPerformAction(user, 'sales.create');
   const { config } = useBusiness();
   const scope = useRestaurantScope();
   const businessId = useRestaurantBusinessId();
@@ -80,7 +82,7 @@ export function Waiter() {
   const { settings } = useRestaurantSettings(scope);
   const { staff, activeStaff, toEmployee, setActive } = useRestaurantStaff(scope, user?.name || '');
   const active = activeStaff('mesero');
-  const { orders, loading: ordersLoading, repository } = useRestaurantOrders(ordersScope);
+  const { orders, loading: ordersLoading, error: ordersError, repository } = useRestaurantOrders(ordersScope);
   const { tables, loading: tablesLoading } = useRestaurantTables();
   const { activeMenu, loading: menuLoading, error: menuError } = useRestaurantCatalog(scope);
   const now = useNow(30_000);
@@ -314,6 +316,7 @@ export function Waiter() {
 
   return (
     <Layout>
+      {ordersError && <p role="alert" className="mb-3 rounded border border-red-200 p-3 text-red-600">{ordersError}</p>}
       <div className="flex h-[calc(100dvh-6rem)] flex-col overflow-hidden lg:h-auto lg:min-h-0 lg:overflow-visible">
         <div ref={contentRef} className="flex-1 overflow-y-auto pb-4 lg:overflow-visible lg:pb-0">
           <header className={`${selectedTable ? 'hidden lg:flex' : 'flex'} flex-col gap-3 sm:flex-row sm:items-start sm:justify-between`}>
@@ -518,7 +521,7 @@ export function Waiter() {
                         key={order.id}
                         order={order}
                         busy={busyOrderId === order.id}
-                        onDeliver={() => deliverOrder(order)}
+                        onDeliver={canCollect ? () => deliverOrder(order) : undefined}
                         currency={config?.currency}
                         now={now}
                       />
@@ -570,7 +573,7 @@ export function Waiter() {
                         key={order.id}
                         order={order}
                         busy={busyOrderId === order.id}
-                        onDeliver={() => deliverOrder(order)}
+                        onDeliver={canCollect ? () => deliverOrder(order) : undefined}
                         currency={config?.currency}
                         now={now}
                       />
@@ -718,7 +721,7 @@ function ReadyOrderCard({
 }: {
   order: Pedido;
   busy: boolean;
-  onDeliver: () => void;
+  onDeliver?: () => void;
   currency?: string;
   now: Date;
 }) {
@@ -751,9 +754,9 @@ function ReadyOrderCard({
         ))}
       </ul>
 
-      <Button className="mt-4 h-11 w-full bg-emerald-600 text-white hover:bg-emerald-700" onClick={onDeliver} disabled={busy}>
+      {onDeliver && <Button className="mt-4 h-11 w-full bg-emerald-600 text-white hover:bg-emerald-700" onClick={onDeliver} disabled={busy}>
         <CheckCircle2 size={18} /> {busy ? 'Registrando venta…' : 'Marcar como entregado'}
-      </Button>
+      </Button>}
     </article>
   );
 }

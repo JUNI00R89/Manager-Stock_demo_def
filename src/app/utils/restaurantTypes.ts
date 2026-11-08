@@ -33,6 +33,7 @@ export interface PedidoItem {
 }
 
 export interface Pedido {
+  source?: 'shared' | 'legacy';
   id: string;
   negocioId: string;
   numero: number;
@@ -98,7 +99,7 @@ export interface CrearPedidoInput {
 
 export interface PedidosRepository {
   listar(negocioId: string): Promise<Pedido[]>;
-  suscribirse(negocioId: string, listener: (pedidos: Pedido[]) => void): () => void;
+  suscribirse(negocioId: string, listener: (pedidos: Pedido[]) => void, onError?: (error: unknown) => void): () => void;
   crearPedido(input: CrearPedidoInput): Promise<Pedido>;
   tomarPedido(pedidoId: string, negocioId: string, empleado: EmpleadoRef): Promise<Pedido>;
   finalizarPedido(pedidoId: string, negocioId: string, empleado: EmpleadoRef): Promise<Pedido>;
