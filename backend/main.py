@@ -174,6 +174,8 @@ def required_permission_for_request(path: str, method: str) -> str | None:
         return "orders.view" if method == "GET" else "orders.manage"
     if path == "/api/dashboard": return "dashboard.view"
     if path == "/api/product-categories": return "catalog.view" if method == "GET" else "catalog.create"
+    if path == "/api/hotel/reports/income":
+        return "reports.view"
     if path.startswith("/api/hotel/rooms") or path.startswith("/api/hotel/reservations") or path == "/api/hotel/products":
         return "hotel.view" if method == "GET" else "hotel.manage"
     if path.startswith("/api/services/catalog") or path.startswith("/api/services/professionals") or path.startswith("/api/services/appointments"):
@@ -4188,7 +4190,8 @@ def cash_session_out(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         WHEN s.payment_method='cash' THEN s.total ELSE 0 END),0)
         FROM sales s WHERE s.cash_session_id=? AND s.status='completed'""", (row["id"],)).fetchone()[0]
     hotel_cash = conn.execute("SELECT COALESCE(SUM(amount),0) FROM hotel_payments WHERE cash_session_id=? AND method='cash'", (row["id"],)).fetchone()[0]
-    expected = round(row["opening_amount"] + cash_sales + hotel_cash, 2)
+    hotel_refunds = conn.execute("SELECT COALESCE(SUM(amount),0) FROM hotel_refunds WHERE cash_session_id=? AND method='cash'", (row["id"],)).fetchone()[0]
+    expected = round(row["opening_amount"] + cash_sales + hotel_cash - hotel_refunds, 2)
     return {"id": row["id"], "openedBy": row["opened_by"], "openingAmount": row["opening_amount"],
             "closingAmount": row["closing_amount"], "expectedAmount": row["expected_amount"] if row["status"] == "closed" else expected,
             "difference": row["difference"], "status": row["status"], "openedAt": timestamp_iso(row["opened_at"]), "closedAt": timestamp_iso(row["closed_at"])}
@@ -4404,6 +4407,57 @@ def create_hotel_reservation(payload: HotelReservationPayload):
         return hotel_reservation_out(row)
 
 
+class HotelSchedulePayload(BaseModel):
+    roomId: str = Field(min_length=1, max_length=80)
+    checkIn: date
+    expectedRoomId: str = Field(min_length=1, max_length=80)
+    expectedCheckIn: date
+    expectedCheckOut: date
+
+
+@app.patch("/api/hotel/reservations/{reservation_id}/schedule")
+def move_hotel_reservation(reservation_id: str, payload: HotelSchedulePayload):
+    if not has_permission("hotel.manage"):
+        raise HTTPException(403, "No tienes permiso para mover reservas.")
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT * FROM hotel_reservations WHERE id=? AND business_id=?", (reservation_id,current_business_id())).fetchone()
+        if not row:
+            raise HTTPException(404, "Reserva no encontrada.")
+        if row["status"] != "confirmed" or conn.execute("SELECT 1 FROM hotel_account_closures WHERE reservation_id=?", (reservation_id,)).fetchone():
+            raise HTTPException(409, "Solo se pueden mover reservas confirmadas antes del check-in.")
+        nights = (payload.expectedCheckOut-payload.expectedCheckIn).days
+        if nights <= 0:
+            raise HTTPException(422, "La estancia debe tener al menos una noche.")
+        try:
+            check_out = (payload.checkIn+timedelta(days=nights)).isoformat()
+        except OverflowError:
+            raise HTTPException(422, "Fecha fuera de rango.")
+        check_in = payload.checkIn.isoformat()
+        # Retry of a committed move with a lost response is harmless.
+        if (row["room_id"],row["check_in"],row["check_out"]) == (payload.roomId,check_in,check_out):
+            return hotel_account(conn,reservation_id)["reservation"]
+        if (row["room_id"],row["check_in"],row["check_out"]) != (payload.expectedRoomId,payload.expectedCheckIn.isoformat(),payload.expectedCheckOut.isoformat()):
+            raise HTTPException(409, "La reserva cambió en otra pantalla. Actualiza el calendario.")
+        room = conn.execute("SELECT * FROM hotel_rooms WHERE id=? AND business_id=?", (payload.roomId,current_business_id())).fetchone()
+        if not room:
+            raise HTTPException(404, "Habitación no encontrada en este hotel.")
+        if room["status"] in {"maintenance","cleaning"}:
+            raise HTTPException(409, "La habitación está en mantenimiento o limpieza.")
+        overlap = conn.execute("SELECT 1 FROM hotel_reservations WHERE business_id=? AND room_id=? AND id<>? AND status IN ('confirmed','checkin') AND check_in<? AND check_out>?", (current_business_id(),payload.roomId,reservation_id,check_out,check_in)).fetchone()
+        if overlap:
+            raise HTTPException(409, "Ya existe una reserva en esa habitación durante ese periodo.")
+        conn.execute("UPDATE hotel_reservations SET room_id=?,check_in=?,check_out=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", (payload.roomId,check_in,check_out,reservation_id))
+        for room_id in {row["room_id"],payload.roomId}:
+            occupied = conn.execute("SELECT 1 FROM hotel_reservations WHERE room_id=? AND status='checkin'", (room_id,)).fetchone()
+            reserved = conn.execute("SELECT 1 FROM hotel_reservations WHERE room_id=? AND status='confirmed' AND check_out>date('now')", (room_id,)).fetchone()
+            conn.execute("UPDATE hotel_rooms SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status NOT IN ('maintenance','cleaning')", ("occupied" if occupied else "reserved" if reserved else "available",room_id))
+        audit(conn,"move","hotel_reservation",reservation_id,{"from":{"roomId":row["room_id"],"checkIn":row["check_in"],"checkOut":row["check_out"]},"to":{"roomId":payload.roomId,"checkIn":check_in,"checkOut":check_out}})
+        result = hotel_account(conn,reservation_id)["reservation"]
+        conn.commit()
+        return result
+
+
 @app.patch("/api/hotel/reservations/{reservation_id}/status")
 def update_hotel_reservation_status(reservation_id: str, payload: HotelReservationStatusPayload):
     identity = current_identity()
@@ -4461,8 +4515,10 @@ def hotel_account(conn: sqlite3.Connection, reservation_id: str) -> dict:
     total = round(reservation["total_charges"], 2)
     payments = [{"id": row["id"], "amount": row["amount"], "method": row["method"], "reference": row["reference"], "cashSessionId": row["cash_session_id"], "createdAt": timestamp_iso(row["created_at"]), "idempotencyKey": row["idempotency_key"]} for row in conn.execute("SELECT * FROM hotel_payments WHERE reservation_id=? AND business_id=? ORDER BY created_at,id", (reservation_id,current_business_id()))]
     paid = round(sum(payment["amount"] for payment in payments), 2)
+    refunds = [hotel_refund_out(row) for row in conn.execute("SELECT * FROM hotel_refunds WHERE reservation_id=? AND business_id=? ORDER BY created_at,id", (reservation_id,current_business_id()))]
+    refunded = round(sum(row["amount"] for row in refunds), 2)
     closure = conn.execute("SELECT * FROM hotel_account_closures WHERE reservation_id=? AND business_id=?", (reservation_id,current_business_id())).fetchone()
-    return {"reservation": hotel_reservation_out(reservation), "charges": charges, "accommodationTotal": round(total-consumed, 2), "consumptionTotal": consumed, "total": total, "advance": reservation["advance"], "payments": payments, "paidTotal": paid, "balance": round(max(0, total-reservation["advance"]-paid), 2), "closedAt": closure["closed_at"] if closure else None, "receiptId": closure["receipt_id"] if closure else None, "receipt": json.loads(closure["receipt_json"]) if closure else None}
+    return {"reservation": hotel_reservation_out(reservation), "charges": charges, "accommodationTotal": round(total-consumed, 2), "consumptionTotal": consumed, "total": total, "advance": reservation["advance"], "payments": payments, "paidTotal": paid, "refunds": refunds, "refundedTotal": refunded, "netPaidTotal": round(paid-refunded, 2), "balance": 0 if closure else round(max(0, total-reservation["advance"]-paid+refunded), 2), "closedAt": closure["closed_at"] if closure else None, "receiptId": closure["receipt_id"] if closure else None, "receipt": json.loads(closure["receipt_json"]) if closure else None}
 
 
 @app.get("/api/hotel/products")
@@ -4524,7 +4580,7 @@ def cancel_hotel_charge(reservation_id: str, charge_id: str):
             raise HTTPException(409, "La cuenta ya está cerrada.")
         if account["reservation"]["status"] != "checkin":
             raise HTTPException(409, "La estancia está cerrada; no puedes modificar sus consumos.")
-        if account["total"] - charge["total"] < account["advance"] + account["paidTotal"]:
+        if account["total"] - charge["total"] < account["advance"] + account["netPaidTotal"]:
             raise HTTPException(409, "La anulación dejaría un saldo a favor. Primero requiere gestionar una devolución.")
         movements = conn.execute("SELECT * FROM inventory_movements WHERE business_id=? AND reference_type='hotel_charge' AND reference_id=? AND movement_type='consumption' ORDER BY id", (current_business_id(), charge_id)).fetchall()
         reverse_movements(conn, movements, f"Anulación de consumo {charge_id}", "adjustment")
@@ -4611,6 +4667,83 @@ def close_hotel_account(reservation_id: str):
         result = hotel_account(conn,reservation_id)
         conn.commit()
         return result
+
+
+def hotel_refund_out(row):
+    return {"id":row["id"],"reservationId":row["reservation_id"],"paymentId":row["payment_id"],"cashSessionId":row["cash_session_id"],"amount":row["amount"],"method":row["method"],"reason":row["reason"],"idempotencyKey":row["idempotency_key"],"createdAt":timestamp_iso(row["created_at"])}
+
+
+class HotelRefundPayload(BaseModel):
+    paymentId: str = Field(min_length=1, max_length=100)
+    cashSessionId: str = Field(min_length=1, max_length=100)
+    amount: float = Field(gt=0, le=1000000000, allow_inf_nan=False)
+    reason: str = Field(min_length=3, max_length=500)
+    idempotencyKey: str = Field(min_length=8, max_length=100)
+
+    @field_validator("reason")
+    @classmethod
+    def reason_required(cls, value):
+        if len(value.strip()) < 3:
+            raise ValueError("Indica el motivo de la devolución.")
+        return value.strip()
+
+    @field_validator("amount")
+    @classmethod
+    def cents(cls, value):
+        if abs(value-round(value,2)) > 0.000001:
+            raise ValueError("El importe admite máximo dos decimales.")
+        return round(value,2)
+
+
+@app.post("/api/hotel/reservations/{reservation_id}/refunds", status_code=201)
+def refund_hotel_payment(reservation_id: str, payload: HotelRefundPayload):
+    require_hotel_payment_permission()
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        account = hotel_account(conn,reservation_id)
+        existing = conn.execute("SELECT * FROM hotel_refunds WHERE business_id=? AND reservation_id=? AND idempotency_key=?", (current_business_id(),reservation_id,payload.idempotencyKey)).fetchone()
+        if existing:
+            if (existing["payment_id"],existing["cash_session_id"],existing["amount"],existing["reason"]) != (payload.paymentId,payload.cashSessionId,payload.amount,payload.reason):
+                raise HTTPException(409, "Esta solicitud ya corresponde a otra devolución.")
+            return account
+        payment = conn.execute("SELECT * FROM hotel_payments WHERE id=? AND reservation_id=? AND business_id=?", (payload.paymentId,reservation_id,current_business_id())).fetchone()
+        if not payment:
+            raise HTTPException(404, "Pago no encontrado en esta cuenta.")
+        returned = conn.execute("SELECT COALESCE(SUM(amount),0) FROM hotel_refunds WHERE payment_id=?", (payment["id"],)).fetchone()[0]
+        if payload.amount > round(payment["amount"]-returned,2):
+            raise HTTPException(422, "La devolución supera el importe disponible de ese pago.")
+        session = conn.execute("SELECT * FROM cash_sessions WHERE id=? AND business_id=? AND opened_by_user_id=? AND status='open'", (payload.cashSessionId,current_business_id(),current_identity()["id"])).fetchone()
+        if not session:
+            raise HTTPException(409, "Abre tu propio turno de caja antes de devolver un pago.")
+        if payment["method"] == "cash" and payload.amount > cash_session_out(conn,session)["expectedAmount"]:
+            raise HTTPException(409, "El turno no tiene suficiente efectivo esperado para esta devolución.")
+        refund_id = f"HR-{uuid.uuid4().hex}"
+        conn.execute("INSERT INTO hotel_refunds (id,business_id,reservation_id,payment_id,cash_session_id,amount,method,reason,idempotency_key,created_by) VALUES (?,?,?,?,?,?,?,?,?,?)", (refund_id,current_business_id(),reservation_id,payment["id"],session["id"],payload.amount,payment["method"],payload.reason,payload.idempotencyKey,current_identity()["id"]))
+        audit(conn,"refund","hotel_payment",payment["id"],{"refundId":refund_id,"amount":payload.amount,"reason":payload.reason,"cashSessionId":session["id"]})
+        result = hotel_account(conn,reservation_id)
+        conn.commit()
+        return result
+
+
+@app.get("/api/hotel/reports/income")
+def hotel_income_report(start: date, end: date):
+    if not has_permission("hotel.view") or not has_permission("reports.view"):
+        raise HTTPException(403, "Necesitas permisos de hotel y reportes.")
+    if end < start or (end-start).days > 365:
+        raise HTTPException(422, "Selecciona un periodo de hasta 366 días.")
+    transactions = []
+    with connection() as conn:
+        for table,kind in [("hotel_payments","payment"),("hotel_refunds","refund")]:
+            rows = conn.execute(f"SELECT p.*,r.guest_name,h.room_number FROM {table} p JOIN hotel_reservations r ON r.id=p.reservation_id JOIN hotel_rooms h ON h.id=r.room_id WHERE p.business_id=? AND date(p.created_at,'-5 hours')>=? AND date(p.created_at,'-5 hours')<=? ORDER BY p.created_at,p.id", (current_business_id(),start.isoformat(),end.isoformat())).fetchall()
+            transactions.extend({"id":row["id"],"reservationId":row["reservation_id"],"guestName":row["guest_name"],"roomNumber":row["room_number"],"kind":kind,"method":row["method"],"amount":row["amount"],"createdAt":timestamp_iso(row["created_at"]),"reference":row["reason"] if kind=="refund" else row["reference"]} for row in rows)
+    methods = []
+    for method in ["cash","card","transfer","digital"]:
+        gross = round(sum(row["amount"] for row in transactions if row["method"]==method and row["kind"]=="payment"),2)
+        refunded = round(sum(row["amount"] for row in transactions if row["method"]==method and row["kind"]=="refund"),2)
+        methods.append({"method":method,"gross":gross,"refunded":refunded,"net":round(gross-refunded,2)})
+    gross = round(sum(row["gross"] for row in methods),2)
+    refunded = round(sum(row["refunded"] for row in methods),2)
+    return {"start":start.isoformat(),"end":end.isoformat(),"gross":gross,"refunded":refunded,"net":round(gross-refunded,2),"methods":methods,"transactions":sorted(transactions,key=lambda row:(row["createdAt"],row["id"]),reverse=True)}
 
 
 def service_out(row: sqlite3.Row) -> dict:

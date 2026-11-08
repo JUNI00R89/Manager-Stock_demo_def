@@ -336,6 +336,7 @@ export interface ProductSubstitutionRecord {
 interface LocalDatabase {
   hotelCharges?: HotelChargeRecord[];
   hotelPayments?: HotelPaymentRecord[];
+  hotelRefunds?: HotelRefundRecord[];
   hotelClosures?: Record<string, HotelReceipt>;
   version: 1;
   products: Product[];
@@ -532,7 +533,7 @@ export async function getHotelReservations() {
   return api<HotelReservationRecord[]>('/hotel/reservations');
 }
 export async function createHotelReservation(input: { roomId: string; guestName: string; guestEmail?: string; guestPhone?: string; checkIn: string; checkOut: string; advance?: number }) {
-  if (isDesktopMode()) return desktop.hotel.createReservation(input);
+  if (isDesktopMode()) return localHotelWrite(async () => { await requireHotelManage(); return desktop.hotel.createReservation(input); });
   return api<HotelReservationRecord>('/hotel/reservations', { method: 'POST', body: JSON.stringify(input) });
 }
 export async function updateHotelReservationStatus(id: string, status: HotelReservationStatus) {
@@ -554,9 +555,19 @@ export interface HotelPaymentRecord {
   id: string; amount: number; method: PaymentPartMethod; reference: string; cashSessionId: string;
   createdAt: string; idempotencyKey: string; reservationId?: string;
 }
+export interface HotelScheduleInput { roomId: string; checkIn: string; expectedRoomId: string; expectedCheckIn: string; expectedCheckOut: string; }
+export interface HotelRefundInput { paymentId: string; cashSessionId: string; amount: number; reason: string; idempotencyKey: string; }
+export interface HotelRefundRecord extends HotelRefundInput { id: string; reservationId: string; method: PaymentPartMethod; createdAt: string; }
+export interface HotelIncomeTransaction { id: string; reservationId: string; guestName: string; roomNumber: string; kind: 'payment' | 'refund'; method: PaymentPartMethod; amount: number; createdAt: string; reference: string; }
+export interface HotelIncomeReport { start: string; end: string; gross: number; refunded: number; net: number; methods: Array<{method: PaymentPartMethod; gross: number; refunded: number; net: number}>; transactions: HotelIncomeTransaction[]; }
+export async function moveHotelReservation(id: string, input: HotelScheduleInput) {
+  if (!isDesktopMode()) return api<HotelReservationRecord>(`/hotel/reservations/${encodeURIComponent(id)}/schedule`, { method: 'PATCH', body: JSON.stringify(input) });
+  return localHotelWrite(async () => { await requireHotelManage(); return desktop.hotel.moveReservation(id,input); });
+}
 export interface HotelReceipt extends Omit<HotelAccount, 'receipt'> { businessName: string; currency: string; }
 export interface HotelPaymentInput { amount: number; method: PaymentPartMethod; reference: string; cashSessionId: string; idempotencyKey: string; }
 export interface HotelAccount {
+  refunds: HotelRefundRecord[]; refundedTotal: number; netPaidTotal: number;
   payments: HotelPaymentRecord[]; paidTotal: number; closedAt?: string | null; receiptId?: string | null; receipt?: HotelReceipt | null;
   reservation: HotelReservationRecord; charges: HotelChargeRecord[];
   accommodationTotal: number; consumptionTotal: number; total: number; advance: number; balance: number;
@@ -576,8 +587,11 @@ export async function getHotelAccount(id: string): Promise<HotelAccount> {
   const db = readLocal();
   const payments = (db.hotelPayments || []).filter(p => p.reservationId === id);
   const paidTotal = money(payments.reduce((sum,p) => sum+p.amount,0));
+  const refunds = (db.hotelRefunds || []).filter(r => r.reservationId === id);
+  const refundedTotal = money(refunds.reduce((sum,r) => sum+r.amount,0));
+  const netPaidTotal = money(paidTotal-refundedTotal);
   const receipt = db.hotelClosures?.[id];
-  return { payments, paidTotal, closedAt: receipt?.closedAt, receiptId: receipt?.receiptId, receipt, reservation: { ...reservation, totalCharges: total, ...(receipt ? { status: 'checkout' as const } : {}) }, charges, accommodationTotal: reservation.totalCharges, consumptionTotal, total, advance: reservation.advance, balance: money(Math.max(0, total - reservation.advance - paidTotal)) };
+  return { refunds, refundedTotal, netPaidTotal, payments, paidTotal, closedAt: receipt?.closedAt, receiptId: receipt?.receiptId, receipt, reservation: { ...reservation, totalCharges: total, ...(receipt ? { status: 'checkout' as const } : {}) }, charges, accommodationTotal: reservation.totalCharges, consumptionTotal, total, advance: reservation.advance, balance: receipt ? 0 : money(Math.max(0, total - reservation.advance - netPaidTotal)) };
 }
 async function localHotelWrite<T>(action: () => Promise<T>): Promise<T> {
   if (navigator.locks) return navigator.locks.request(`hotel-charges:${localKey()}`, action);
@@ -624,7 +638,7 @@ export async function cancelHotelCharge(id: string, chargeId: string): Promise<H
     if (charge.status === 'cancelled') return account;
     if (account.closedAt) throw new ApiError(409, 'La cuenta ya está cerrada.');
     if (account.reservation.status !== 'checkin') throw new ApiError(422, 'La estancia está cerrada; no puedes modificar sus consumos.');
-    if (money(account.total - charge.total) < money(account.advance + account.paidTotal)) throw new ApiError(409, 'La anulación requiere gestionar una devolución del saldo a favor.');
+    if (money(account.total - charge.total) < money(account.advance + account.netPaidTotal)) throw new ApiError(409, 'La anulación requiere gestionar una devolución del saldo a favor.');
     const product = db.products.find(p => p.id === charge.productId);
     if (!product) throw new ApiError(422, 'No se encontró el producto para devolver sus existencias.');
     const before = product.stock;
@@ -675,6 +689,57 @@ export async function closeHotelAccount(id: string): Promise<HotelAccount> {
     await desktop.hotel.updateReservationStatus(id,'checkout');
     return getHotelAccount(id);
   });
+}
+
+export async function refundHotelPayment(id: string, input: HotelRefundInput): Promise<HotelAccount> {
+  if (!isDesktopMode()) return api<HotelAccount>(`/hotel/reservations/${encodeURIComponent(id)}/refunds`, { method: 'POST', body: JSON.stringify(input) });
+  return localHotelWrite(async () => {
+    const user = await requireHotelCashManage();
+    const account = await getHotelAccount(id);
+    const prior = account.refunds.find(r => r.idempotencyKey === input.idempotencyKey);
+    if (prior) {
+      if (prior.paymentId !== input.paymentId || prior.cashSessionId !== input.cashSessionId || prior.amount !== input.amount || prior.reason !== input.reason.trim()) throw new ApiError(409,'La solicitud corresponde a otra devolución.');
+      return account;
+    }
+    const payment = account.payments.find(p => p.id === input.paymentId);
+    if (!payment) throw new ApiError(404,'Pago no encontrado.');
+    const available = money(payment.amount-account.refunds.filter(r => r.paymentId === payment.id).reduce((sum,r) => sum+r.amount,0));
+    if (!Number.isFinite(input.amount) || input.amount <= 0 || input.amount > available || Math.abs(input.amount-money(input.amount)) > 0.000001 || input.reason.trim().length < 3 || input.reason.length > 500 || input.idempotencyKey.length < 8) throw new ApiError(422,'Revisa el importe disponible y el motivo de la devolución.');
+    const session = await dataService.getCurrentCashSession();
+    if (!session || session.status !== 'open' || session.id !== input.cashSessionId || session.openedByUserId !== user.id) throw new ApiError(409,'Abre tu propio turno de caja.');
+    if (payment.method === 'cash' && input.amount > (session.expectedAmount ?? 0)) throw new ApiError(409,'El turno no tiene suficiente efectivo esperado.');
+    const db = readLocal();
+    db.hotelRefunds = [...(db.hotelRefunds || []), { ...input, reason: input.reason.trim(), id: uniqueId('HR'), reservationId: id, method: payment.method, createdAt: new Date().toISOString() }];
+    writeLocal(db);
+    return getHotelAccount(id);
+  });
+}
+export async function getHotelIncomeReport(start: string, end: string): Promise<HotelIncomeReport> {
+  if (!isDesktopMode()) return api<HotelIncomeReport>(`/hotel/reports/income?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
+  const user = await desktop.auth.me();
+  if (!['owner','business_admin'].includes(user.role) && !(user.permissions?.includes('hotel.view') && user.permissions?.includes('reports.view'))) throw new ApiError(403,'Necesitas permisos de hotel y reportes.');
+  const range = (Date.parse(end)-Date.parse(start))/86400000;
+  if (!Number.isFinite(range) || range < 0 || range > 365) throw new ApiError(422,'Selecciona un periodo de hasta 366 días.');
+  const reservations = await desktop.hotel.reservations();
+  const db = readLocal();
+  const transactions: HotelIncomeTransaction[] = [];
+  for (const [kind, rows] of [['payment',db.hotelPayments || []],['refund',db.hotelRefunds || []]] as const) {
+    for (const row of rows) {
+      const day = new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota'}).format(new Date(row.createdAt));
+      if (day < start || day > end) continue;
+      const reservation = reservations.find(r => r.id === row.reservationId);
+      if (!reservation) continue;
+      transactions.push({ id: row.id, reservationId: reservation.id, guestName: reservation.guestName, roomNumber: reservation.roomNumber, kind, method: row.method, amount: row.amount, createdAt: row.createdAt, reference: 'reason' in row ? row.reason : row.reference });
+    }
+  }
+  const methods = (['cash','card','transfer','digital'] as const).map(method => {
+    const gross = money(transactions.filter(r => r.method === method && r.kind === 'payment').reduce((sum,r) => sum+r.amount,0));
+    const refunded = money(transactions.filter(r => r.method === method && r.kind === 'refund').reduce((sum,r) => sum+r.amount,0));
+    return { method, gross, refunded, net: money(gross-refunded) };
+  });
+  const gross = money(methods.reduce((sum,r) => sum+r.gross,0));
+  const refunded = money(methods.reduce((sum,r) => sum+r.refunded,0));
+  return { start, end, gross, refunded, net: money(gross-refunded), methods, transactions: transactions.sort((a,b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id)) };
 }
 
 export interface ServiceCatalogRecord { id: string; nombre: string; name: string; duracion: number; durationMinutes: number; precio: number; price: number; categoria: string; category: string; color: string; active: boolean; }
@@ -1131,7 +1196,7 @@ export const dataService = {
       if (!session || (session.openedByUserId && session.openedByUserId !== user.id)) return null;
       const cashSales = db.sales.filter(s => s.cashSessionId === session.id && s.status === 'completed').reduce((sum,s) => sum + (s.payments?.filter(p => p.method === 'cash').reduce((v,p) => v+p.amount,0) ?? (s.paymentMethod === 'cash' ? s.totalPrice : 0)),0);
       const hotelCash = (db.hotelPayments || []).filter(p => p.cashSessionId === session.id && p.method === 'cash').reduce((sum,p) => sum+p.amount,0);
-      return { ...session, expectedAmount: money(session.openingAmount + cashSales + hotelCash) };
+      return { ...session, expectedAmount: money(session.openingAmount + cashSales + hotelCash - (db.hotelRefunds || []).filter(r => r.cashSessionId === session.id && r.method === 'cash').reduce((sum,r) => sum+r.amount,0)) };
     }
   },
   async openCashSession(openingAmount: number, openedBy: string): Promise<CashSessionRecord> {
@@ -1179,7 +1244,7 @@ export const dataService = {
       if (!session || session.id !== id || session.status !== 'open') throw new Error('No se encontró un turno local abierto.');
       const cashSales = db.sales.filter(s => s.cashSessionId === id && s.status === 'completed').reduce((sum, sale) => sum + (sale.payments?.filter(p => p.method === 'cash').reduce((total, payment) => total + payment.amount, 0) ?? (sale.paymentMethod === 'cash' ? sale.totalPrice : 0)), 0);
       const hotelCash = (db.hotelPayments || []).filter(p => p.cashSessionId === id && p.method === 'cash').reduce((sum,p) => sum+p.amount,0);
-      const expected = money(session.openingAmount + cashSales + hotelCash);
+      const expected = money(session.openingAmount + cashSales + hotelCash - (db.hotelRefunds || []).filter(r => r.cashSessionId === session.id && r.method === 'cash').reduce((sum,r) => sum+r.amount,0));
       const closed: CashSessionRecord = { ...session, closingAmount: money(closingAmount), expectedAmount: expected, difference: money(closingAmount - expected), status: 'closed', closedAt: new Date().toISOString() };
       db.cashSession = null; writeLocal(db); return closed;
     });

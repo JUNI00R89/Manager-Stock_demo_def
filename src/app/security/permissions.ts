@@ -31,6 +31,7 @@ const pathPermission = (path: string): string | null => {
   if (path === '/warehouse/purchase-orders') return 'inventory.view';
   if (path === '/warehouse/locations') return 'inventory.view';
   if (path === '/warehouse/settings') return 'inventory.edit';
+  if (path === '/hotel/income') return 'reports.view';
   if (path.startsWith('/hotel/')) return 'hotel.view';
   if (path === '/restaurant/tables') return 'orders.view';
   if (path === '/restaurant/recipes') return 'catalog.edit';
@@ -52,6 +53,7 @@ export function canAccessPath(path: string, role?: AppRole | null, config?: Busi
   if (path === '/business-setup') return role === 'owner';
 
   if (customPermissions !== undefined) {
+    if (path === '/hotel/income' && !customPermissions.includes('hotel.view')) return false;
     const required = pathPermission(path);
     if (!required || !customPermissions.includes(required)) return false;
   }

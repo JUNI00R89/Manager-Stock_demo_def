@@ -185,6 +185,25 @@ CREATE TABLE IF NOT EXISTS hotel_payments (
   UNIQUE(business_id,reservation_id,idempotency_key)
 );
 CREATE INDEX IF NOT EXISTS idx_hotel_payments_cash ON hotel_payments(cash_session_id,method);
+CREATE TABLE IF NOT EXISTS hotel_refunds (
+  id TEXT PRIMARY KEY,
+  business_id TEXT NOT NULL REFERENCES businesses(id),
+  reservation_id TEXT NOT NULL REFERENCES hotel_reservations(id),
+  payment_id TEXT NOT NULL REFERENCES hotel_payments(id),
+  cash_session_id TEXT NOT NULL REFERENCES cash_sessions(id),
+  amount REAL NOT NULL CHECK(amount > 0),
+  method TEXT NOT NULL CHECK(method IN ('cash','card','transfer','digital')),
+  reason TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(business_id,reservation_id,idempotency_key)
+);
+CREATE INDEX IF NOT EXISTS idx_hotel_refunds_payment ON hotel_refunds(payment_id);
+CREATE INDEX IF NOT EXISTS idx_hotel_refunds_cash ON hotel_refunds(cash_session_id,method);
+CREATE INDEX IF NOT EXISTS idx_hotel_refunds_period ON hotel_refunds(business_id,created_at);
+CREATE INDEX IF NOT EXISTS idx_hotel_payments_period ON hotel_payments(business_id,created_at);
+
 CREATE TABLE IF NOT EXISTS hotel_account_closures (
   reservation_id TEXT PRIMARY KEY REFERENCES hotel_reservations(id),
   business_id TEXT NOT NULL REFERENCES businesses(id),

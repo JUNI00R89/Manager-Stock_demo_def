@@ -172,6 +172,7 @@ function LayoutShell({ children }: LayoutProps) {
     if (config?.type === 'hotel' && (config.features.rooms || config.features.reservations)) {
       items.push({ path: '/hotel/rooms', icon: Bed, label: 'Habitaciones', group: 'tipo' });
       items.push({ path: '/hotel/availability', icon: CalendarDays, label: 'Disponibilidad', group: 'tipo' });
+      items.push({ path: '/hotel/income', icon: FileBarChart, label: 'Ingresos del hotel', group: 'tipo' });
       items.push({ path: '/hotel/housekeeping', icon: Building2, label: 'Limpieza', group: 'tipo' });
     }
     if (config?.type === 'services' && (config.features.services || config.features.reservations)) {

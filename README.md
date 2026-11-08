@@ -230,7 +230,7 @@ no duplicar cobros si se pierde una respuesta de red.
 Cobrar y cerrar requiere `hotel.manage` y `cash.manage`; abrir caja funciona también
 cuando el hotel tiene POS desactivado. Cada pago requiere un turno propio abierto.
 No se permiten sobrepagos ni anulaciones de consumos que dejen saldo a favor.
-La devolución o reversión de pagos todavía no está implementada.
+Las devoluciones parciales o totales de abonos registrados se gestionan desde la misma cuenta, con motivo obligatorio y comprobante propio.
 
 ## Pantallas y acciones según el negocio y el empleado
 
@@ -251,4 +251,57 @@ python backend/tests/test_hotel_payments.py
 node scripts/test_permissions.cjs
 npx tsc --noEmit
 npm run build
+```
+
+
+## Calendario con mouse, pantalla táctil y teclado
+
+En **Hotel → Disponibilidad**, arrastra el asa de una reserva azul a otra fecha o
+habitación. En móvil, el asa permite mover la reserva y el resto del calendario
+permite desplazarse. También puedes enfocar el asa y usar espacio, flechas y Enter;
+Escape cancela. El destino se muestra antes de confirmar el movimiento.
+
+Solo se mueven reservas confirmadas, antes del check-in. Se conservan la duración,
+el importe acordado, los abonos y la identidad de la reserva, incluso si se cambia
+a una habitación con otra tarifa. El servidor comprueba disponibilidad, permisos,
+negocio y cambios concurrentes. Un conflicto vuelve a cargar el calendario sin
+sobrescribir la reserva de otro usuario. El calendario tiene desplazamiento interno
+y los formularios y reportes se adaptan al ancho de la pantalla.
+
+## Devoluciones y reporte de ingresos del hotel
+
+En **Cuenta y consumos → Devoluciones de pagos**, abre tu turno, elige el pago,
+indica el importe y el motivo, y confirma después de realizar la devolución al
+huésped. Se conserva el medio de pago original. No se envía dinero automáticamente.
+La suma de devoluciones no puede superar el pago. Las devoluciones en efectivo
+reducen el efectivo esperado del turno actual, aunque el pago pertenezca a un turno
+anterior; el turno debe tener efectivo suficiente. Los reintentos no duplican
+registros y el historial conserva el pago original y cada devolución.
+
+En una cuenta abierta, devolver un pago aumenta el saldo pendiente. En una cuenta
+cerrada, una devolución posterior queda registrada por separado y no reabre la
+estancia ni modifica el comprobante original. Cada devolución tiene un comprobante
+interno descargable. Los anticipos antiguos que no tienen un registro de pago no
+se pueden devolver desde este flujo.
+
+**Hotel → Ingresos del hotel** muestra cobros, devoluciones e ingreso neto, con
+desglose por medio de pago, fechas y exportación CSV. El periodo usa la fecha del
+movimiento en **America/Bogota**, admite hasta 366 días e incluye devoluciones de
+pagos anteriores realizadas durante ese periodo. No suma bases de caja, valores
+pendientes de reservas ni anticipos anteriores sin fecha de cobro. Para consultar
+el reporte, un rol personalizado necesita `hotel.view` y `reports.view`.
+
+```sh
+python backend/tests/test_hotel_schedule_refunds.py
+node scripts/test_permissions.cjs
+```
+
+Las pruebas opcionales de navegador requieren Python con Playwright, Chromium en
+`/usr/bin/chromium`, Vite en `127.0.0.1:5173` y la API en `127.0.0.1:8000`. Ejecuta
+la API con una base **temporal de pruebas** (`MANAGER_STOCK_DB=/tmp/hotel-ui-test.db`):
+las pruebas crean negocios y reservas de demostración.
+
+```sh
+python backend/tests/test_hotel_browser.py
+python backend/tests/test_hotel_local_browser.py
 ```

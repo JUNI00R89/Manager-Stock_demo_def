@@ -86,6 +86,8 @@ export function HotelAccountDialog({ reservations, initialId, onClose, onSaved }
           <dt>Total de la cuenta</dt><dd className="text-right font-semibold">{money(account.total)}</dd>
           <dt>Anticipo previo</dt><dd className="text-right">{money(account.advance)}</dd>
           <dt>Abonos</dt><dd className="text-right">{money(account.paidTotal)}</dd>
+          <dt>Devoluciones</dt><dd className="text-right">{money(account.refundedTotal)}</dd>
+          <dt>Cobrado neto</dt><dd className="text-right">{money(account.netPaidTotal)}</dd>
           <dt className="font-bold">Saldo pendiente</dt><dd className="text-right font-bold">{money(account.balance)}</dd>
         </dl>
         {canManage && !account.closedAt && account.reservation.status === 'checkin' && <section className="space-y-3 rounded-xl border p-4">

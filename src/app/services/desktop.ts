@@ -506,7 +506,7 @@ export const desktop = {
       if (!room) throw new Error('Selecciona una habitación válida.');
       const checkIn = new Date(`${input.checkIn}T12:00:00`);
       const checkOut = new Date(`${input.checkOut}T12:00:00`);
-      const nights = Math.max(1, Math.round((checkOut.getTime() - checkIn.getTime()) / 86_400_000));
+      const nights = Math.round((checkOut.getTime() - checkIn.getTime()) / 86_400_000);
       if (!Number.isFinite(nights) || nights <= 0) throw new Error('La fecha de salida debe ser posterior a la de entrada.');
       const created: HotelReservationRecord = {
         id: uid('RES'),
@@ -524,9 +524,37 @@ export const desktop = {
         createdAt: new Date().toISOString(),
       };
       const reservations = await this.reservations();
+      if (['maintenance','cleaning'].includes(room.status)) throw new Error('La habitación no está habilitada para reservas.');
+      if (reservations.some(r => r.roomId === room.id && ['confirmed','checkin'].includes(r.status) && r.checkIn < input.checkOut && r.checkOut > input.checkIn)) throw new Error('Ya existe una reserva durante ese periodo.');
+      if (!Number.isFinite(created.advance) || created.advance < 0 || created.advance > created.totalCharges) throw new Error('Anticipo no válido.');
       writeJson(reservationsKey(businessId), [created, ...reservations]);
-      writeJson(roomsKey(businessId), rooms.map(item => item.id === room.id ? { ...item, status: 'reserved' } : item));
+      writeJson(roomsKey(businessId), rooms.map(item => item.id === room.id && item.status === 'available' ? { ...item, status: 'reserved' } : item));
       return created;
+    },
+    async moveReservation(id: string, input: import('./dataService').HotelScheduleInput): Promise<HotelReservationRecord> {
+      const businessId = requireBusinessId();
+      const rooms = await this.rooms();
+      const reservations = await this.reservations();
+      const current = reservations.find(r => r.id === id);
+      if (!current || current.status !== 'confirmed') throw new Error('Solo se pueden mover reservas confirmadas antes del check-in.');
+      const nights = (Date.parse(input.expectedCheckOut) - Date.parse(input.expectedCheckIn)) / 86400000;
+      const start = Date.parse(input.checkIn);
+      if (!Number.isFinite(start) || !Number.isFinite(nights) || nights < 1) throw new Error('Fechas no válidas.');
+      const checkOut = new Date(start + nights * 86400000).toISOString().slice(0,10);
+      if (current.roomId === input.roomId && current.checkIn === input.checkIn && current.checkOut === checkOut) return current;
+      if (current.roomId !== input.expectedRoomId || current.checkIn !== input.expectedCheckIn || current.checkOut !== input.expectedCheckOut) throw new Error('La reserva cambió. Actualiza el calendario.');
+      const room = rooms.find(r => r.id === input.roomId);
+      if (!room || ['maintenance','cleaning'].includes(room.status)) throw new Error('Habitación no disponible.');
+      if (reservations.some(r => r.id !== id && r.roomId === input.roomId && ['confirmed','checkin'].includes(r.status) && r.checkIn < checkOut && r.checkOut > input.checkIn)) throw new Error('Ya existe una reserva durante ese periodo.');
+      const updated = { ...current, roomId: room.id, roomNumber: room.number, checkIn: input.checkIn, checkOut, nights };
+      const next = reservations.map(r => r.id === id ? updated : r);
+      writeJson(reservationsKey(businessId), next);
+      writeJson(roomsKey(businessId), rooms.map(r => {
+        if (![current.roomId,room.id].includes(r.id) || ['maintenance','cleaning'].includes(r.status)) return r;
+        const status: HotelRoomRecord['status'] = next.some(b => b.roomId === r.id && b.status === 'checkin') ? 'occupied' : next.some(b => b.roomId === r.id && b.status === 'confirmed' && b.checkOut > new Date().toISOString().slice(0,10)) ? 'reserved' : 'available';
+        return { ...r, status };
+      }));
+      return updated;
     },
     async updateReservationStatus(id: string, status: HotelReservationRecord['status']): Promise<HotelReservationRecord> {
       const businessId = requireBusinessId();

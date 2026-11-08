@@ -34,4 +34,8 @@ assert.equal(action({role:'cashier'},'hotel.manage'),false);
 assert.equal(access('/products/new','owner',{type:'retail',features:{pos:true,inventory:false}}),false);
 assert.equal(access('/products/123/edit','owner',{type:'retail',features:{pos:true,inventory:false}}),false);
 assert.equal(action(null,'hotel.manage'),false);
+assert.equal(access('/hotel/income','owner',hotel),true);
+assert.equal(access('/hotel/income','cashier',hotel,['hotel.view','reports.view']),true);
+assert.equal(access('/hotel/income','cashier',hotel,['hotel.view']),false);
+assert.equal(access('/hotel/income','cashier',hotel,['reports.view']),false);
 console.log('OK: navigation by business/modules, custom roles and employee actions');

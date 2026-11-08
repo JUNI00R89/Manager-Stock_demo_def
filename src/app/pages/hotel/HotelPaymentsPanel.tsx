@@ -1,3 +1,4 @@
+import { HotelRefundsPanel } from './HotelRefundsPanel';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -19,6 +20,7 @@ export function HotelPaymentsPanel({account,canCollect,busy,onBusy,onAccount,onS
   const [cashAmount,setCashAmount]=useState('0');
   const [error,setError]=useState('');
   const [pending,setPending]=useState<HotelPaymentInput|null>(null);
+  const [pendingRefund,setPendingRefund]=useState(false);
   const [confirm,setConfirm]=useState<'account'|'shift'|null>(null);
   const id=account.reservation.id;
   const key=`hotel-pending-payment:${user?.businessId}:${id}`;
@@ -59,20 +61,21 @@ export function HotelPaymentsPanel({account,canCollect,busy,onBusy,onAccount,onS
       <div className="rounded-lg bg-muted p-3 space-y-2"><p className="text-sm font-medium">{session?'Turno de caja abierto':'Abre tu turno de caja para registrar pagos'}</p>
         {session&&<p className="text-sm">Efectivo esperado: {money(session.expectedAmount??session.openingAmount)}</p>}
         <Label htmlFor="hotel-cash-amount">{session?'Efectivo contado para cerrar el turno':'Base de apertura'}</Label>
-        <Input id="hotel-cash-amount" type="number" min="0" step="0.01" value={cashAmount} disabled={busy||!!pending} onChange={e=>setCashAmount(e.target.value)}/>
-        <Button variant="outline" disabled={busy||!!pending} onClick={()=>session?setConfirm('shift'):void open().catch(()=>undefined)}>{session?'Cerrar turno':'Abrir turno'}</Button>
+        <Input id="hotel-cash-amount" type="number" min="0" step="0.01" value={cashAmount} disabled={busy||!!pending||pendingRefund} onChange={e=>setCashAmount(e.target.value)}/>
+        <Button variant="outline" disabled={busy||!!pending||pendingRefund} onClick={()=>session?setConfirm('shift'):void open().catch(()=>undefined)}>{session?'Cerrar turno':'Abrir turno'}</Button>
       </div>
       {!account.closedAt&&account.reservation.status!=='cancelled'&&account.balance>0&&(session||pending)&&<div className="space-y-2">
         {pending&&<p className="text-sm">Hay un pago pendiente de confirmación. Reintenta el mismo pago para comprobarlo.</p>}
-        <Label htmlFor="hotel-payment-amount">Importe del abono</Label><Input id="hotel-payment-amount" type="number" min="0.01" step="0.01" max={account.balance} value={pending?.amount??amount} disabled={busy||!!pending} onChange={e=>setAmount(e.target.value)}/>
-        <Label htmlFor="hotel-payment-method">Medio de pago</Label><select id="hotel-payment-method" className="w-full rounded border bg-background p-2" value={pending?.method||method} disabled={busy||!!pending} onChange={e=>setMethod(e.target.value as PaymentPartMethod)}>{Object.entries(methods).map(([id,label])=><option key={id} value={id}>{label}</option>)}</select>
-        <Label htmlFor="hotel-payment-reference">Referencia del pago (opcional)</Label><Input id="hotel-payment-reference" maxLength={200} value={pending?.reference??reference} disabled={busy||!!pending} onChange={e=>setReference(e.target.value)}/>
+        <Label htmlFor="hotel-payment-amount">Importe del abono</Label><Input id="hotel-payment-amount" type="number" min="0.01" step="0.01" max={account.balance} value={pending?.amount??amount} disabled={busy||!!pending||pendingRefund} onChange={e=>setAmount(e.target.value)}/>
+        <Label htmlFor="hotel-payment-method">Medio de pago</Label><select id="hotel-payment-method" className="w-full rounded border bg-background p-2" value={pending?.method||method} disabled={busy||!!pending||pendingRefund} onChange={e=>setMethod(e.target.value as PaymentPartMethod)}>{Object.entries(methods).map(([id,label])=><option key={id} value={id}>{label}</option>)}</select>
+        <Label htmlFor="hotel-payment-reference">Referencia del pago (opcional)</Label><Input id="hotel-payment-reference" maxLength={200} value={pending?.reference??reference} disabled={busy||!!pending||pendingRefund} onChange={e=>setReference(e.target.value)}/>
         <p className="text-xs text-muted-foreground">Registra el pago después de recibirlo. Tarjetas y transferencias se verifican fuera de esta aplicación.</p>
-        <Button disabled={busy} onClick={()=>void pay().catch(()=>undefined)}>{busy?'Procesando…':pending?'Reintentar pago':'Registrar abono'}</Button>
+        <Button disabled={busy||pendingRefund} onClick={()=>void pay().catch(()=>undefined)}>{busy?'Procesando…':pending?'Reintentar pago':'Registrar abono'}</Button>
       </div>}
-      {!account.closedAt&&account.balance===0&&['checkin','checkout'].includes(account.reservation.status)&&<Button disabled={busy||!!pending} onClick={()=>setConfirm('account')}>Cerrar cuenta y registrar salida</Button>}
+      {!account.closedAt&&account.balance===0&&['checkin','checkout'].includes(account.reservation.status)&&<Button disabled={busy||!!pending||pendingRefund} onClick={()=>setConfirm('account')}>Cerrar cuenta y registrar salida</Button>}
     </>}
     {account.closedAt&&<div className="space-y-2"><p className="font-semibold text-emerald-700">Cuenta cerrada · {account.receiptId}</p>{account.receipt&&<Button variant="outline" onClick={()=>downloadHotelReceipt(account.receipt!)}>Descargar comprobante</Button>}</div>}
+    <HotelRefundsPanel account={account} session={session} canCollect={canCollect&&!pending} busy={busy} onBusy={onBusy} onAccount={onAccount} onSaved={async()=>{onSaved();await refresh();}} onPending={setPendingRefund}/>
     <ConfirmActionDialog open={!!confirm} onOpenChange={open=>{if(!open)setConfirm(null);}} title={confirm==='account'?'Cerrar cuenta del huésped':'Cerrar turno de caja'} description={confirm==='account'?'Se generará el comprobante y se registrará la salida. La cuenta quedará cerrada para nuevos cargos y pagos.':`Se comparará el efectivo contado (${money(Number(cashAmount)||0)}) con el esperado (${money(session?.expectedAmount||0)}).`} confirmLabel={confirm==='account'?'Cerrar cuenta':'Cerrar turno'} onConfirm={finish}/>
   </section>;
 }
