@@ -191,6 +191,8 @@ function LayoutShell({ children }: LayoutProps) {
   const getNavItems = (): NavItem[] => {
     const items: NavItem[] = [
       { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', group: 'general' },
+      { path: '/customers', icon: Users, label: 'Clientes', group: 'general' },
+      { path: '/billing', icon: FileBarChart, label: 'Preparación fiscal', group: 'general' },
     ];
 
     if (config?.features.pos) {
@@ -211,6 +213,7 @@ function LayoutShell({ children }: LayoutProps) {
       );
     }
     if (config?.type === 'hotel' && (config.features.rooms || config.features.reservations)) {
+      items.push({ path: '/hotel/today', icon: CalendarDays, label: 'Hotel hoy', group: 'tipo' });
       items.push({ path: '/hotel/rooms', icon: Bed, label: 'Habitaciones', group: 'tipo' });
       items.push({ path: '/hotel/availability', icon: CalendarDays, label: 'Disponibilidad', group: 'tipo' });
       items.push({ path: '/hotel/income', icon: FileBarChart, label: 'Ingresos del hotel', group: 'tipo' });

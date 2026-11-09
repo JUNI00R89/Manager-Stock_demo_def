@@ -1,3 +1,4 @@
+import { returnedUnits } from './saleMetrics';
 import { colombiaDateKey } from '../services/dataService';
 import type { SaleRecord } from '../services/dataService';
 import type { Product } from './mockData';
@@ -44,10 +45,12 @@ export function salesWindowStats(sales: SaleRecord[], windowDays = 30): SalesWin
     if (sale.status !== 'completed') continue;
     const key = colombiaDateKey(new Date(sale.date));
     if (key < cutoffKey) continue;
+    const retained = (sale.items ?? []).map(item => ({ ...item, quantity: Math.max(0, item.quantity - returnedUnits(sale, item)), subtotal: item.quantity > 0 ? item.subtotal * Math.max(0, item.quantity - returnedUnits(sale, item)) / item.quantity : 0 })).filter(item => item.quantity > 0);
+    if (!retained.length) continue;
     baskets += 1;
     const dayIndex = Math.floor((Date.parse(`${key}T00:00:00Z`) - cutoffTime) / DAY_MS);
-    const ids = Array.from(new Set((sale.items ?? []).map(item => item.productId))).sort();
-    for (const item of sale.items ?? []) {
+    const ids = Array.from(new Set(retained.map(item => item.productId))).sort();
+    for (const item of retained) {
       units.set(item.productId, (units.get(item.productId) ?? 0) + item.quantity);
       revenue.set(item.productId, (revenue.get(item.productId) ?? 0) + item.subtotal);
       const series = daily.get(item.productId) ?? new Array(windowDays).fill(0);

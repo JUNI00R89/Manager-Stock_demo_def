@@ -1,3 +1,4 @@
+import { saleNetTotal } from './saleMetrics';
 import { colombiaDateKey } from '../services/dataService';
 
 /**
@@ -17,7 +18,8 @@ export const WEEKDAY_SHORT = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
 export interface ForecastSale {
   date: string;
   totalPrice: number;
-  status: string;
+  returnedTotal?: number;
+  status: 'completed' | 'pending' | 'cancelled';
 }
 
 export interface DailyRevenue {
@@ -78,7 +80,7 @@ export function dailyRevenue(sales: ForecastSale[], days: number, now: Date = ne
   for (const sale of sales) {
     if (sale.status !== 'completed') continue;
     const key = colombiaDateKey(new Date(sale.date));
-    byDay.set(key, (byDay.get(key) ?? 0) + sale.totalPrice);
+    byDay.set(key, (byDay.get(key) ?? 0) + saleNetTotal(sale));
   }
   return Array.from({ length: days }, (_, index) => {
     const key = colombiaDateKey(addDays(now, -(days - 1 - index)));
@@ -96,7 +98,7 @@ export function buildRevenueProjection(
   for (const sale of sales) {
     if (sale.status !== 'completed' || !Number.isFinite(sale.totalPrice)) continue;
     const key = colombiaDateKey(new Date(sale.date));
-    byDay.set(key, (byDay.get(key) ?? 0) + sale.totalPrice);
+    byDay.set(key, (byDay.get(key) ?? 0) + saleNetTotal(sale));
   }
 
   // Entrenamiento: último día completo = ayer (hoy suele estar incompleto).

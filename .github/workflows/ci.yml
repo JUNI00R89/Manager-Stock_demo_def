@@ -1,0 +1,32 @@
+name: Validate Manager Stock
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: pip install -r backend/requirements.txt
+      - run: npx tsc --noEmit
+      - run: npm run build
+      - run: node scripts/test_permissions.cjs
+      - run: node scripts/test_sale_metrics.cjs
+      - name: API regressions on disposable databases
+        run: |
+          set -e
+          for test in backend/tests/test_*.py; do
+            case "$test" in *browser*) continue ;; esac
+            python "$test"
+          done

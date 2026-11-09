@@ -15,6 +15,8 @@ export function roleLabel(role?: AppRole | null): string {
 }
 
 const pathPermission = (path: string): string | null => {
+  if (path === '/customers') return 'customers.view';
+  if (path === '/billing') return 'billing.view';
   if (path === '/dashboard') return 'dashboard.view';
   if (path === '/pos' || path === '/sales/new') return 'sales.create';
   if (path === '/sales' || /^\/sales\/[^/]+$/.test(path)) return 'sales.view';
@@ -27,7 +29,8 @@ const pathPermission = (path: string): string | null => {
   if (path.startsWith('/inventory/')) return 'inventory.view';
   if (path === '/warehouse' || path === '/warehouse/movements' || path === '/warehouse/lots' || path === '/warehouse/reports') return 'inventory.view';
   if (path === '/warehouse/entries' || path === '/warehouse/exits' || path === '/warehouse/waste' || path === '/warehouse/transfers') return 'inventory.entry';
-  if (path === '/warehouse/adjustments' || path === '/warehouse/counts') return 'inventory.adjust';
+  if (path === '/warehouse/counts') return 'inventory.count';
+  if (path === '/warehouse/adjustments') return 'inventory.adjust';
   if (path === '/warehouse/purchase-orders') return 'inventory.view';
   if (path === '/warehouse/locations') return 'inventory.view';
   if (path === '/warehouse/settings') return 'inventory.edit';
@@ -52,6 +55,7 @@ export function canAccessPath(path: string, role?: AppRole | null, config?: Busi
   if (path === '/platform' || path.startsWith('/platform/')) return false;
   if (path === '/business-setup') return role === 'owner';
 
+  if (customPermissions?.includes('inventory.adjust')) customPermissions = [...customPermissions, 'inventory.count'];
   if (customPermissions !== undefined) {
     if (path === '/hotel/income' && !customPermissions.includes('hotel.view')) return false;
     const required = pathPermission(path);
@@ -64,7 +68,7 @@ export function canAccessPath(path: string, role?: AppRole | null, config?: Busi
   }
 
   if (role === 'cashier' && customPermissions === undefined) {
-    const cashierRoutes = [
+    const cashierRoutes = ['/customers',
       '/dashboard', '/pos', '/sales', '/sales/new', '/notifications', '/products',
       '/restaurant/waiter', '/restaurant/kitchen', '/restaurant/tables',
     ];
@@ -99,7 +103,8 @@ export function canManageUsers(role?: AppRole | null): boolean {
 /** Match effective employee permissions when rendering actions. The API remains authoritative. */
 export function canPerformAction(user: AuthUser | null | undefined, permission: string): boolean {
   if (!user) return false;
+  if (permission === 'inventory.count' && user.permissions?.includes('inventory.adjust')) return true;
   if (user.customRoleId) return !!user.permissions?.includes(permission);
   if (user.role === 'owner' || user.role === 'business_admin') return true;
-  return user.role === 'cashier' && ['dashboard.view', 'catalog.view', 'sales.view', 'sales.create', 'orders.view', 'orders.manage', 'cash.view', 'cash.manage'].includes(permission);
+  return user.role === 'cashier' && ['customers.view', 'customers.manage', 'dashboard.view', 'catalog.view', 'sales.view', 'sales.create', 'orders.view', 'orders.manage', 'cash.view', 'cash.manage'].includes(permission);
 }

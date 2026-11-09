@@ -1,3 +1,8 @@
+import { AppointmentMoveHandle } from '../../components/AppointmentMoveHandle';
+import { ConfirmActionDialog } from '../../components/ConfirmActionDialog';
+import { moveServiceAppointment } from '../../services/dataService';
+import { ProfessionalScheduleDialog } from '../../components/ProfessionalScheduleDialog';
+import { ServiceCheckoutDialog } from '../../components/ServiceCheckoutDialog';
 import { useAuth } from '../../context/AuthContext';
 import { canPerformAction } from '../../security/permissions';
 import { useCallback, useEffect, useState } from 'react';
@@ -30,6 +35,11 @@ const DAYS_OF_WEEK = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 export function Appointments() {
   const { user } = useAuth();
   const canManage = canPerformAction(user, 'services.manage');
+  const [move, setMove] = useState<{ cita: Cita; date: string; time: string; professionalId: string } | null>(null);
+  const [professionalRows, setProfessionalRows] = useState<ServiceProfessionalRecord[]>([]);
+  const [schedulePro, setSchedulePro] = useState<ServiceProfessionalRecord | null>(null);
+  const [appointmentRows, setAppointmentRows] = useState<ServiceAppointmentRecord[]>([]);
+  const [checkout, setCheckout] = useState<ServiceAppointmentRecord | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('semana');
   const [selectedPro, setSelectedPro] = useState<string | 'todos'>('todos');
   const [selectedCita, setSelectedCita] = useState<Cita | null>(null);
@@ -42,7 +52,7 @@ export function Appointments() {
   const [citas, setCitas] = useState<Cita[]>([]);
   const [loading, setLoading] = useState(true);
   const today = new Date();
-  const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  const todayKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit' }).format(today);
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -51,7 +61,7 @@ export function Appointments() {
       const mappedProfessionals: Profesional[] = professionalRows.map((v: ServiceProfessionalRecord) => ({ id:v.id, nombre:v.nombre, especialidad:v.especialidad, color:v.color, horario:v.horario.map(h => ({ dia:h.dia ?? 1, inicio:h.inicio ?? '09:00', fin:h.fin ?? '18:00' })) }));
       const statusMap: Record<ServiceAppointmentRecord['estado'], Cita['estado']> = { reserved:'reservada', confirmed:'confirmada', attended:'atendida', cancelled:'cancelada', no_show:'no_asistio' };
       const mappedAppointments: Cita[] = appointmentRows.map((v: ServiceAppointmentRecord) => ({ id:v.id, clienteId:v.clienteId || '', clienteNombre:v.clienteNombre, clienteTelefono:v.clienteTelefono, clienteEmail:v.clienteEmail, servicioId:v.servicioId, servicioNombre:v.servicioNombre, profesionalId:v.profesionalId, profesionalNombre:v.profesionalNombre, fecha:v.fecha, horaInicio:v.horaInicio, horaFin:v.horaFin, estado:statusMap[v.estado], notas:v.notes }));
-      setServices(mappedServices); setProfessionals(mappedProfessionals); setCitas(mappedAppointments);
+      setProfessionalRows(professionalRows); setAppointmentRows(appointmentRows); setServices(mappedServices); setProfessionals(mappedProfessionals); setCitas(mappedAppointments);
     } catch (error) { toastError(error, 'No se pudo cargar la agenda del negocio.'); }
     finally { setLoading(false); }
   }, []);
@@ -83,20 +93,17 @@ export function Appointments() {
   const filteredCitas = citas.filter(c => selectedPro === 'todos' || c.profesionalId === selectedPro);
   const todayCitas = filteredCitas.filter(c => c.fecha === todayKey);
 
-  const getCitaForCell = (proId: string, hour: string, day: string) => {
-    return filteredCitas.find(c =>
-      c.profesionalId === proId &&
-      c.fecha === day &&
-      c.horaInicio <= hour &&
-      c.horaFin > hour
-    );
-  };
-
   const weekDays = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - d.getDay() + 1 + i);
+    const d = new Date(todayKey + 'T12:00:00');
+    d.setDate(d.getDate() - (d.getDay() + 6) % 7 + i);
     const iso = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; return { label: DAYS_OF_WEEK[i], iso, isToday: iso === todayKey };
   });
+
+  const gridColumns = viewMode === 'dia'
+    ? professionals.filter(p => selectedPro === 'todos' || p.id === selectedPro).map(p => ({ key: p.id, iso: todayKey, label: p.nombre, isToday: true, professionalId: p.id }))
+    : weekDays.map(d => ({ ...d, key: d.iso, professionalId: '' }));
+  const visibleDates = new Set(gridColumns.map(d => d.iso));
+  const gridHours = [...new Set([...HOURS, ...filteredCitas.filter(c => visibleDates.has(c.fecha)).map(c => c.horaInicio)])].sort();
 
   return (
     <Layout>
@@ -111,6 +118,7 @@ export function Appointments() {
           </div>
         </div>
 
+        {canManage && <div className="flex flex-wrap gap-2">{professionalRows.map(p => <Button key={p.id} variant="outline" className="min-h-11" onClick={() => setSchedulePro(p)}>Horario de {p.name}</Button>)}</div>}
         {/* Filters */}
         <div className="flex flex-wrap gap-3">
           <div className="flex rounded-lg border border-border overflow-hidden">
@@ -154,8 +162,8 @@ export function Appointments() {
               <thead>
                 <tr className="border-b border-border bg-accent/30">
                   <th className="w-16 text-left px-3 py-3 text-xs font-semibold text-muted-foreground">Hora</th>
-                  {weekDays.map(d => (
-                    <th key={d.iso} className={`py-3 text-center text-xs font-semibold ${d.isToday ? 'text-orange-600' : 'text-muted-foreground'}`}>
+                  {gridColumns.map(d => (
+                    <th key={d.key} className={`py-3 text-center text-xs font-semibold ${d.isToday ? 'text-orange-600' : 'text-muted-foreground'}`}>
                       <p>{d.label}</p>
                       <p className={`text-lg font-bold ${d.isToday ? 'text-orange-600' : 'text-foreground'}`}>
                         {parseInt(d.iso.split('-')[2])}
@@ -165,15 +173,14 @@ export function Appointments() {
                 </tr>
               </thead>
               <tbody>
-                {HOURS.map((hour, hi) => (
+                {gridHours.map((hour, hi) => (
                   <tr key={hour} className={`border-b border-border/40 ${hi % 2 === 0 ? '' : 'bg-muted/10'}`} style={{ height: 64 }}>
                     <td className="px-3 py-2 text-xs text-muted-foreground font-mono align-top pt-2 sticky left-0 bg-card">{hour}</td>
-                    {weekDays.map(day => {
-                      const prosToShow = selectedPro === 'todos' ? professionals : professionals.filter(p => p.id === selectedPro);
-                      const citas = prosToShow.map(p => getCitaForCell(p.id, hour, day.iso)).filter(Boolean) as Cita[];
+                    {gridColumns.map(day => {
+                      const citas = filteredCitas.filter(c => c.fecha === day.iso && c.horaInicio === hour && (!day.professionalId || c.profesionalId === day.professionalId));
 
                       return (
-                        <td key={day.iso} className={`border-l border-border/30 p-1 align-top ${day.isToday ? 'bg-orange-50/30 dark:bg-orange-950/10' : ''}`}>
+                        <td key={day.key} data-appointment-date={day.iso} data-appointment-time={hour} data-appointment-professional={day.professionalId} className={`border-l border-border/30 p-1 align-top ${day.isToday ? 'bg-orange-50/30 dark:bg-orange-950/10' : ''}`}>
                           {citas.map(cita => {
                             const cfg = ESTADO_CONFIG[cita.estado];
                             const isStart = cita.horaInicio === hour;
@@ -184,6 +191,7 @@ export function Appointments() {
                                 onClick={() => setSelectedCita(cita)}
                                 className={`px-2 py-1 rounded-lg border ${cfg.bg} ${cfg.border} cursor-pointer hover:opacity-80 transition-opacity`}
                               >
+                                {canManage && ['reservada', 'confirmada'].includes(cita.estado) && <AppointmentMoveHandle label={cita.clienteNombre} onDrop={(date, time, professionalId) => setMove({ cita, date, time, professionalId: professionalId || cita.profesionalId })} />}
                                 <p className={`text-[10px] font-bold ${cfg.color} truncate`}>{cita.clienteNombre}</p>
                                 <p className="text-[10px] text-muted-foreground truncate">{cita.servicioNombre}</p>
                                 <p className="text-[10px] text-muted-foreground">{cita.horaInicio}–{cita.horaFin}</p>
@@ -261,12 +269,13 @@ export function Appointments() {
                 <Badge className={`${cfg.bg} ${cfg.color} border-0 text-xs`}>{cfg.label}</Badge>
                 <p className="text-lg font-bold text-foreground">{selectedCita.clienteNombre}</p>
                 <div className="space-y-2 text-sm text-muted-foreground">
-                  <p className="flex items-center gap-2"><Scissors size={14} className="text-orange-500" />{svc?.nombre} · {svc?.duracion} min</p>
+                  <p className="flex items-center gap-2"><Scissors size={14} className="text-orange-500" />{selectedCita.servicioNombre} · {appointmentRows.find(r => r.id === selectedCita.id)?.durationMinutes ?? svc?.duracion} min</p>
                   <p className="flex items-center gap-2"><User size={14} className="text-orange-500" />{pro?.nombre}</p>
                   <p className="flex items-center gap-2"><Clock size={14} className="text-orange-500" />{selectedCita.horaInicio} — {selectedCita.horaFin}</p>
                 </div>
-                <p className="text-xl font-bold text-orange-600">${svc?.precio}</p>
+                <p className="text-xl font-bold text-orange-600">{(appointmentRows.find(r => r.id === selectedCita.id)?.price ?? svc?.precio ?? 0).toLocaleString('es-CO', { style: 'currency', currency: 'COP' })}</p>
               </div>
+              {!['cancelada', 'no_asistio'].includes(selectedCita.estado) && (appointmentRows.find(r => r.id === selectedCita.id)?.saleId || canManage && canPerformAction(user, 'cash.manage')) && <Button className="w-full min-h-11 mt-4" onClick={() => { const row = appointmentRows.find(r => r.id === selectedCita.id); if (row) { setCheckout(row); setSelectedCita(null); } }}>{appointmentRows.find(r => r.id === selectedCita.id)?.saleId ? 'Ver comprobante' : 'Finalizar y cobrar'}</Button>}
               <div style={{ display: canManage ? undefined : 'none' }} className="flex gap-2 mt-5">
                 {selectedCita.estado === 'reservada' && (
                   <Button size="sm" className="flex-1 bg-[var(--brand-primary)] text-white hover:opacity-90" onClick={() => void setAppointmentStatus(selectedCita, 'confirmed')}>
@@ -292,6 +301,9 @@ export function Appointments() {
           </div>
         );
       })()}
+      <ConfirmActionDialog open={!!move} onOpenChange={open => { if (!open) setMove(null); }} title="Mover cita" description={move ? `${move.cita.clienteNombre}: ${move.date} a las ${move.time}, con ${professionals.find(p => p.id === move.professionalId)?.nombre || ''}. Se conservan duración y precio.` : ''} confirmLabel="Confirmar cambio" onConfirm={async () => { if (!move) return; try { await moveServiceAppointment(move.cita.id, { professionalId: move.professionalId, appointmentDate: move.date, startTime: move.time, expectedProfessionalId: move.cita.profesionalId, expectedDate: move.cita.fecha, expectedStartTime: move.cita.horaInicio, expectedEndTime: move.cita.horaFin }); setMove(null); await load(); toast.success('Cita reprogramada.'); } catch (e) { toastError(e, 'No se pudo mover la cita.'); throw e; } }} />
+      {schedulePro && <ProfessionalScheduleDialog key={schedulePro.id} professional={schedulePro} onClose={() => setSchedulePro(null)} onSaved={load} />}
+      {checkout && <ServiceCheckoutDialog key={checkout.id} appointment={checkout} onClose={() => setCheckout(null)} onSaved={load} />}
     </Layout>
   );
 }

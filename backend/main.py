@@ -136,8 +136,9 @@ def public_user(row: sqlite3.Row, conn: sqlite3.Connection | None = None) -> dic
 
 
 DELEGABLE_PERMISSIONS = {
+    "customers.view", "customers.manage", "billing.view", "billing.manage",
     "dashboard.view", "catalog.view", "catalog.create", "catalog.edit",
-    "inventory.view", "inventory.edit", "inventory.entry", "inventory.adjust",
+    "inventory.count", "inventory.view", "inventory.edit", "inventory.entry", "inventory.adjust",
     "inventory.delete", "inventory.negative", "purchases.approve",
     "suppliers.view", "suppliers.manage",
     "sales.view", "sales.create", "sales.cancel", "cash.view", "cash.manage",
@@ -170,6 +171,10 @@ def has_permission(permission: str) -> bool:
 
 
 def required_permission_for_request(path: str, method: str) -> str | None:
+    if path.startswith("/api/customers"):
+        return "customers.view" if method == "GET" else "customers.manage"
+    if path.startswith("/api/billing"):
+        return "billing.view" if method == "GET" else "billing.manage"
     if path.startswith("/api/tables"):
         return "orders.view" if method == "GET" else "orders.manage"
     if path == "/api/dashboard": return "dashboard.view"
@@ -192,6 +197,8 @@ def required_permission_for_request(path: str, method: str) -> str | None:
         return "catalog.view" if method == "GET" else "catalog.edit"
     if path.startswith("/api/recipes/"):
         return "catalog.view" if method == "GET" else "catalog.edit"
+    if path.startswith("/api/inventory/count-reviews") or path == "/api/inventory/count-products":
+        return "inventory.adjust" if path.endswith("/approve") or path.endswith("/cancel") else "inventory.count"
     if path.startswith("/api/inventory/"):
         if path.startswith("/api/inventory/purchase-orders"):
             if method == "GET":
@@ -214,6 +221,8 @@ def required_permission_for_request(path: str, method: str) -> str | None:
         return "inventory.entry"
     if path == "/api/sales":
         return "sales.view" if method == "GET" else "sales.create"
+    if path.startswith("/api/sales/") and "/returns" in path:
+        return "sales.cancel"
     if path.startswith("/api/sales/") and path.endswith("/cancel"):
         return "sales.cancel"
     if path.startswith("/api/sales/"):
@@ -290,6 +299,8 @@ async def authenticate_and_authorize(request: Request, call_next):
             custom_permissions = set(json.loads(role_row["permissions_json"] or "[]")) if role_row else set()
         except (sqlite3.OperationalError, json.JSONDecodeError, TypeError):
             custom_permissions = set()
+        if "inventory.adjust" in custom_permissions:
+            custom_permissions.add("inventory.count")
         required_permission = required_permission_for_request(path, request.method)
         if not required_permission or required_permission not in custom_permissions:
             return JSONResponse(status_code=403, content={"detail": "Tu rol personalizado no tiene permiso para esta operación."})
@@ -330,7 +341,7 @@ async def authenticate_and_authorize(request: Request, call_next):
                 elif module == "inventory":
                     enabled = bool(features.get("inventory"))
                 elif module == "pos":
-                    enabled = bool(features.get("pos")) or bool(path.startswith("/api/cash/") and business_row and business_row["business_type"] == "hotel" and (features.get("rooms") or features.get("reservations")))
+                    enabled = bool(features.get("pos")) or bool(path.startswith("/api/cash/") and business_row and ((business_row["business_type"] == "hotel" and (features.get("rooms") or features.get("reservations"))) or (business_row["business_type"] == "services" and (features.get("services") or features.get("reservations")))))
                 else:
                     food = business_row and business_row["business_type"] == "food"
                     active_modules = settings.get("foodConfig", {}).get("activeModules", []) if isinstance(settings, dict) and isinstance(settings.get("foodConfig"), dict) else []
@@ -351,6 +362,8 @@ async def authenticate_and_authorize(request: Request, call_next):
             allowed = True
         elif path in {"/api/products", "/api/business/config", "/api/tables"}:
             allowed = request.method == "GET"
+        elif path == "/api/customers" or path.startswith("/api/customers/"):
+            allowed = request.method in {"GET", "POST", "PUT"}
         elif path == "/api/dashboard":
             allowed = request.method == "GET"
         elif path == "/api/sales":
@@ -907,6 +920,8 @@ def delete_business_type_data(conn: sqlite3.Connection, business_id: str, old_ty
     # and it contains an explicit business_id column. No broad table scans or cascades are used.
     if old_type == "hotel" and (conn.execute("SELECT 1 FROM hotel_payments WHERE business_id=? LIMIT 1", (business_id,)).fetchone() or conn.execute("SELECT 1 FROM hotel_account_closures WHERE business_id=? LIMIT 1", (business_id,)).fetchone()):
         return deleted  # Paid stays and cash records must survive a business-type change.
+    if old_type == "services" and conn.execute("SELECT 1 FROM service_appointments WHERE business_id=? AND sale_id IS NOT NULL LIMIT 1", (business_id,)).fetchone():
+        return deleted  # Paid service receipts must survive a business-type change.
     optional_by_type = {
         # Child rows must be deleted before parent rows to preserve foreign-key integrity.
         "hotel": ["reservation_items", "hotel_reservations", "reservations", "housekeeping_tasks", "hotel_rooms"],
@@ -969,17 +984,28 @@ def get_sale(conn: sqlite3.Connection, sale_id: str) -> dict | None:
         return None
     items = conn.execute("SELECT * FROM sale_items WHERE sale_id = ? ORDER BY id", (sale_id,)).fetchall()
     mapped_items = [{
-        "productId": i["product_id"], "productName": i["product_name"], "sku": i["sku_snapshot"],
+        "id": i["id"], "productId": i["product_id"], "productName": i["product_name"], "sku": i["sku_snapshot"],
         "quantity": i["quantity"], "price": i["unit_price"],
         "unitCost": i["unit_cost_snapshot"] if "unit_cost_snapshot" in i.keys() else 0,
         "discountPercent": i["discount_percent"], "subtotal": i["line_total"],
     } for i in items]
+    service_line = conn.execute("SELECT * FROM service_sale_lines WHERE sale_id=?", (sale_id,)).fetchone()
+    if service_line:
+        mapped_items.insert(0, {"productId": "service:" + service_line["service_id"], "productName": service_line["service_name"], "sku": "SERVICIO", "quantity": 1, "price": service_line["unit_price"], "unitCost": 0, "discountPercent": 0, "subtotal": service_line["line_total"]})
+    customer_link = conn.execute("SELECT customer_id,customer_snapshot FROM customer_operations WHERE business_id=? AND source_type='sale' AND source_id=?", (current_business_id(), sale_id)).fetchone()
+    from .returns import returns_for_sale, service_balance
+    returns = returns_for_sale(conn, sale_id)
     count_products = len(mapped_items)
     product_names = ", ".join(i["productName"] for i in mapped_items[:2])
     if count_products > 2:
         product_names += f" y {count_products - 2} más"
     payment_rows = conn.execute("SELECT method, amount FROM sale_payments WHERE sale_id = ? ORDER BY id", (sale_id,)).fetchall()
     return {
+        "returns": returns, "returnedTotal": round(sum(r["total"] for r in returns), 2),
+        "netTotal": 0 if sale["status"] == "cancelled" else round(sale["total"] - sum(r["total"] for r in returns), 2),
+        "returnableServiceAmount": float(service_balance(conn, sale)) if service_line else 0,
+        "customerId": customer_link["customer_id"] if customer_link else None,
+        "customerSnapshot": json.loads(customer_link["customer_snapshot"]) if customer_link else None,
         "id": sale["id"], "date": timestamp_iso(sale["created_at"]), "status": sale["status"], "customer": sale["customer"],
         "paymentMethod": sale["payment_method"], "currency": sale["currency"], "subtotal": sale["subtotal"],
         "lineDiscount": sale["line_discount"], "globalDiscount": sale["global_discount"],
@@ -994,7 +1020,14 @@ def get_sale(conn: sqlite3.Connection, sale_id: str) -> dict | None:
 @app.on_event("startup")
 async def startup():
     with connection() as conn:
+        if table_exists(conn, "businesses"):
+            applied = {r[0] for r in conn.execute("SELECT version FROM schema_migrations")} if table_exists(conn, "schema_migrations") else set()
+            if any(p.name not in applied for p in (ROOT / "database" / "migrations").glob("*.sql")):
+                from .backups import create_backup
+                create_backup(DB_PATH, Path(os.getenv("MANAGER_STOCK_BACKUP_DIR", str(DB_PATH.parent / "backups"))))
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        from .migrations import migrate
+        migrate(conn)
         migrate_inventory_schema(conn)
         if not table_has_column(conn, "orders", "restaurant_metadata"):
             conn.execute("ALTER TABLE orders ADD COLUMN restaurant_metadata TEXT NOT NULL DEFAULT '{}'")
@@ -1140,10 +1173,20 @@ async def startup():
         # Historical databases are left intact; no user data is removed during startup.
         process_due_type_transitions()
         app.state.transition_cleanup_task = asyncio.create_task(transition_cleanup_worker())
+        if os.getenv("MANAGER_STOCK_AUTO_BACKUP", "1") != "0":
+            from .backups import backup_worker
+            app.state.backup_task = asyncio.create_task(backup_worker(DB_PATH))
 
 
 @app.on_event("shutdown")
 async def shutdown():
+    backup_task = getattr(app.state, "backup_task", None)
+    if backup_task is not None:
+        backup_task.cancel()
+        try:
+            await backup_task
+        except asyncio.CancelledError:
+            pass
     task = getattr(app.state, "transition_cleanup_task", None)
     if task is not None:
         task.cancel()
@@ -1280,6 +1323,12 @@ class ProfessionalPayload(BaseModel):
     color: str = Field(default="#315F68", pattern=r"^#[0-9a-fA-F]{6}$")
     availability: list[dict] = Field(default_factory=list, max_length=100)
 
+    @field_validator("availability")
+    @classmethod
+    def valid_availability(cls, value):
+        from .scheduling import Schedule
+        return [p.model_dump() for p in Schedule(availability=value).availability]
+
 
 class AppointmentPayload(BaseModel):
     serviceId: str = Field(min_length=1, max_length=80)
@@ -1318,7 +1367,7 @@ class SaleItemPayload(BaseModel):
 
 class PaymentPartPayload(BaseModel):
     method: Literal["cash", "card", "digital", "transfer"]
-    amount: float = Field(ge=0)
+    amount: float = Field(ge=0, allow_inf_nan=False)
 
 
 class SalePayload(BaseModel):
@@ -1326,6 +1375,8 @@ class SalePayload(BaseModel):
     items: list[SaleItemPayload] = Field(default_factory=list, max_length=200)
     orderIds: list[str] = Field(default_factory=list, max_length=200)
     customer: str = Field(default="Cliente general", max_length=120)
+    customerId: str | None = Field(default=None, max_length=100)
+    appointmentId: str | None = Field(default=None, max_length=100)
     paymentMethod: Literal["cash", "card", "digital", "split", "transfer"] = "cash"
     payments: list[PaymentPartPayload] = Field(default_factory=list, max_length=10)
     cashSessionId: str | None = None
@@ -1655,7 +1706,7 @@ def create_custom_role(payload: CustomRolePayload):
         "catalog.edit": {"catalog.view"},
         "inventory.edit": {"inventory.view"},
         "inventory.entry": {"inventory.view", "catalog.view"},
-        "inventory.adjust": {"inventory.view", "catalog.view"},
+        "inventory.adjust": {"inventory.view", "catalog.view", "inventory.count"},
         "inventory.delete": {"inventory.view"},
         "inventory.negative": {"inventory.view"},
         "purchases.approve": {"inventory.view", "suppliers.view", "catalog.view"},
@@ -1663,6 +1714,8 @@ def create_custom_role(payload: CustomRolePayload):
         "cash.manage": {"cash.view"},
         # Staff assigned custom roles use the least-privilege cashier base identity.
         # The POS needs catalog reads and the authorized cash-session workflow.
+        "customers.manage": {"customers.view"},
+        "billing.manage": {"billing.view", "customers.view"},
         "sales.create": {"sales.view", "catalog.view", "cash.view", "cash.manage"},
         "sales.cancel": {"sales.view"},
         "orders.manage": {"orders.view"},
@@ -2336,8 +2389,24 @@ def create_sale(payload: SalePayload):
         conn.execute("BEGIN IMMEDIATE")
         existing = conn.execute("SELECT id FROM sales WHERE business_id=? AND idempotency_key=?", (current_business_id(), payload.idempotencyKey)).fetchone()
         if existing:
+            linked = conn.execute("SELECT appointment_id FROM service_sale_lines WHERE sale_id=?", (existing["id"],)).fetchone()
+            if (linked["appointment_id"] if linked else None) != payload.appointmentId:
+                raise HTTPException(409, "La clave de cobro pertenece a otra operación.")
             conn.commit()
             return get_sale(conn, existing["id"])
+        appointment = None
+        if payload.appointmentId:
+            if not has_permission("services.manage") or not has_permission("cash.manage"):
+                raise HTTPException(403, "Necesitas permisos de servicios y caja para cobrar una cita.")
+            appointment = conn.execute("SELECT * FROM service_appointments WHERE id=? AND business_id=?", (payload.appointmentId, current_business_id())).fetchone()
+            if not appointment:
+                raise HTTPException(404, "Cita no encontrada.")
+            if appointment["sale_id"] or appointment["status"] in {"cancelled", "no_show"} or payload.status != "completed" or payload.orderIds:
+                raise HTTPException(409, "La cita ya fue cobrada o no admite un cobro.")
+            session = conn.execute("SELECT id FROM cash_sessions WHERE id=? AND business_id=? AND opened_by_user_id=? AND status='open'", (payload.cashSessionId, current_business_id(), current_identity()["id"])).fetchone()
+            if not session:
+                raise HTTPException(409, "Abre tu turno de caja antes de cobrar la cita.")
+            payload = payload.model_copy(update={"customer": appointment["client_name"]})
         if current_identity()["role"] == "cashier" and not payload.cashSessionId:
             conn.rollback()
             raise HTTPException(409, "Abre tu turno de caja antes de registrar una venta.")
@@ -2349,6 +2418,11 @@ def create_sale(payload: SalePayload):
             if not active_session:
                 conn.rollback()
                 raise HTTPException(409, "La caja seleccionada no está abierta o no pertenece a tu turno.")
+        customer = None
+        if payload.customerId:
+            from .commerce import resolve_customer
+            customer = resolve_customer(conn, payload.customerId)
+            payload = payload.model_copy(update={"customer": customer["name"]})
         business_settings = conn.execute("SELECT currency,tax_rate FROM businesses WHERE id=?", (current_business_id(),)).fetchone()
         if not business_settings:
             conn.rollback()
@@ -2373,7 +2447,7 @@ def create_sale(payload: SalePayload):
             if order["stock_consumed"]:
                 movements = conn.execute("SELECT * FROM inventory_movements WHERE order_id=? AND movement_type IN ('consumption','recipe_consumption') ORDER BY id", (order_id,)).fetchall()
                 reverse_movements(conn, movements, f"Traslado a venta del pedido {order_id}", "adjustment")
-        if not items:
+        if not items and not appointment:
             raise HTTPException(422, "Agrega al menos un producto o pedido a la venta.")
         payload = payload.model_copy(update={"items": items})
 
@@ -2422,7 +2496,7 @@ def create_sale(payload: SalePayload):
                     conn.rollback()
                     raise HTTPException(409, f"Stock insuficiente para {product['name']}. Disponible: {available:g}; solicitado: {required_quantity:g}.")
 
-        subtotal = 0.0
+        subtotal = float(appointment["price_snapshot"]) if appointment else 0.0
         line_discount = 0.0
         resolved_items = []
         for item in payload.items:
@@ -2458,6 +2532,12 @@ def create_sale(payload: SalePayload):
             (sale_id, current_business_id(), payload.idempotencyKey, payload.customer.strip() or "Cliente general", payload.paymentMethod,
              sale_currency, subtotal, line_discount, global_discount, sale_tax_rate, tax, total, payload.status, current_identity()["id"], payload.cashSessionId, now),
         )
+        if appointment:
+            conn.execute("INSERT INTO service_sale_lines VALUES (?,?,?,?,?,?)", (sale_id, appointment["id"], appointment["service_id"], appointment["service_name_snapshot"], appointment["price_snapshot"], appointment["price_snapshot"]))
+            conn.execute("UPDATE service_appointments SET sale_id=?,status='attended',updated_at=CURRENT_TIMESTAMP WHERE id=?", (sale_id, appointment["id"]))
+        if customer:
+            from .commerce import link_customer
+            link_customer(conn, "sale", sale_id, customer["id"])
         for part in payment_parts:
             conn.execute("INSERT INTO sale_payments (sale_id,method,amount) VALUES (?,?,?)", (sale_id, part.method, part.amount))
         recipe_costs = {product_id: recipe_unit_cost(conn, product_id) for product_id in quantities_by_product}
@@ -2506,6 +2586,12 @@ def cancel_sale(sale_id: str):
         if sale["status"] == "cancelled":
             conn.commit()
             return get_sale(conn, sale_id)
+        if conn.execute("SELECT 1 FROM service_sale_lines WHERE sale_id=?", (sale_id,)).fetchone():
+            raise HTTPException(409, "La cita tiene un cobro vinculado. Registra una devolución desde su comprobante.")
+        if conn.execute("SELECT 1 FROM sale_returns WHERE sale_id=?", (sale_id,)).fetchone():
+            raise HTTPException(409, "La venta tiene devoluciones parciales. Devuelve las líneas restantes para conservar la trazabilidad.")
+        if conn.execute("SELECT 1 FROM billing_drafts WHERE business_id=? AND source_type='sale' AND source_id=?", (current_business_id(), sale_id)).fetchone():
+            raise HTTPException(409, "La venta tiene preparación fiscal. Registra una devolución vinculada en lugar de anularla.")
         movements = conn.execute(
             "SELECT * FROM inventory_movements WHERE sale_id=? AND movement_type IN ('sale','recipe_consumption') ORDER BY id",
             (sale_id,),
@@ -2588,10 +2674,10 @@ def dashboard():
         revenue_today = 0.0
         revenue_last_7_days = 0.0
         if pos_enabled:
-            today_query = """SELECT COUNT(*) AS count, COALESCE(SUM(total),0) AS revenue
+            today_query = """SELECT COUNT(*) AS count, COALESCE(SUM(MAX(0,total-COALESCE((SELECT SUM(r.total) FROM sale_returns r WHERE r.sale_id=sales.id),0))),0) AS revenue
                 FROM sales WHERE business_id=? AND status='completed'
                 AND julianday(created_at) >= julianday(?) AND julianday(created_at) < julianday(?)"""
-            last7_query = """SELECT COALESCE(SUM(total),0) FROM sales WHERE business_id=? AND status='completed'
+            last7_query = """SELECT COALESCE(SUM(MAX(0,total-COALESCE((SELECT SUM(r.total) FROM sale_returns r WHERE r.sale_id=sales.id),0))),0) FROM sales WHERE business_id=? AND status='completed'
                 AND julianday(created_at) >= julianday(?) AND julianday(created_at) <= julianday(?)"""
             today_params: list = [business_id, start_utc, end_utc]
             last7_params: list = [business_id, seven_days_ago_utc, now_utc]
@@ -4191,7 +4277,8 @@ def cash_session_out(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         FROM sales s WHERE s.cash_session_id=? AND s.status='completed'""", (row["id"],)).fetchone()[0]
     hotel_cash = conn.execute("SELECT COALESCE(SUM(amount),0) FROM hotel_payments WHERE cash_session_id=? AND method='cash'", (row["id"],)).fetchone()[0]
     hotel_refunds = conn.execute("SELECT COALESCE(SUM(amount),0) FROM hotel_refunds WHERE cash_session_id=? AND method='cash'", (row["id"],)).fetchone()[0]
-    expected = round(row["opening_amount"] + cash_sales + hotel_cash - hotel_refunds, 2)
+    sale_refunds = conn.execute("SELECT COALESCE(SUM(p.amount),0) FROM sale_return_payments p JOIN sale_returns r ON r.id=p.return_id WHERE r.cash_session_id=? AND p.method='cash'", (row["id"],)).fetchone()[0]
+    expected = round(row["opening_amount"] + cash_sales + hotel_cash - hotel_refunds - sale_refunds, 2)
     return {"id": row["id"], "openedBy": row["opened_by"], "openingAmount": row["opening_amount"],
             "closingAmount": row["closing_amount"], "expectedAmount": row["expected_amount"] if row["status"] == "closed" else expected,
             "difference": row["difference"], "status": row["status"], "openedAt": timestamp_iso(row["opened_at"]), "closedAt": timestamp_iso(row["closed_at"])}
@@ -4758,6 +4845,7 @@ def professional_out(row: sqlite3.Row) -> dict:
     except json.JSONDecodeError:
         availability = []
     return {"id": row["id"], "nombre": row["name"], "name": row["name"], "especialidad": row["specialty"],
+            "bufferMinutes": row["buffer_minutes"], "daysOff": json.loads(row["days_off_json"] or "[]"), "scheduleRevision": row["schedule_revision"],
             "specialty": row["specialty"], "color": row["color"], "horario": availability, "availability": availability,
             "active": bool(row["active"])}
 
@@ -4769,7 +4857,7 @@ def appointment_out(row: sqlite3.Row) -> dict:
             "profesionalId": row["professional_id"], "profesionalNombre": row["professional_name_snapshot"],
             "fecha": row["appointment_date"], "horaInicio": row["start_time"], "horaFin": row["end_time"],
             "estado": row["status"], "notes": row["notes"], "durationMinutes": row["duration_minutes"],
-            "price": row["price_snapshot"], "createdAt": timestamp_iso(row["created_at"])}
+            "saleId": row["sale_id"], "price": row["price_snapshot"], "createdAt": timestamp_iso(row["created_at"])}
 
 
 @app.get("/api/services/catalog")
@@ -4867,6 +4955,8 @@ def create_service_appointment(payload: AppointmentPayload):
         if end_dt.date().isoformat() != payload.appointmentDate:
             conn.rollback()
             raise HTTPException(422, "La cita no puede terminar después de la medianoche.")
+        from .scheduling import check_slot
+        check_slot(conn, professional, start_dt, end_dt, "")
         conflict = conn.execute("SELECT id FROM service_appointments WHERE business_id=? AND professional_id=? AND appointment_date=? AND status IN ('reserved','confirmed') AND start_time<? AND end_time>? LIMIT 1", (business_id,payload.professionalId,payload.appointmentDate,end_time,payload.startTime)).fetchone()
         if conflict:
             conn.rollback()
@@ -4892,11 +4982,20 @@ def update_service_appointment_status(appointment_id: str, payload: AppointmentS
             raise HTTPException(403, "Tu rol no puede actualizar citas.")
     business_id = current_business_id()
     with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        current = conn.execute("SELECT * FROM service_appointments WHERE id=? AND business_id=?", (appointment_id, business_id)).fetchone()
+        if current and current["sale_id"] and payload.status != 'attended':
+            raise HTTPException(409, "La cita ya fue cobrada. Conserva el estado y usa su comprobante.")
+        if current and payload.status in {'reserved', 'confirmed'}:
+            professional = conn.execute("SELECT * FROM service_professionals WHERE id=? AND business_id=?", (current['professional_id'], business_id)).fetchone()
+            from .scheduling import check_slot
+            check_slot(conn, professional, datetime.fromisoformat(current['appointment_date'] + 'T' + current['start_time']), datetime.fromisoformat(current['appointment_date'] + 'T' + current['end_time']), appointment_id)
         cursor = conn.execute("UPDATE service_appointments SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND business_id=?", (payload.status,appointment_id,business_id))
         if cursor.rowcount == 0:
             raise HTTPException(404, "Cita no encontrada.")
         audit(conn, payload.status, "service_appointment", appointment_id, {"status": payload.status})
         row = conn.execute("SELECT * FROM service_appointments WHERE id=? AND business_id=?",(appointment_id,business_id)).fetchone()
+        conn.commit()
         return appointment_out(row)
 
 
@@ -4914,7 +5013,10 @@ def edit_service_appointment(appointment_id: str, payload: AppointmentPayload):
             raise HTTPException(403, "Tu rol no puede editar citas.")
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        existing = conn.execute("SELECT id FROM service_appointments WHERE id=? AND business_id=?", (appointment_id, business_id)).fetchone()
+        paid = conn.execute("SELECT sale_id FROM service_appointments WHERE id=? AND business_id=?", (appointment_id, business_id)).fetchone()
+        if paid and paid['sale_id']:
+            raise HTTPException(409, "No se puede modificar ni eliminar una cita cobrada.")
+        existing = conn.execute("SELECT * FROM service_appointments WHERE id=? AND business_id=?", (appointment_id, business_id)).fetchone()
         service = conn.execute("SELECT * FROM service_catalog WHERE id=? AND business_id=? AND active=1", (payload.serviceId, business_id)).fetchone()
         professional = conn.execute("SELECT * FROM service_professionals WHERE id=? AND business_id=? AND active=1", (payload.professionalId, business_id)).fetchone()
         if not existing:
@@ -4922,14 +5024,19 @@ def edit_service_appointment(appointment_id: str, payload: AppointmentPayload):
         if not service or not professional:
             conn.rollback(); raise HTTPException(404, "Selecciona un servicio y un profesional activos de este negocio.")
         start_dt = datetime.strptime(f"{payload.appointmentDate} {payload.startTime}", "%Y-%m-%d %H:%M")
-        end_dt = start_dt + timedelta(minutes=service["duration_minutes"])
+        same_service = existing["service_id"] == service["id"]
+        duration = existing["duration_minutes"] if same_service else service["duration_minutes"]
+        price = existing["price_snapshot"] if same_service else service["price"]
+        end_dt = start_dt + timedelta(minutes=duration)
         end_time = end_dt.strftime("%H:%M")
         if end_dt.date().isoformat() != payload.appointmentDate:
             conn.rollback(); raise HTTPException(422, "La cita no puede terminar después de la medianoche.")
+        from .scheduling import check_slot
+        check_slot(conn, professional, start_dt, end_dt, appointment_id)
         conflict = conn.execute("SELECT id FROM service_appointments WHERE business_id=? AND professional_id=? AND appointment_date=? AND status IN ('reserved','confirmed') AND id<>? AND start_time<? AND end_time>? LIMIT 1", (business_id, payload.professionalId, payload.appointmentDate, appointment_id, end_time, payload.startTime)).fetchone()
         if conflict:
             conn.rollback(); raise HTTPException(409, "El profesional ya tiene una cita en ese horario.")
-        conn.execute("UPDATE service_appointments SET service_id=?,professional_id=?,client_name=?,client_email=?,client_phone=?,service_name_snapshot=?,professional_name_snapshot=?,duration_minutes=?,price_snapshot=?,appointment_date=?,start_time=?,end_time=?,notes=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND business_id=?", (service["id"], professional["id"], payload.clientName, payload.clientEmail.strip(), payload.clientPhone.strip(), service["name"], professional["name"], service["duration_minutes"], service["price"], payload.appointmentDate, payload.startTime, end_time, payload.notes.strip(), appointment_id, business_id))
+        conn.execute("UPDATE service_appointments SET service_id=?,professional_id=?,client_name=?,client_email=?,client_phone=?,service_name_snapshot=?,professional_name_snapshot=?,duration_minutes=?,price_snapshot=?,appointment_date=?,start_time=?,end_time=?,notes=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND business_id=?", (service["id"], professional["id"], payload.clientName, payload.clientEmail.strip(), payload.clientPhone.strip(), service["name"], professional["name"], duration, price, payload.appointmentDate, payload.startTime, end_time, payload.notes.strip(), appointment_id, business_id))
         audit(conn, "edit", "service_appointment", appointment_id, {"serviceId": service["id"], "professionalId": professional["id"], "date": payload.appointmentDate, "startTime": payload.startTime})
         row = conn.execute("SELECT * FROM service_appointments WHERE id=? AND business_id=?", (appointment_id, business_id)).fetchone()
         conn.commit()
@@ -4949,11 +5056,16 @@ def delete_service_appointment(appointment_id: str):
         if not role or "services.manage" not in set(json.loads(role["permissions_json"] or "[]")):
             raise HTTPException(403, "Tu rol no puede eliminar citas.")
     with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        paid = conn.execute("SELECT sale_id FROM service_appointments WHERE id=? AND business_id=?", (appointment_id, business_id)).fetchone()
+        if paid and paid['sale_id']:
+            raise HTTPException(409, "No se puede modificar ni eliminar una cita cobrada.")
         row = conn.execute("SELECT id FROM service_appointments WHERE id=? AND business_id=?", (appointment_id, business_id)).fetchone()
         if not row:
             raise HTTPException(404, "Cita no encontrada.")
         conn.execute("DELETE FROM service_appointments WHERE id=? AND business_id=?", (appointment_id, business_id))
         audit(conn, "delete", "service_appointment", appointment_id, {})
+        conn.commit()
     return None
 
 
@@ -5353,3 +5465,23 @@ def delete_recipe(recipe_id: str):
         audit(conn, "delete", "recipe", recipe_id)
         conn.commit()
         return {"ok": True, "id": recipe_id}
+
+
+# New domains are isolated from the legacy API while sharing tenant and transaction helpers.
+from .commerce import router as commerce_router
+app.include_router(commerce_router)
+
+from .returns import router as returns_router
+app.include_router(returns_router)
+
+from .service_checkout import router as service_checkout_router
+app.include_router(service_checkout_router)
+
+from .scheduling import router as scheduling_router
+app.include_router(scheduling_router)
+
+from .scheduling import appointment_router as appointment_schedule_router
+app.include_router(appointment_schedule_router)
+
+from .count_reviews import router as count_reviews_router
+app.include_router(count_reviews_router)

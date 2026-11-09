@@ -1,54 +1,58 @@
+import { lazy, Suspense } from 'react';
+const CountReviews = lazy(() => import('./pages/warehouse/CountReviews').then(module => ({ default: module.CountReviews })));
+const HotelToday = lazy(() => import('./pages/hotel/Today').then(module => ({ default: module.HotelToday })));
+const Customers = lazy(() => import('./pages/Customers').then(module => ({ default: module.Customers })));
+const Billing = lazy(() => import('./pages/Billing').then(module => ({ default: module.Billing })));
 import { createBrowserRouter, Navigate, useLocation, useNavigate, useRouteError } from 'react-router';
 import { useAuth } from './context/AuthContext';
 import { useBusiness } from './context/BusinessContext';
 import { canAccessPath } from './security/permissions';
-import { Login } from './pages/Login';
-import { Register } from './pages/Register';
-import { BusinessSetup } from './pages/BusinessSetup';
-import { Dashboard } from './pages/Dashboard';
-import { Products } from './pages/Products';
-import { NewProduct } from './pages/NewProduct';
-import { Sales } from './pages/Sales';
-import { NewSale } from './pages/NewSale';
-import { SaleDetail } from './pages/SaleDetail';
-import { POS } from './pages/POS';
-import { Suppliers } from './pages/Suppliers';
-import { NewSupplier } from './pages/NewSupplier';
-import { Notifications } from './pages/Notifications';
-import { Subscription } from './pages/Subscription';
-import { Settings } from './pages/Settings';
-import { Tables } from './pages/restaurant/Tables';
-import { Kitchen } from './pages/restaurant/Kitchen';
-import { Waiter } from './pages/restaurant/Waiter';
-import { Orders } from './pages/restaurant/Orders';
-import { Catalog as RestaurantCatalog } from './pages/restaurant/Catalog';
-import { RestaurantSettingsPage } from './pages/restaurant/Settings';
-import { HotelIncome } from './pages/hotel/Income';
-import { Rooms } from './pages/hotel/Rooms';
-import { Availability } from './pages/hotel/Availability';
-import { Housekeeping } from './pages/hotel/Housekeeping';
-import { Locations } from './pages/warehouse/Locations';
-import { WarehouseOverview } from './pages/warehouse/Overview';
-import { WarehouseEntries } from './pages/warehouse/Entries';
-import { WarehouseExits } from './pages/warehouse/Exits';
-import { WarehouseAdjustments } from './pages/warehouse/Adjustments';
-import { WarehouseLots } from './pages/warehouse/Lots';
-import { WarehousePurchaseOrders } from './pages/warehouse/PurchaseOrders';
-import { WarehouseCounts } from './pages/warehouse/Counts';
-import { WarehouseTransfers } from './pages/warehouse/Transfers';
-import { WarehouseReports } from './pages/warehouse/Reports';
-import { WarehouseSettings } from './pages/warehouse/Settings';
-import { Recipes } from './pages/restaurant/Recipes';
-import { Appointments } from './pages/services/Appointments';
-import { Services } from './pages/services/Services';
-import { Movements } from './pages/inventory/Movements';
-import { UsersRoles } from './pages/UsersRoles';
-import { Reports } from './pages/Reports';
-import { ActivityLog } from './pages/ActivityLog';
-import { PlatformAdmin } from './pages/PlatformAdmin';
-import { SuspendedBusiness } from './pages/SuspendedBusiness';
-import { LandingPage } from './pages/LandingPage';
-import { Downloads } from './pages/Downloads';
+const Login = lazy(() => import('./pages/Login').then(module => ({ default: module.Login })));
+const Register = lazy(() => import('./pages/Register').then(module => ({ default: module.Register })));
+const BusinessSetup = lazy(() => import('./pages/BusinessSetup').then(module => ({ default: module.BusinessSetup })));
+const Dashboard = lazy(() => import('./pages/Dashboard').then(module => ({ default: module.Dashboard })));
+const Products = lazy(() => import('./pages/Products').then(module => ({ default: module.Products })));
+const NewProduct = lazy(() => import('./pages/NewProduct').then(module => ({ default: module.NewProduct })));
+const Sales = lazy(() => import('./pages/Sales').then(module => ({ default: module.Sales })));
+const NewSale = lazy(() => import('./pages/NewSale').then(module => ({ default: module.NewSale })));
+const SaleDetail = lazy(() => import('./pages/SaleDetail').then(module => ({ default: module.SaleDetail })));
+const POS = lazy(() => import('./pages/POS').then(module => ({ default: module.POS })));
+const Suppliers = lazy(() => import('./pages/Suppliers').then(module => ({ default: module.Suppliers })));
+const NewSupplier = lazy(() => import('./pages/NewSupplier').then(module => ({ default: module.NewSupplier })));
+const Notifications = lazy(() => import('./pages/Notifications').then(module => ({ default: module.Notifications })));
+const Subscription = lazy(() => import('./pages/Subscription').then(module => ({ default: module.Subscription })));
+const Settings = lazy(() => import('./pages/Settings').then(module => ({ default: module.Settings })));
+const Tables = lazy(() => import('./pages/restaurant/Tables').then(module => ({ default: module.Tables })));
+const Kitchen = lazy(() => import('./pages/restaurant/Kitchen').then(module => ({ default: module.Kitchen })));
+const Waiter = lazy(() => import('./pages/restaurant/Waiter').then(module => ({ default: module.Waiter })));
+const Orders = lazy(() => import('./pages/restaurant/Orders').then(module => ({ default: module.Orders })));
+const RestaurantCatalog = lazy(() => import('./pages/restaurant/Catalog').then(module => ({ default: module.Catalog })));
+const RestaurantSettingsPage = lazy(() => import('./pages/restaurant/Settings').then(module => ({ default: module.RestaurantSettingsPage })));
+const HotelIncome = lazy(() => import('./pages/hotel/Income').then(module => ({ default: module.HotelIncome })));
+const Rooms = lazy(() => import('./pages/hotel/Rooms').then(module => ({ default: module.Rooms })));
+const Availability = lazy(() => import('./pages/hotel/Availability').then(module => ({ default: module.Availability })));
+const Housekeeping = lazy(() => import('./pages/hotel/Housekeeping').then(module => ({ default: module.Housekeeping })));
+const Locations = lazy(() => import('./pages/warehouse/Locations').then(module => ({ default: module.Locations })));
+const WarehouseOverview = lazy(() => import('./pages/warehouse/Overview').then(module => ({ default: module.WarehouseOverview })));
+const WarehouseEntries = lazy(() => import('./pages/warehouse/Entries').then(module => ({ default: module.WarehouseEntries })));
+const WarehouseExits = lazy(() => import('./pages/warehouse/Exits').then(module => ({ default: module.WarehouseExits })));
+const WarehouseAdjustments = lazy(() => import('./pages/warehouse/Adjustments').then(module => ({ default: module.WarehouseAdjustments })));
+const WarehouseLots = lazy(() => import('./pages/warehouse/Lots').then(module => ({ default: module.WarehouseLots })));
+const WarehousePurchaseOrders = lazy(() => import('./pages/warehouse/PurchaseOrders').then(module => ({ default: module.WarehousePurchaseOrders })));
+const WarehouseTransfers = lazy(() => import('./pages/warehouse/Transfers').then(module => ({ default: module.WarehouseTransfers })));
+const WarehouseReports = lazy(() => import('./pages/warehouse/Reports').then(module => ({ default: module.WarehouseReports })));
+const WarehouseSettings = lazy(() => import('./pages/warehouse/Settings').then(module => ({ default: module.WarehouseSettings })));
+const Recipes = lazy(() => import('./pages/restaurant/Recipes').then(module => ({ default: module.Recipes })));
+const Appointments = lazy(() => import('./pages/services/Appointments').then(module => ({ default: module.Appointments })));
+const Services = lazy(() => import('./pages/services/Services').then(module => ({ default: module.Services })));
+const Movements = lazy(() => import('./pages/inventory/Movements').then(module => ({ default: module.Movements })));
+const UsersRoles = lazy(() => import('./pages/UsersRoles').then(module => ({ default: module.UsersRoles })));
+const Reports = lazy(() => import('./pages/Reports').then(module => ({ default: module.Reports })));
+const ActivityLog = lazy(() => import('./pages/ActivityLog').then(module => ({ default: module.ActivityLog })));
+const PlatformAdmin = lazy(() => import('./pages/PlatformAdmin').then(module => ({ default: module.PlatformAdmin })));
+const SuspendedBusiness = lazy(() => import('./pages/SuspendedBusiness').then(module => ({ default: module.SuspendedBusiness })));
+const LandingPage = lazy(() => import('./pages/LandingPage').then(module => ({ default: module.LandingPage })));
+const Downloads = lazy(() => import('./pages/Downloads').then(module => ({ default: module.Downloads })));
 import { AppShell } from './components/AppShell';
 
 function Waiting() {
@@ -111,7 +115,8 @@ function RouteErrorFallback() {
   return <main className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground"><section className="w-full max-w-lg rounded-2xl border border-border bg-card p-8 text-center shadow-xl"><div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-rose-50 text-rose-700"><span className="text-xl font-bold">!</span></div><p className="mt-4 text-xs font-semibold uppercase tracking-[.18em] text-rose-700">Error de aplicación</p><h1 className="mt-2 text-2xl font-bold">No se pudo mostrar esta pantalla</h1><p className="mt-3 text-sm leading-6 text-muted-foreground">{message}</p><div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row"><button type="button" onClick={() => window.location.reload()} className="rounded-xl bg-[var(--brand-primary)] px-4 py-3 text-sm font-semibold text-white">Intentar nuevamente</button><button type="button" onClick={() => navigate('/dashboard')} className="rounded-xl border border-border px-4 py-3 text-sm font-semibold">Volver al panel</button></div></section></main>;
 }
 
-const appRoute = (path: string, element: React.ReactNode) => ({ path, element, errorElement: <RouteErrorFallback /> });
+const loadingPage = <div role="status" className="p-8 text-muted-foreground">Cargando pantalla…</div>;
+const appRoute = (path: string, element: React.ReactNode) => ({ path, element: <Suspense fallback={loadingPage}>{element}</Suspense>, errorElement: <RouteErrorFallback /> });
 
 // El marco (sidebar, header, barra inferior) vive en una ruta sin path que
 // persiste durante toda la sesión: cada página sigue montando su propio <Layout>,
@@ -152,7 +157,7 @@ export const router = createBrowserRouter([
       { path: 'warehouse/adjustments', element: <WarehouseAdjustments /> },
       { path: 'warehouse/lots', element: <WarehouseLots /> },
       { path: 'warehouse/purchase-orders', element: <WarehousePurchaseOrders /> },
-      { path: 'warehouse/counts', element: <WarehouseCounts /> },
+      { path: 'warehouse/counts', element: <CountReviews /> },
       { path: 'warehouse/transfers', element: <WarehouseTransfers /> },
       { path: 'warehouse/locations', element: <Locations /> },
       { path: 'warehouse/movements', element: <Movements /> },
@@ -165,6 +170,9 @@ export const router = createBrowserRouter([
       { path: 'restaurant/catalog', element: <RestaurantCatalog /> },
       { path: 'restaurant/recipes', element: <Recipes /> },
       { path: 'restaurant/settings', element: <RestaurantSettingsPage /> },
+      { path: 'customers', element: <Customers /> },
+      { path: 'billing', element: <Billing /> },
+      { path: 'hotel/today', element: <HotelToday /> },
       { path: 'hotel/income', element: <HotelIncome /> },
       { path: 'hotel/rooms', element: <Rooms /> },
       { path: 'hotel/availability', element: <Availability /> },
@@ -175,7 +183,7 @@ export const router = createBrowserRouter([
       { path: 'users-roles', element: <UsersRoles /> },
       { path: 'subscription', element: <Subscription /> },
       { path: 'settings', element: <Settings /> },
-    ],
+    ].map(route => ({ ...route, element: <Suspense fallback={loadingPage}>{route.element}</Suspense> })),
   },
   appRoute('*', <NotFound />),
 ]);
