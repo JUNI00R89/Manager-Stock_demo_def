@@ -6,6 +6,7 @@ import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { BusinessSetup } from './pages/BusinessSetup';
 import { Dashboard } from './pages/Dashboard';
+import { DesignPreview } from './pages/DesignPreview';
 import { Products } from './pages/Products';
 import { NewProduct } from './pages/NewProduct';
 import { Sales } from './pages/Sales';
@@ -131,6 +132,7 @@ export const router = createBrowserRouter([
     errorElement: <RouteErrorFallback />,
     children: [
       { path: 'dashboard', element: <Dashboard /> },
+      { path: 'design-preview', element: <DesignPreview /> },
       { path: 'pos', element: <POS /> },
       { path: 'sales', element: <Sales /> },
       { path: 'sales/new', element: <NewSale /> },

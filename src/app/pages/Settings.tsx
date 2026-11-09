@@ -14,10 +14,14 @@ import {
   Building2,
   Save,
   RefreshCw,
-  CheckCircle
+  CheckCircle,
+  LayoutTemplate,
+  LayoutGrid,
+  Check
 } from 'lucide-react';
 import { useBusiness, BusinessConfig, DEFAULT_BUSINESS_THEMES, resolveThemeColors, type BusinessTheme } from '../context/BusinessContext';
 import { useTheme } from '../context/ThemeContext';
+import { useDesignMode } from '../context/DesignModeContext';
 import { toast } from 'sonner';
 import { toastError } from '../utils/notifications';
 import { ConfirmActionDialog } from '../components/ConfirmActionDialog';
@@ -26,6 +30,7 @@ export function Settings() {
   const navigate = useNavigate();
   const { config, setConfig } = useBusiness();
   const { setTheme } = useTheme();
+  const { designMode, setDesignMode } = useDesignMode();
 
   const [saving, setSaving] = useState(false);
   const [showReconfigureConfirm, setShowReconfigureConfirm] = useState(false);
@@ -169,6 +174,65 @@ export function Settings() {
           <h2 className="text-3xl font-bold text-foreground">Configuración</h2>
           <p className="text-muted-foreground mt-1">Administra la configuración de tu negocio</p>
         </div>
+
+        {/* Design mode: preferencia local, reversible en cualquier momento. */}
+        <Card className="rounded-2xl border-border/70 p-6 shadow-sm">
+          <div className="mb-5 flex items-start gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand-primary)]">
+              <LayoutTemplate size={21} />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold">Diseño de la interfaz</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Elige cómo se ve la aplicación en este dispositivo. El cambio se aplica al instante y no modifica tus datos ni la configuración del negocio.</p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              aria-pressed={designMode === 'editorial'}
+              onClick={() => setDesignMode('editorial')}
+              className={`group relative rounded-xl border p-4 text-left transition ${designMode === 'editorial' ? 'border-[var(--brand-primary)] bg-[var(--brand-soft)]' : 'border-border hover:border-foreground/30'}`}
+            >
+              <span className="flex items-center gap-2 text-sm font-semibold">
+                <LayoutTemplate size={16} className="text-[var(--brand-primary)]" />
+                Editorial
+                <span className="rounded-full bg-[var(--brand-primary)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">Nuevo</span>
+                {designMode === 'editorial' && <Check size={16} className="ml-auto text-[var(--brand-primary)]" />}
+              </span>
+              <span className="mt-1 block text-xs leading-5 text-muted-foreground">Líneas finas, tipografía con carácter y superficies planas, sin sombras ni cristal.</span>
+              <span className="mt-4 block rounded-md border border-border bg-background p-2.5" aria-hidden="true">
+                <span className="block h-1.5 w-10 rounded-full bg-[var(--brand-primary)]" />
+                <span className="mt-2 block h-1 w-full rounded-full bg-foreground/15" />
+                <span className="mt-1 block h-1 w-3/4 rounded-full bg-foreground/10" />
+              </span>
+            </button>
+
+            <button
+              type="button"
+              aria-pressed={designMode === 'classic'}
+              onClick={() => setDesignMode('classic')}
+              className={`group relative rounded-xl border p-4 text-left transition ${designMode === 'classic' ? 'border-[var(--brand-primary)] bg-[var(--brand-soft)]' : 'border-border hover:border-foreground/30'}`}
+            >
+              <span className="flex items-center gap-2 text-sm font-semibold">
+                <LayoutGrid size={16} className="text-muted-foreground" />
+                Clásico
+                {designMode === 'classic' && <Check size={16} className="ml-auto text-[var(--brand-primary)]" />}
+              </span>
+              <span className="mt-1 block text-xs leading-5 text-muted-foreground">El diseño original de Manager Stock, con sus tarjetas suaves y controles redondeados.</span>
+              <span className="mt-4 block rounded-lg border border-border bg-background p-2.5 shadow-sm" aria-hidden="true">
+                <span className="block h-1.5 w-10 rounded-full bg-foreground/30" />
+                <span className="mt-2 block h-1 w-full rounded-full bg-foreground/15" />
+                <span className="mt-1 block h-1 w-3/4 rounded-full bg-foreground/10" />
+              </span>
+            </button>
+          </div>
+
+          <p className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
+            <CheckCircle size={14} className="text-green-600" />
+            La preferencia se guarda solo en este dispositivo y puedes cambiarla cuando quieras.
+          </p>
+        </Card>
 
         <Card className="rounded-2xl border-border/70 p-6 shadow-sm">
           <div className="mb-5 flex items-start gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand-primary)]"><SettingsIcon size={21}/></div><div><h3 className="text-lg font-semibold">Personalización de apariencia</h3><p className="mt-1 text-sm text-muted-foreground">Ajusta la marca visual de tu negocio. La vista previa se actualiza al cambiar los colores.</p></div></div>

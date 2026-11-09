@@ -22,6 +22,15 @@
             document.documentElement.classList.add('dark');
           }
         } catch (e) {}
+        // El diseño editorial es el predeterminado; "classic" devuelve la
+        // interfaz original. Se marca antes del primer pintado para no mostrar
+        // un fotograma con el estilo equivocado.
+        try {
+          document.documentElement.dataset.design =
+            localStorage.getItem('designMode') === 'classic' ? 'classic' : 'editorial';
+        } catch (e) {
+          document.documentElement.dataset.design = 'editorial';
+        }
       </script>
       
     </head>
