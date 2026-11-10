@@ -62,6 +62,11 @@ class ProductPayload(BaseModel):
         return self
 
 
+class ProductImagePayload(BaseModel):
+    # ~500 KB of image once base64-decoded, plus the data-URL header.
+    dataUrl: str = Field(min_length=20, max_length=700_000)
+
+
 class ProductCategoryPayload(BaseModel):
     name: str = Field(min_length=2, max_length=80)
     description: str = Field(default="", max_length=400)

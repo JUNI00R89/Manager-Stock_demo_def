@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import json
+import re
 import sqlite3
 import uuid
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import FileResponse
 
+from backend.core.config import UPLOADS_DIR
 from backend.core.context import current_business_id, current_identity
 from backend.core.db import audit, connection, timestamp_iso
-from backend.schemas import ProductCategoryPayload, ProductPayload
+from backend.schemas import ProductCategoryPayload, ProductImagePayload, ProductPayload
 from backend.services.catalog import ensure_product_category, normalize_category_name, product_category_options, product_out
 from backend.services.inventory import add_product_stock, allows_negative_stock, consume_product_stock, get_or_create_lot, insert_movement
 from backend.services.subscriptions import subscription_for_business
@@ -142,7 +147,10 @@ def update_product(product_id: str, payload: ProductPayload):
                    supplier_id=?,barcode=?,track_lots=?,default_location_id=?,updated_at=CURRENT_TIMESTAMP
                    WHERE id=? AND business_id=?""",
                 (payload.name.strip(), payload.sku, payload.category.strip(), payload.price, payload.cost,
-                 payload.minStock, payload.description.strip(), payload.image, payload.productType, payload.unit,
+                 payload.minStock, payload.description.strip(),
+                 # An uploaded photo is only changed through /image; an edit sending an icon key keeps it.
+                 old["image"] if (old["image"] or "").startswith(PRODUCT_IMAGE_PREFIX) else payload.image,
+                 payload.productType, payload.unit,
                  payload.supplierId, payload.barcode.strip(), 1 if payload.trackLots else 0, payload.defaultLocationId,
                  product_id, current_business_id()),
             )
@@ -170,3 +178,77 @@ def delete_product(product_id: str):
         conn.execute("UPDATE products SET active=0, updated_at=CURRENT_TIMESTAMP WHERE id=?", (product_id,))
         audit(conn, "archive", "product", product_id)
         return {"ok": True, "id": product_id}
+
+
+# --- Product photos ----------------------------------------------------------
+PRODUCT_IMAGES_DIR = UPLOADS_DIR / "products"
+PRODUCT_IMAGE_PREFIX = "/uploads/products/"
+MAX_PRODUCT_IMAGE_BYTES = 500 * 1024
+SAFE_IMAGE_NAME = re.compile(r"^[0-9a-f]{32}\.(jpg|png|webp)$")
+
+
+def image_extension(raw: bytes) -> str | None:
+    """Detect the real format from the file's magic bytes (never trust the data-URL label)."""
+    if raw.startswith(b"\xff\xd8\xff"):
+        return "jpg"
+    if raw.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+        return "webp"
+    return None
+
+
+def remove_stored_image(image: str | None) -> None:
+    if image and image.startswith(PRODUCT_IMAGE_PREFIX):
+        name = image[len(PRODUCT_IMAGE_PREFIX):]
+        if SAFE_IMAGE_NAME.match(name):
+            (PRODUCT_IMAGES_DIR / name).unlink(missing_ok=True)
+
+
+def set_product_image(product_id: str, new_image: str) -> dict:
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT * FROM products WHERE id=? AND business_id=? AND active=1", (product_id, current_business_id())).fetchone()
+        if not row:
+            conn.rollback()
+            remove_stored_image(new_image)  # nothing references the file just written
+            raise HTTPException(404, "Producto no encontrado.")
+        conn.execute("UPDATE products SET image=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (new_image, product_id))
+        audit(conn, "update_image" if new_image else "remove_image", "product", product_id, {"image": new_image})
+        conn.commit()
+        remove_stored_image(row["image"])  # only after the new value is committed
+        return product_out(conn.execute("SELECT * FROM products WHERE id=?", (product_id,)).fetchone())
+
+
+@router.put("/api/products/{product_id}/image")
+def upload_product_image(product_id: str, payload: ProductImagePayload):
+    header, _, encoded = payload.dataUrl.partition(",")
+    if not header.startswith("data:") or ";base64" not in header:
+        raise HTTPException(422, "Envía la foto como data URL en base64.")
+    try:
+        raw = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise HTTPException(422, "La foto no tiene un formato válido.") from exc
+    if len(raw) > MAX_PRODUCT_IMAGE_BYTES:
+        raise HTTPException(422, "La foto supera 500 KB.")
+    extension = image_extension(raw)
+    if not extension:
+        raise HTTPException(422, "Solo se aceptan fotos JPG, PNG o WebP.")
+    PRODUCT_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    name = f"{uuid.uuid4().hex}.{extension}"
+    (PRODUCT_IMAGES_DIR / name).write_bytes(raw)
+    return set_product_image(product_id, PRODUCT_IMAGE_PREFIX + name)
+
+
+@router.delete("/api/products/{product_id}/image")
+def delete_product_image(product_id: str):
+    return set_product_image(product_id, "")
+
+
+@router.get("/uploads/products/{filename}", include_in_schema=False)
+def serve_product_image(filename: str):
+    # Outside /api on purpose: <img> tags cannot send the session token. Random names are not guessable.
+    path = PRODUCT_IMAGES_DIR / filename
+    if not SAFE_IMAGE_NAME.match(filename) or not path.is_file():
+        raise HTTPException(404, "Foto no encontrada.")
+    return FileResponse(path, headers={"Cache-Control": "public, max-age=604800, immutable"})
