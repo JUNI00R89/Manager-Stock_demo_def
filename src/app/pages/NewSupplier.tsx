@@ -11,7 +11,7 @@ import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Checkbox } from '../components/ui/checkbox';
 import { dataService } from '../services/dataService';
-import type { Product } from '../utils/mockData';
+import type { Product } from '../utils/types';
 
 export function NewSupplier() {
   const navigate = useNavigate();

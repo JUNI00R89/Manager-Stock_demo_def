@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { AlertTriangle, ChevronDown, GitCompareArrows, PackageX, PauseCircle, ShieldCheck, Sigma, TrendingUp, Wallet } from 'lucide-react';
 import { Card } from '../ui/card';
 import type { SaleRecord } from '../../services/dataService';
-import type { Product } from '../../utils/mockData';
+import type { Product } from '../../utils/types';
 import { analyzeProductRisk, type ProductRiskLevel, type ProductRiskRow } from '../../utils/productRisk';
 import { analyzeInventoryScience, anchorOptions, buildComboPlan } from '../../utils/commercialScience';
 

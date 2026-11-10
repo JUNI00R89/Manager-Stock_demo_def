@@ -9,7 +9,7 @@ import {
   CalendarDays, Clock, User,
   Scissors, Check, X
 } from 'lucide-react';
-import type { Cita, Profesional, Servicio } from '../../utils/mockData';
+import type { Cita, Profesional, Servicio } from '../../utils/types';
 import { deleteServiceAppointment, editServiceAppointment, getServiceAppointments, getServiceProfessionals, getServicesCatalog, updateServiceAppointmentStatus, type ServiceAppointmentRecord, type ServiceCatalogRecord, type ServiceProfessionalRecord } from '../../services/dataService';
 import { toast } from 'sonner';
 import { toastError } from '../../utils/notifications';

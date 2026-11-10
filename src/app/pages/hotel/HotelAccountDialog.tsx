@@ -7,7 +7,7 @@ import { Label } from '../../components/ui/label';
 import { ConfirmActionDialog } from '../../components/ConfirmActionDialog';
 import { useAuth } from '../../context/AuthContext';
 import { addHotelCharge, cancelHotelCharge, getHotelAccount, getHotelProducts, type HotelAccount, type HotelChargeInput, type HotelChargeRecord, type HotelReservationRecord } from '../../services/dataService';
-import type { Product } from '../../utils/mockData';
+import type { Product } from '../../utils/types';
 
 import { HotelPaymentsPanel } from './HotelPaymentsPanel';
 

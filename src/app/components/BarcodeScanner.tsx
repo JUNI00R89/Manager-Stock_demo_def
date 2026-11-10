@@ -7,7 +7,7 @@ import {
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { motion, AnimatePresence } from 'motion/react';
-import type { Product } from '../utils/mockData';
+import type { Product } from '../utils/types';
 import { toast } from 'sonner';
 
 const money = (value: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(value);

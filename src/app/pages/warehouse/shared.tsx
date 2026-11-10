@@ -7,7 +7,7 @@ import { Card } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
 import { dataService, type InventoryLocationRecord, type InventoryLotRecord, type InventorySettingsRecord } from '../../services/dataService';
-import type { Product, Supplier } from '../../utils/mockData';
+import type { Product, Supplier } from '../../utils/types';
 import { useAuth } from '../../context/AuthContext';
 
 export const money = (value: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(Number.isFinite(value) ? value : 0);

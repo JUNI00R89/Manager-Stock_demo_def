@@ -1,6 +1,6 @@
 import { colombiaDateKey } from '../services/dataService';
 import type { SaleRecord } from '../services/dataService';
-import type { Product } from './mockData';
+import type { Product } from './types';
 
 /**
  * Ciencia de datos comercial para el inventario:

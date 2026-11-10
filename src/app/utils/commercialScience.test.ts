@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { Product } from './mockData'
+import type { Product } from './types'
 import type { SaleRecord } from '../services/dataService'
 
 vi.mock('../services/dataService', () => ({

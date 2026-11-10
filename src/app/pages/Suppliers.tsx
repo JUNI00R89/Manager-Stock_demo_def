@@ -10,7 +10,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
 import { dataService } from '../services/dataService';
-import type { Supplier } from '../utils/mockData';
+import type { Supplier } from '../utils/types';
 
 export function Suppliers() {
   const navigate = useNavigate(); const [suppliers, setSuppliers] = useState<Supplier[]>([]); const [search, setSearch] = useState(''); const [loading, setLoading] = useState(true); const [supplierToRemove, setSupplierToRemove] = useState<Supplier | null>(null);
