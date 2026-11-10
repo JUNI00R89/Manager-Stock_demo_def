@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { Product } from '../utils/mockData';
+import type { Product } from '../utils/types';
 import { dataService } from '../services/dataService';
 import { createScopedLocalStore, useScopedLocalStore } from './restaurantStorage';
 

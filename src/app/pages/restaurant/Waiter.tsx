@@ -45,7 +45,7 @@ import { getJornadaKey, formatJornadaTitle, formatMoney, formatTime, minutesSinc
 import type { Pedido } from '../../utils/restaurantTypes';
 import { deliverRestaurantOrder } from '../../utils/restaurantOrdersService';
 import { primeRestaurantAudio, playReadyOrderChime, vibrateReadyOrder } from '../../utils/restaurantAudio';
-import type { Product } from '../../utils/mockData';
+import type { Product } from '../../utils/types';
 
 type WaiterView = 'nuevo' | 'pedidos';
 type OrderFilter = 'todos' | 'listos' | 'preparando' | 'pendientes' | 'entregados';

@@ -33,7 +33,7 @@ import {
 import { toast } from 'sonner';
 import { toastError } from '../../utils/notifications';
 import { dataService, type OrderRecord, type RestaurantTableRecord } from '../../services/dataService';
-import { findProductByBarcode, type Product } from '../../utils/mockData';
+import type { Product } from '../../utils/types';
 import { useAuth } from '../../context/AuthContext';
 import { useBusiness } from '../../context/BusinessContext';
 
@@ -61,28 +61,11 @@ interface CartItem {
 interface TableView {
   table: RestaurantTableRecord;
   orders: OrderRecord[];
-  billOnly: CartItem[];
   items: number;
   total: number;
   occupied: boolean;
   inactive: boolean;
   since: string | null;
-}
-
-const billOnlyKey = (tableId: string) => `table_bill_only_${tableId}`;
-
-function readBillOnly(tableId: string): CartItem[] {
-  try {
-    const raw = localStorage.getItem(billOnlyKey(tableId));
-    return raw ? (JSON.parse(raw) as CartItem[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeBillOnly(tableId: string, items: CartItem[]) {
-  if (items.length === 0) localStorage.removeItem(billOnlyKey(tableId));
-  else localStorage.setItem(billOnlyKey(tableId), JSON.stringify(items));
 }
 
 const elapsedLabel = (iso: string | null) => {
@@ -159,19 +142,15 @@ export function Tables() {
     () =>
       tables.map((table) => {
         const tableOrders = activeOrders.filter((o) => Number(o.tableNumber) === table.number);
-        const billOnly = readBillOnly(table.id);
-        const kitchenItems = tableOrders.reduce((sum, order) => sum + order.items.reduce((s, item) => s + item.quantity, 0), 0);
-        const billItems = billOnly.reduce((sum, item) => sum + item.quantity, 0);
-        const kitchenTotal = tableOrders.reduce((sum, order) => sum + order.total, 0);
-        const billTotal = billOnly.reduce((sum, item) => sum + item.price * item.quantity, 0);
+        // Los productos "solo cuenta" viajan dentro del pedido (restaurantMetadata.directProductIds),
+        // así que todo el consumo de la mesa sale del backend.
+        const items = tableOrders.reduce((sum, order) => sum + order.items.reduce((s, item) => s + item.quantity, 0), 0);
         const inactive = table.status !== 'active';
-        const items = kitchenItems + billItems;
         return {
           table,
           orders: tableOrders,
-          billOnly,
           items,
-          total: kitchenTotal + billTotal,
+          total: tableOrders.reduce((sum, order) => sum + order.total, 0),
           occupied: !inactive && items > 0,
           inactive,
           since: tableOrders[0]?.created_at ?? null,
@@ -409,14 +388,14 @@ export function Tables() {
       const session = await dataService.getCurrentCashSession();
       const sale = await dataService.createSale({
         orderIds: view.orders.map(order => order.id),
-        items: view.billOnly.map(item => ({ productId: item.productId, quantity: item.quantity })),
+        items: [],
         customer: `Mesa ${view.table.number}`,
         paymentMethod: 'cash',
         taxRate: config?.taxRate,
         cashSessionId: session?.id,
         idempotencyKey: key,
       });
-      writeBillOnly(view.table.id, []);
+      localStorage.removeItem(`table_bill_only_${view.table.id}`); // limpia restos de versiones anteriores
       localStorage.removeItem(keyName);
       setOrders(prev => prev.filter(order => !view.orders.some(closed => closed.id === order.id)));
       toast.success(`Mesa ${view.table.number} cerrada`, { description: `Total cobrado en efectivo: ${money(sale.totalPrice)}` });
@@ -432,8 +411,7 @@ export function Tables() {
     if (event.key === 'Enter') {
       const code = searchTerm.trim();
       const product =
-        products.find((p) => p.sku.toLowerCase() === code.toLowerCase() || p.codigosBarras?.includes(code)) ||
-        findProductByBarcode(code);
+        products.find((p) => p.barcode === code || p.sku.toLowerCase() === code.toLowerCase() || p.codigosBarras?.includes(code));
       if (product) {
         addToCart(product);
         setSearchTerm('');
@@ -689,14 +667,6 @@ export function Tables() {
                           </li>
                         ))
                       )}
-                      {selectedView.billOnly.map((item) => (
-                        <li key={`bill-${item.productId}`} className="flex justify-between gap-2">
-                          <span className="text-foreground">
-                            {item.quantity} × {item.name} <span className="text-[10px] text-muted-foreground">(cuenta)</span>
-                          </span>
-                          <span className="text-muted-foreground">{money(item.price * item.quantity)}</span>
-                        </li>
-                      ))}
                     </ul>
                     <div className="mt-2 flex justify-between border-t border-border pt-2 text-sm font-semibold">
                       <span>Total actual</span>

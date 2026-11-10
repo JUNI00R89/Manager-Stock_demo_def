@@ -10,7 +10,7 @@ import {
   Smartphone, Receipt, X, Check, Barcode, ScanLine, Users, Percent,
   Lock, Unlock, DollarSign, Split, Printer, MessageCircle, Mail
 } from 'lucide-react';
-import { findProductByBarcode, type Product } from '../utils/mockData';
+import type { Product } from '../utils/types';
 import { dataService, type CashSessionRecord, type PaymentPartRecord } from '../services/dataService';
 import { useAuth } from '../context/AuthContext';
 import { useBusiness } from '../context/BusinessContext';
@@ -228,7 +228,7 @@ export function POS() {
   const handleManualBarcode = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       const code = searchTerm.trim();
-      const product = products.find(p => p.sku.toLowerCase() === code.toLowerCase() || p.codigosBarras?.includes(code)) || findProductByBarcode(code);
+      const product = products.find(p => p.barcode === code || p.sku.toLowerCase() === code.toLowerCase() || p.codigosBarras?.includes(code));
       if (product) {
         addToCart(product);
         setSearchTerm('');

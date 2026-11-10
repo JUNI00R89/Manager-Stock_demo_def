@@ -29,7 +29,7 @@ import type {
   SupportMessageRecord,
   SuspensionStatusRecord,
 } from './dataService';
-import type { Product, Supplier } from '../utils/mockData';
+import type { Product, Supplier } from '../utils/types';
 
 export interface DesktopUser {
   id: string;

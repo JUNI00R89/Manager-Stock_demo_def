@@ -130,6 +130,31 @@ La prueba de API utiliza una base SQLite temporal; no modifica la base de datos 
 
 **Limitación de validación:** no se pudo completar `npm install` ni `npm run build` en el entorno de generación porque la solicitud al registro de paquetes agotó el tiempo de espera. Debes ejecutar `npm install` y `npm run build` en tu PC antes de desplegar. La comprobación sintáctica no sustituye un build completo ni una prueba visual en navegador.
 
+## Seguridad de acceso: intentos de login y CORS
+
+**Límite de intentos.** El backend bloquea temporalmente (HTTP 429 con encabezado `Retry-After`) cuando hay demasiados intentos fallidos:
+
+| Qué se limita | Límite por defecto | Variable de entorno |
+| --- | --- | --- |
+| Logins fallidos por correo | 5 en 15 min | `MANAGER_STOCK_LOGIN_MAX_PER_EMAIL` |
+| Logins fallidos por IP | 20 en 15 min | `MANAGER_STOCK_LOGIN_MAX_PER_IP` |
+| Ventana de los logins (segundos) | 900 | `MANAGER_STOCK_LOGIN_WINDOW_SECONDS` |
+| Registros de cuentas por IP | 10 por hora | `MANAGER_STOCK_REGISTER_MAX_PER_IP` |
+
+Un login correcto borra los fallos de ese correo. Los contadores viven en memoria: se reinician al reiniciar el backend y solo sirven para un proceso de uvicorn.
+
+**CORS.** Por defecto la API solo acepta peticiones del navegador desde `127.0.0.1`, `localhost` o `[::1]` (cualquier puerto: Vite y la app de escritorio). No se usan cookies (`allow_credentials` desactivado), porque la sesión va en el encabezado `Authorization`.
+
+- Para probar desde el celular en la misma red Wi-Fi, inicia el backend con `MANAGER_STOCK_ALLOW_LAN=1` y `--host 0.0.0.0`; se aceptan solo IPs privadas (192.168.x.x, 10.x.x.x, 172.16–31.x.x).
+- Para un dominio propio, agrega `MANAGER_STOCK_CORS_ORIGINS=https://app.midominio.com` (varios separados por coma).
+
+```powershell
+$env:MANAGER_STOCK_ALLOW_LAN = "1"
+.\.venv\Scripts\python.exe -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
+```
+
+Prueba: `.\.venv\Scripts\python.exe backend	ests	est_auth_security.py`
+
 ## Personalización, roles y soporte administrativo
 
 - Los temas por tipo de negocio y los colores personalizados se guardan en la configuración de la empresa. La personalización no cambia los datos comerciales.

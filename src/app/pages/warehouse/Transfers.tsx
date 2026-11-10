@@ -10,7 +10,7 @@ import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
 import { Badge } from '../../components/ui/badge';
 import { dataService, type InventoryLotRecord, type TransferRecord } from '../../services/dataService';
-import type { Product } from '../../utils/mockData';
+import type { Product } from '../../utils/types';
 import { dateTime, fmtQty, LotSelect, PageTitle, ProductSelect, useWarehousePermissions, useWarehouseRefs } from './shared';
 
 type TransferLine = { key: string; productId: string; quantity: string; unit: string; lotId: string };

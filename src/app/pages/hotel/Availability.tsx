@@ -12,7 +12,7 @@ import {
   ChevronLeft, ChevronRight, Plus, Calendar, Bed, Users, DollarSign,
   CheckCircle2, X, Clock
 } from 'lucide-react';
-import type { Habitacion, ReservaHotel } from '../../utils/mockData';
+import type { Habitacion, ReservaHotel } from '../../utils/types';
 import { moveHotelReservation, createHotelReservation, getHotelReservations, getHotelRooms, updateHotelReservationStatus, type HotelReservationRecord, type HotelRoomRecord } from '../../services/dataService';
 import { toast } from 'sonner';
 import { toastError } from '../../utils/notifications';
