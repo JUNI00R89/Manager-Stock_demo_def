@@ -36,7 +36,7 @@ export interface BusinessConfig {
   name: string;
   currency: string;
   taxRate: number;
-  features: { inventory: boolean; pos: boolean; reservations: boolean; tables: boolean; rooms: boolean; warehouse: boolean; services: boolean; delivery: boolean };
+  features: { inventory: boolean; pos: boolean; reservations: boolean; tables: boolean; rooms: boolean; warehouse: boolean; services: boolean; delivery: boolean; productImages?: boolean };
   foodConfig?: FoodBusinessConfig;
   theme?: BusinessTheme;
   inventoryConfig?: InventoryConfig;

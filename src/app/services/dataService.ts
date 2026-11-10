@@ -362,6 +362,8 @@ const API_BASE = (
       : 'http://127.0.0.1:8000/api'
   )
 ).replace(/\/$/, '');
+/** Server origin without `/api`, for files served outside the API (product photos). */
+export const API_ORIGIN = API_BASE.replace(/\/api$/, '');
 const STORAGE_KEY = 'manager_stock_database_v1';
 const CURRENCY = 'COP';
 const DEFAULT_TAX_RATE = 0.19;
@@ -1027,6 +1029,12 @@ export const dataService = {
       if (created.stock > 0) db.movements.unshift({ id: uniqueId('MOV'), productId: created.id, productName: created.name, movementType: 'opening', quantityDelta: created.stock, stockBefore: 0, stockAfter: created.stock, note: 'Existencias iniciales del producto', createdAt: new Date().toISOString() });
       writeLocal(db); return created;
     }
+  },
+  uploadProductImage(id: string, dataUrl: string): Promise<Product> {
+    return api<Product>(`/products/${encodeURIComponent(id)}/image`, { method: 'PUT', body: JSON.stringify({ dataUrl }) });
+  },
+  removeProductImage(id: string): Promise<Product> {
+    return api<Product>(`/products/${encodeURIComponent(id)}/image`, { method: 'DELETE' });
   },
   async updateProduct(id: string, input: Omit<Product, 'id'> & { cost?: number; productType?: 'sale_item' | 'ingredient' | 'supplies'; unit?: string }): Promise<Product> {
     const payload = { ...input, productType: input.productType || 'sale_item', unit: input.unit || 'unidad', cost: input.cost || 0 };
