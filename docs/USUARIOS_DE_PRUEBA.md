@@ -4,6 +4,8 @@ Estas cuentas son datos ficticios para desarrollo local. El script nunca se ejec
 
 Ejecuta `python scripts/seed_demo_data.py --allow-demo-data` para crear de forma idempotente los usuarios, negocios, productos, proveedores y una venta de ejemplo en la base SQLite configurada. No se eliminan datos preexistentes.
 
+Para completar únicamente los datos del hotel en una base existente, ejecuta `python scripts/seed_hotel_demo_data.py --allow-demo-data`. También es idempotente y no modifica los demás negocios.
+
 ## Credenciales iniciales
 
 | Tipo | Rol | Correo | Contraseña inicial |
@@ -22,6 +24,10 @@ Ejecuta `python scripts/seed_demo_data.py --allow-demo-data` para crear de forma
 
 Si una cuenta ya existía, el seed conserva su contraseña actual; en ese caso, la contraseña de la tabla solo corresponde a la creación inicial. Cambia todas las contraseñas si los datos salen del entorno local.
 
+## Datos de hotel incluidos
+
+El negocio `Hotel Senderos (Demo)` incluye 8 habitaciones en 3 pisos (disponible, ocupada, reservada, limpieza y mantenimiento), 7 reservas entre pasadas, activas y futuras, productos de minibar y restaurante, consumos activos y anulados, pagos en efectivo y tarjeta, una devolución y una cuenta cerrada con comprobante descargable. El seed conserva la reserva histórica `DEMO-HOTEL-RES-001` y agrega el resto de forma idempotente.
+
 ## Alcance de los datos
 
-El seed crea negocios y registros ficticios por tenant: productos, proveedores, ventas, líneas de venta, movimientos de inventario y, en los tipos hotel y servicios, habitaciones, reservas, servicios, profesionales y citas en SQLite. Los módulos que no dispongan de persistencia backend en esta versión no deben considerarse operativos para producción. No se cargan datos reales.
+El seed crea negocios y registros ficticios por tenant: productos, proveedores, ventas, líneas de venta, movimientos de inventario y, en los tipos hotel y servicios, habitaciones, reservas, consumos, cobros, devoluciones, cierres de cuenta, servicios, profesionales y citas en SQLite. Los módulos que no dispongan de persistencia backend en esta versión no deben considerarse operativos para producción. No se cargan datos reales.

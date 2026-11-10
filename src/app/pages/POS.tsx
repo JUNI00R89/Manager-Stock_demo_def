@@ -644,7 +644,7 @@ export function POS() {
                   <div className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-orange-100 text-orange-600">
                     <Check size={18} />
                   </div>
-                  <p className="font-bold text-base text-gray-900">{config?.name || 'Manager Stock Pro'}</p>
+                  <p className="font-bold text-base text-gray-900">{config?.name || 'Manager Stock'}</p>
                   <p className="text-[11px] text-gray-500">{new Date(receiptData.date).toLocaleString('es-CO')}</p>
                   <p className="text-xs text-gray-500">Factura: {receiptData.invoiceNumber}</p>
                   {receiptData.customer !== 'Cliente general' && (
