@@ -17,7 +17,7 @@ import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.core.config import SCHEMA_PATH
+from backend.core.config import CORS_EXTRA_ORIGINS, CORS_ORIGIN_REGEX, SCHEMA_PATH
 from backend.core.db import connection, timestamp_iso
 from backend.core.middleware import authenticate_and_authorize
 from backend.core.schema import init_database
@@ -53,13 +53,15 @@ app = FastAPI(title="Manager Stock API", version="1.0.0", description="API local
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:4173", "http://127.0.0.1:4173"],
-    # Permite el acceso desde el celular/PC en la misma red al levantar el
-    # backend en 0.0.0.0 y la app frontend con Vite en 0.0.0.0.
-    allow_origin_regex=r"^https?://([0-9]{1,3}\.){3}[0-9]{1,3}(:[0-9]+)?$",
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    # Orígenes: ver CORS_* en backend/core/config.py (loopback siempre; LAN solo con
+    # MANAGER_STOCK_ALLOW_LAN=1; dominios extra con MANAGER_STOCK_CORS_ORIGINS).
+    allow_origins=CORS_EXTRA_ORIGINS,
+    allow_origin_regex=CORS_ORIGIN_REGEX,
+    # La sesión viaja en el encabezado Authorization, no en cookies.
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+    expose_headers=["Retry-After"],
 )
 # Registrado después de CORS para que quede como capa externa (mismo orden que antes).
 app.middleware("http")(authenticate_and_authorize)

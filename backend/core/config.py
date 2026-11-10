@@ -42,3 +42,22 @@ DEFAULT_CATEGORY_PRESETS: dict[str, list[str]] = {
 
 
 DISCRETE_UNITS = {"unidad", "porcion", "porción", "paquete", "tajada", "caja", "pieza", "par", "botella", "lata", "servicio"}
+
+
+# --- CORS -------------------------------------------------------------------
+# Siempre se permite loopback (127.0.0.1 / localhost / [::1]) en cualquier
+# puerto: lo usan Vite (5173/4173) y la app de escritorio, que sirve el
+# frontend en un puerto aleatorio de 127.0.0.1. Solo procesos del mismo equipo
+# pueden usar esos orígenes.
+_LOOPBACK_ORIGIN = r"http://(127\.0\.0\.1|localhost|\[::1\])(:[0-9]{1,5})?"
+# Redes privadas (192.168.x.x, 10.x.x.x, 172.16-31.x.x): solo si se activa
+# MANAGER_STOCK_ALLOW_LAN=1, para probar desde el celular en la misma red.
+_PRIVATE_LAN_ORIGIN = (
+    r"http://(192\.168\.[0-9]{1,3}\.[0-9]{1,3}"
+    r"|10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}"
+    r"|172\.(1[6-9]|2[0-9]|3[01])\.[0-9]{1,3}\.[0-9]{1,3})(:[0-9]{1,5})?"
+)
+CORS_ALLOW_LAN = os.getenv("MANAGER_STOCK_ALLOW_LAN", "").strip().lower() in {"1", "true", "yes", "si", "sí"}
+CORS_ORIGIN_REGEX = "^(" + _LOOPBACK_ORIGIN + ("|" + _PRIVATE_LAN_ORIGIN if CORS_ALLOW_LAN else "") + ")$"
+# Orígenes adicionales exactos, separados por coma (p. ej. un dominio propio).
+CORS_EXTRA_ORIGINS = [o.strip().rstrip("/") for o in os.getenv("MANAGER_STOCK_CORS_ORIGINS", "").split(",") if o.strip()]
