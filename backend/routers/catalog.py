@@ -1,0 +1,172 @@
+from __future__ import annotations
+
+import json
+import sqlite3
+import uuid
+
+from fastapi import APIRouter, HTTPException, Query
+
+from backend.core.context import current_business_id, current_identity
+from backend.core.db import audit, connection, timestamp_iso
+from backend.schemas import ProductCategoryPayload, ProductPayload
+from backend.services.catalog import ensure_product_category, normalize_category_name, product_category_options, product_out
+from backend.services.inventory import add_product_stock, allows_negative_stock, consume_product_stock, get_or_create_lot, insert_movement
+from backend.services.subscriptions import subscription_for_business
+
+
+router = APIRouter()
+
+
+@router.get("/api/product-categories")
+def list_product_categories():
+    with connection() as conn:
+        _, categories = product_category_options(conn, current_business_id())
+        return categories
+
+
+@router.post("/api/product-categories", status_code=201)
+def create_product_category(payload: ProductCategoryPayload):
+    identity = current_identity()
+    if identity["role"] not in {"owner", "business_admin"} and "catalog.create" not in set(identity.get("permissions", [])):
+        # Custom permissions are retrieved from the persisted role, not accepted from request JSON.
+        if identity.get("custom_role_id"):
+            with connection() as conn:
+                role = conn.execute("SELECT permissions_json FROM custom_roles WHERE id=? AND business_id=?", (identity["custom_role_id"], current_business_id())).fetchone()
+                permissions = set(json.loads(role["permissions_json"] or "[]")) if role else set()
+            if "catalog.create" not in permissions:
+                raise HTTPException(403, "Tu rol no puede crear categorías.")
+        else:
+            raise HTTPException(403, "Solo el propietario o un usuario autorizado puede crear categorías.")
+    business_id = current_business_id()
+    name = " ".join(payload.name.split())
+    with connection() as conn:
+        business_type, current_options = product_category_options(conn, business_id)
+        key = normalize_category_name(name)
+        if any(normalize_category_name(option["name"]) == key for option in current_options):
+            raise HTTPException(409, "Ya existe una categoría con ese nombre en este negocio.")
+        category_id = f"CAT-{uuid.uuid4().hex[:12].upper()}"
+        try:
+            conn.execute("INSERT INTO product_categories (id,business_id,name,description,active) VALUES (?,?,?,?,?)", (category_id, business_id, name, payload.description.strip(), 1 if payload.active else 0))
+        except sqlite3.IntegrityError as exc:
+            raise HTTPException(409, "Ya existe una categoría con ese nombre en este negocio.") from exc
+        audit(conn, "create", "product_category", category_id, {"name": name, "businessType": business_type})
+        row = conn.execute("SELECT id,name,description,active,created_at FROM product_categories WHERE id=?", (category_id,)).fetchone()
+        return {"id": row["id"], "name": row["name"], "description": row["description"], "active": bool(row["active"]), "custom": True, "createdAt": timestamp_iso(row["created_at"])}
+
+
+@router.get("/api/products")
+def list_products(search: str = Query(default="", max_length=120), active: bool = True, productType: str | None = None):
+    query = """SELECT p.*, s.company AS supplier_name FROM products p
+               LEFT JOIN suppliers s ON s.id=p.supplier_id AND s.business_id=p.business_id
+               WHERE p.business_id = ? AND p.active = ?"""
+    params: list = [current_business_id(), 1 if active else 0]
+    if search:
+        query += " AND (lower(p.name) LIKE ? OR lower(p.sku) LIKE ? OR lower(p.category) LIKE ? OR lower(p.barcode) LIKE ?)"
+        term = f"%{search.lower()}%"
+        params.extend([term, term, term, term])
+    if productType:
+        query += " AND p.product_type = ?"
+        params.append(productType)
+    with connection() as conn:
+        return [product_out(r) for r in conn.execute(query + " ORDER BY p.name COLLATE NOCASE", params).fetchall()]
+
+
+@router.post("/api/products", status_code=201)
+def create_product(payload: ProductPayload):
+    product_id = f"PRD-{uuid.uuid4().hex[:10].upper()}"
+    with connection() as conn:
+        business = conn.execute("SELECT business_type FROM businesses WHERE id=?", (current_business_id(),)).fetchone()
+        ensure_product_category(conn, current_business_id(), payload.category)
+        subscription = subscription_for_business(conn, current_business_id())
+        product_count = conn.execute("SELECT count(*) FROM products WHERE business_id=? AND active=1", (current_business_id(),)).fetchone()[0]
+        if product_count >= subscription["plan"]["maxProducts"]:
+            raise HTTPException(409, f"El plan {subscription['plan']['name']} permite hasta {subscription['plan']['maxProducts']} productos activos. Cambia de plan para añadir más.")
+        if payload.supplierId:
+            supplier = conn.execute("SELECT id FROM suppliers WHERE id=? AND business_id=? AND active=1", (payload.supplierId, current_business_id())).fetchone()
+            if not supplier:
+                raise HTTPException(422, "El proveedor principal seleccionado no está activo en este negocio.")
+        if payload.defaultLocationId:
+            location = conn.execute("SELECT id FROM warehouse_locations WHERE id=? AND business_id=? AND active=1", (payload.defaultLocationId, current_business_id())).fetchone()
+            if not location:
+                raise HTTPException(422, "La ubicación seleccionada no pertenece a este negocio.")
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                """INSERT INTO products (id,business_id,name,sku,category,price,cost,stock,min_stock,description,image,product_type,unit,
+                   supplier_id,barcode,track_lots,default_location_id)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (product_id, current_business_id(), payload.name.strip(), payload.sku, payload.category.strip(), payload.price,
+                 payload.cost, payload.stock, payload.minStock, payload.description.strip(), payload.image,
+                 payload.productType, payload.unit, payload.supplierId, payload.barcode.strip(), 1 if payload.trackLots else 0,
+                 payload.defaultLocationId),
+            )
+            if payload.stock > 0:
+                lot_id = None
+                if payload.trackLots:
+                    lot_id = get_or_create_lot(conn, conn.execute("SELECT * FROM products WHERE id=?", (product_id,)).fetchone(), f"INICIAL-{product_id[-6:]}", None, payload.cost, payload.defaultLocationId)
+                    conn.execute("UPDATE product_lots SET quantity=? WHERE id=?", (payload.stock, lot_id))
+                insert_movement(
+                    conn, product_id=product_id, movement_type="opening", quantity_delta=payload.stock,
+                    stock_before=0, stock_after=payload.stock, note="Existencias iniciales del producto",
+                    unit_cost=payload.cost, lot_id=lot_id, location_id=payload.defaultLocationId,
+                )
+            audit(conn, "create", "product", product_id, {"sku": payload.sku})
+            conn.commit()
+        except sqlite3.IntegrityError as exc:
+            conn.rollback()
+            raise HTTPException(409, "Ya existe un producto con ese SKU.") from exc
+        return product_out(conn.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone())
+
+
+@router.put("/api/products/{product_id}")
+def update_product(product_id: str, payload: ProductPayload):
+    with connection() as conn:
+        business = conn.execute("SELECT business_type FROM businesses WHERE id=?", (current_business_id(),)).fetchone()
+        if payload.supplierId:
+            supplier = conn.execute("SELECT id FROM suppliers WHERE id=? AND business_id=? AND active=1", (payload.supplierId, current_business_id())).fetchone()
+            if not supplier:
+                raise HTTPException(422, "El proveedor principal seleccionado no está activo en este negocio.")
+        if payload.defaultLocationId:
+            location = conn.execute("SELECT id FROM warehouse_locations WHERE id=? AND business_id=? AND active=1", (payload.defaultLocationId, current_business_id())).fetchone()
+            if not location:
+                raise HTTPException(422, "La ubicación seleccionada no pertenece a este negocio.")
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            old = conn.execute("SELECT * FROM products WHERE id=? AND business_id=? AND active=1", (product_id, current_business_id())).fetchone()
+            if not old:
+                raise HTTPException(404, "Producto no encontrado.")
+            ensure_product_category(conn, current_business_id(), payload.category, allow_existing=(payload.category == old["category"]))
+            delta = round(payload.stock - float(old["stock"] or 0), 6)
+            conn.execute(
+                """UPDATE products SET name=?,sku=?,category=?,price=?,cost=?,min_stock=?,description=?,image=?,product_type=?,unit=?,
+                   supplier_id=?,barcode=?,track_lots=?,default_location_id=?,updated_at=CURRENT_TIMESTAMP
+                   WHERE id=? AND business_id=?""",
+                (payload.name.strip(), payload.sku, payload.category.strip(), payload.price, payload.cost,
+                 payload.minStock, payload.description.strip(), payload.image, payload.productType, payload.unit,
+                 payload.supplierId, payload.barcode.strip(), 1 if payload.trackLots else 0, payload.defaultLocationId,
+                 product_id, current_business_id()),
+            )
+            if delta > 0:
+                add_product_stock(conn, old, delta, movement_type="adjustment", note="Ajuste desde edición de producto", reason="Edición de producto", unit_cost=payload.cost)
+            elif delta < 0:
+                consume_product_stock(conn, old, abs(delta), movement_type="adjustment", note="Ajuste desde edición de producto", reason="Edición de producto", allow_negative=allows_negative_stock(conn))
+            audit(conn, "update", "product", product_id, {"stockDelta": delta})
+            conn.commit()
+        except sqlite3.IntegrityError as exc:
+            conn.rollback()
+            raise HTTPException(409, "El SKU ya está asignado a otro producto.") from exc
+        except Exception:
+            conn.rollback()
+            raise
+        return product_out(conn.execute("SELECT * FROM products WHERE id=?", (product_id,)).fetchone())
+
+
+@router.delete("/api/products/{product_id}")
+def delete_product(product_id: str):
+    with connection() as conn:
+        row = conn.execute("SELECT id FROM products WHERE id=? AND business_id=? AND active=1", (product_id, current_business_id())).fetchone()
+        if not row:
+            raise HTTPException(404, "Producto no encontrado.")
+        conn.execute("UPDATE products SET active=0, updated_at=CURRENT_TIMESTAMP WHERE id=?", (product_id,))
+        audit(conn, "archive", "product", product_id)
+        return {"ok": True, "id": product_id}
