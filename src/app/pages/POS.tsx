@@ -15,6 +15,7 @@ import { dataService, type CashSessionRecord, type PaymentPartRecord } from '../
 import { useAuth } from '../context/AuthContext';
 import { useBusiness } from '../context/BusinessContext';
 import { toast } from 'sonner';
+import { imagesEnabled, productImageUrl } from '../utils/productImage';
 import { toastError } from '../utils/notifications';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
@@ -382,6 +383,9 @@ export function POS() {
                     onClick={() => !outOfStock && addToCart(product)}
                   >
                     <div className="space-y-2">
+                      {productImageUrl(product.image, imagesEnabled(config)) && (
+                        <img src={productImageUrl(product.image, true)!} alt={product.name} loading="lazy" className="h-24 w-full rounded-lg object-cover" />
+                      )}
                       <div className="flex justify-between items-start">
                         <h3 className="text-sm font-semibold text-foreground line-clamp-2 leading-tight">{product.name}</h3>
                         {inCart && (

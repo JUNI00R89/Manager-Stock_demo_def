@@ -31,6 +31,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { imagesEnabled, productImageUrl } from '../../utils/productImage';
 import { toastError } from '../../utils/notifications';
 import { dataService, type OrderRecord, type RestaurantTableRecord } from '../../services/dataService';
 import type { Product } from '../../utils/types';
@@ -634,6 +635,9 @@ export function Tables() {
                     onClick={() => addToCart(product)}
                   >
                     <div className="space-y-1">
+                      {productImageUrl(product.image, imagesEnabled(config)) && (
+                        <img src={productImageUrl(product.image, true)!} alt={product.name} loading="lazy" className="mb-2 h-24 w-full rounded-lg object-cover" />
+                      )}
                       <p className="text-base font-semibold text-foreground line-clamp-2">{product.name}</p>
                       <div className="flex justify-between items-center mt-1">
                         <span className="text-sm text-muted-foreground">Stock: {product.stock}</span>

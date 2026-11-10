@@ -19,6 +19,7 @@ import {
   UtensilsCrossed,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { imagesEnabled, productImageUrl } from '../../utils/productImage';
 import { toastError } from '../../utils/notifications';
 import { Layout } from '../../components/Layout';
 import { StaffSwitcher } from '../../components/restaurant/StaffSwitcher';
@@ -425,6 +426,9 @@ export function Waiter() {
                         const inCart = cart.find((line) => line.productId === product.id);
                         return (
                           <article key={product.id} className="flex min-h-36 flex-col rounded-2xl border border-border bg-card p-4 shadow-sm">
+                            {productImageUrl(product.image, imagesEnabled(config)) && (
+                              <img src={productImageUrl(product.image, true)!} alt={product.name} loading="lazy" className="mb-3 h-24 w-full rounded-lg object-cover" />
+                            )}
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <h3 className="font-semibold leading-snug text-foreground">{product.name}</h3>
