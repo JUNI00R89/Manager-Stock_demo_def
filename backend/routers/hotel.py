@@ -91,7 +91,7 @@ def update_housekeeping(room_id: str, payload: HousekeepingPayload):
         conn.execute("UPDATE hotel_rooms SET cleaning_status=?,cleaning_assignee=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", (payload.cleaningStatus, payload.cleaningAssignee.strip(), room_id))
         # Cleaning cannot release an occupied or maintenance room.
         if room["status"] not in {"occupied", "maintenance"}:
-            reserved = conn.execute("SELECT 1 FROM hotel_reservations WHERE room_id=? AND business_id=? AND status='confirmed' AND check_out>date('now')", (room_id, current_business_id())).fetchone()
+            reserved = conn.execute("SELECT 1 FROM hotel_reservations WHERE room_id=? AND business_id=? AND status='confirmed' AND check_out>date('now','-5 hours')", (room_id, current_business_id())).fetchone()
             status = ("reserved" if reserved else "available") if payload.cleaningStatus == "inspeccionada" else "cleaning"
             conn.execute("UPDATE hotel_rooms SET status=? WHERE id=?", (status, room_id))
         audit(conn, "housekeeping", "hotel_room", room_id, payload.model_dump())
@@ -205,7 +205,7 @@ def move_hotel_reservation(reservation_id: str, payload: HotelSchedulePayload):
         conn.execute("UPDATE hotel_reservations SET room_id=?,check_in=?,check_out=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", (payload.roomId,check_in,check_out,reservation_id))
         for room_id in {row["room_id"],payload.roomId}:
             occupied = conn.execute("SELECT 1 FROM hotel_reservations WHERE room_id=? AND status='checkin'", (room_id,)).fetchone()
-            reserved = conn.execute("SELECT 1 FROM hotel_reservations WHERE room_id=? AND status='confirmed' AND check_out>date('now')", (room_id,)).fetchone()
+            reserved = conn.execute("SELECT 1 FROM hotel_reservations WHERE room_id=? AND status='confirmed' AND check_out>date('now','-5 hours')", (room_id,)).fetchone()
             conn.execute("UPDATE hotel_rooms SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status NOT IN ('maintenance','cleaning')", ("occupied" if occupied else "reserved" if reserved else "available",room_id))
         audit(conn,"move","hotel_reservation",reservation_id,{"from":{"roomId":row["room_id"],"checkIn":row["check_in"],"checkOut":row["check_out"]},"to":{"roomId":payload.roomId,"checkIn":check_in,"checkOut":check_out}})
         result = hotel_account(conn,reservation_id)["reservation"]
@@ -241,7 +241,7 @@ def update_hotel_reservation_status(reservation_id: str, payload: HotelReservati
         room = conn.execute("SELECT * FROM hotel_rooms WHERE id=? AND business_id=?", (reservation["room_id"], business_id)).fetchone()
         if room and room["status"] not in {"maintenance", "cleaning"}:
             has_checkin = conn.execute("SELECT 1 FROM hotel_reservations WHERE business_id=? AND room_id=? AND status='checkin' LIMIT 1", (business_id, reservation["room_id"])).fetchone()
-            has_upcoming = conn.execute("SELECT 1 FROM hotel_reservations WHERE business_id=? AND room_id=? AND status='confirmed' AND check_out>date('now') LIMIT 1", (business_id, reservation["room_id"])).fetchone()
+            has_upcoming = conn.execute("SELECT 1 FROM hotel_reservations WHERE business_id=? AND room_id=? AND status='confirmed' AND check_out>date('now','-5 hours') LIMIT 1", (business_id, reservation["room_id"])).fetchone()
             next_room_status = "occupied" if has_checkin else "reserved" if has_upcoming else "available"
             conn.execute("UPDATE hotel_rooms SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND business_id=?", (next_room_status, reservation["room_id"], business_id))
         if payload.status == "checkout" and reservation["status"] == "checkin":
@@ -415,7 +415,7 @@ def close_hotel_account(reservation_id: str):
         if reservation["status"] == "checkin":
             room_id = reservation["roomId"]
             occupied = conn.execute("SELECT 1 FROM hotel_reservations WHERE room_id=? AND status='checkin'", (room_id,)).fetchone()
-            reserved = conn.execute("SELECT 1 FROM hotel_reservations WHERE room_id=? AND status='confirmed' AND check_out>date('now')", (room_id,)).fetchone()
+            reserved = conn.execute("SELECT 1 FROM hotel_reservations WHERE room_id=? AND status='confirmed' AND check_out>date('now','-5 hours')", (room_id,)).fetchone()
             status = "occupied" if occupied else "reserved" if reserved else "cleaning"
             conn.execute("UPDATE hotel_rooms SET cleaning_status='sucia',cleaning_assignee='',status=CASE WHEN status='maintenance' THEN status ELSE ? END,updated_at=CURRENT_TIMESTAMP WHERE id=? AND business_id=?", (status,room_id,current_business_id()))
         audit(conn,"close_account","hotel_reservation",reservation_id,{"receiptId":receipt_id,"total":account["total"]})

@@ -39,6 +39,9 @@ import { useBusiness } from '../../context/BusinessContext';
 
 const money = (value: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(value);
 
+// Mismos métodos que acepta el backend; solo el efectivo suma al cuadre de caja.
+const PAYMENT_LABELS = { cash: 'Efectivo', card: 'Tarjeta', digital: 'Digital' } as const;
+
 const NON_KITCHEN_CATEGORIES = ['bebidas', 'gaseosas', 'aguas', 'jugos', 'café', 'te', 'cervezas', 'vinos', 'licores', 'refrescos', 'sodas'];
 const goesToKitchen = (category: string) => !NON_KITCHEN_CATEGORIES.some((c) => category.toLowerCase().includes(c));
 
@@ -373,7 +376,7 @@ export function Tables() {
     }
   };
 
-  const closeTable = async (view: TableView) => {
+  const closeTable = async (view: TableView, paymentMethod: keyof typeof PAYMENT_LABELS) => {
     if (!view.occupied) return;
     setClosingId(view.table.id);
     try {
@@ -390,7 +393,7 @@ export function Tables() {
         orderIds: view.orders.map(order => order.id),
         items: [],
         customer: `Mesa ${view.table.number}`,
-        paymentMethod: 'cash',
+        paymentMethod,
         taxRate: config?.taxRate,
         cashSessionId: session?.id,
         idempotencyKey: key,
@@ -398,7 +401,7 @@ export function Tables() {
       localStorage.removeItem(`table_bill_only_${view.table.id}`); // limpia restos de versiones anteriores
       localStorage.removeItem(keyName);
       setOrders(prev => prev.filter(order => !view.orders.some(closed => closed.id === order.id)));
-      toast.success(`Mesa ${view.table.number} cerrada`, { description: `Total cobrado en efectivo: ${money(sale.totalPrice)}` });
+      toast.success(`Mesa ${view.table.number} cerrada`, { description: `Total cobrado (${PAYMENT_LABELS[paymentMethod]}): ${money(sale.totalPrice)}` });
       void dataService.getOrders().then(setOrders).catch(() => undefined);
     } catch (error) {
       toastError(error, 'No se pudo cerrar la mesa');
@@ -558,19 +561,28 @@ export function Tables() {
                         </div>
                       )}
 
-                      <Button
-                        size="sm"
-                        className="w-full bg-rose-600 hover:bg-rose-700"
-                        style={{ display: canCollect ? undefined : 'none' }}
-                        disabled={closingId === view.table.id}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void closeTable(view);
-                        }}
-                      >
-                        <Receipt size={14} className="mr-1" />
-                        {closingId === view.table.id ? 'Cobrando...' : 'Cobrar en efectivo'}
-                      </Button>
+                      <div className="space-y-1" style={{ display: canCollect ? undefined : 'none' }}>
+                        <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Receipt size={12} />
+                          {closingId === view.table.id ? 'Cobrando...' : 'Cobrar con:'}
+                        </p>
+                        <div className="grid grid-cols-3 gap-1">
+                          {(Object.keys(PAYMENT_LABELS) as (keyof typeof PAYMENT_LABELS)[]).map((method) => (
+                            <Button
+                              key={method}
+                              size="sm"
+                              className="bg-rose-600 px-1 hover:bg-rose-700"
+                              disabled={closingId === view.table.id}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void closeTable(view, method);
+                              }}
+                            >
+                              {PAYMENT_LABELS[method]}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   )}
 
