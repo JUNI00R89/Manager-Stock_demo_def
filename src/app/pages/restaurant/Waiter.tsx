@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { imagesEnabled, productImageUrl } from '../../utils/productImage';
+import { mergeableLine } from '../../utils/orderCart';
 import { toastError } from '../../utils/notifications';
 import { Layout } from '../../components/Layout';
 import { StaffSwitcher } from '../../components/restaurant/StaffSwitcher';
@@ -52,6 +53,7 @@ type WaiterView = 'nuevo' | 'pedidos';
 type OrderFilter = 'todos' | 'listos' | 'preparando' | 'pendientes' | 'entregados';
 
 interface CartLine {
+  lineId: string;
   productId: string;
   cantidad: number;
   nota: string;
@@ -216,26 +218,26 @@ export function Waiter() {
 
   const addProduct = (product: Product) => {
     setCart((current) => {
-      const exists = current.find((line) => line.productId === product.id);
-      if (exists) {
-        return current.map((line) => line.productId === product.id ? { ...line, cantidad: line.cantidad + 1 } : line);
+      const line = mergeableLine(current, product.id, (item) => item.nota);
+      if (line) {
+        return current.map((item) => item.lineId === line.lineId ? { ...item, cantidad: item.cantidad + 1 } : item);
       }
-      return [...current, { productId: product.id, cantidad: 1, nota: '' }];
+      return [...current, { lineId: crypto.randomUUID(), productId: product.id, cantidad: 1, nota: '' }];
     });
   };
 
-  const changeQuantity = (productId: string, delta: number) => {
+  const changeQuantity = (lineId: string, delta: number) => {
     setCart((current) => current
-      .map((line) => line.productId === productId ? { ...line, cantidad: Math.max(0, line.cantidad + delta) } : line)
+      .map((line) => line.lineId === lineId ? { ...line, cantidad: Math.max(0, line.cantidad + delta) } : line)
       .filter((line) => line.cantidad > 0));
   };
 
-  const removeLine = (productId: string) => {
-    setCart((current) => current.filter((line) => line.productId !== productId));
+  const removeLine = (lineId: string) => {
+    setCart((current) => current.filter((line) => line.lineId !== lineId));
   };
 
-  const setLineNote = (productId: string, nota: string) => {
-    setCart((current) => current.map((line) => line.productId === productId ? { ...line, nota } : line));
+  const setLineNote = (lineId: string, nota: string) => {
+    setCart((current) => current.map((line) => line.lineId === lineId ? { ...line, nota } : line));
   };
 
   const scrollToTop = () => {
@@ -423,7 +425,7 @@ export function Waiter() {
                   ) : (
                     <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       {filteredMenu.map((product) => {
-                        const inCart = cart.find((line) => line.productId === product.id);
+                        const inCartQty = cart.reduce((sum, line) => sum + (line.productId === product.id ? line.cantidad : 0), 0);
                         return (
                           <article key={product.id} className="flex min-h-36 flex-col rounded-2xl border border-border bg-card p-4 shadow-sm">
                             {productImageUrl(product.image, imagesEnabled(config)) && (
@@ -434,7 +436,7 @@ export function Waiter() {
                                 <h3 className="font-semibold leading-snug text-foreground">{product.name}</h3>
                                 <p className="mt-0.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{product.category || 'Otros'}</p>
                               </div>
-                              {inCart && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">x{inCart.cantidad}</span>}
+                              {inCartQty > 0 && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">x{inCartQty}</span>}
                             </div>
                             {product.description && <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{product.description}</p>}
                             <div className="mt-auto flex items-center justify-between gap-3 pt-3">
@@ -642,7 +644,7 @@ export function Waiter() {
 
           <div className="space-y-3">
             {cartLines.map((line) => (
-              <div key={line.product.id} className="rounded-2xl border border-border bg-card p-3">
+              <div key={line.lineId} className="rounded-2xl border border-border bg-card p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-semibold leading-snug text-foreground">{line.product.name}</p>
@@ -650,7 +652,7 @@ export function Waiter() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => removeLine(line.product.id)}
+                    onClick={() => removeLine(line.lineId)}
                     className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     aria-label={`Quitar ${line.product.name}`}
                   >
@@ -661,7 +663,7 @@ export function Waiter() {
                   <div className="flex items-center gap-1 rounded-xl border border-border p-1">
                     <button
                       type="button"
-                      onClick={() => changeQuantity(line.product.id, -1)}
+                      onClick={() => changeQuantity(line.lineId, -1)}
                       className="flex h-11 w-11 items-center justify-center rounded-xl text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       aria-label={`Quitar una unidad de ${line.product.name}`}
                     >
@@ -670,7 +672,7 @@ export function Waiter() {
                     <span className="w-7 text-center text-sm font-bold">{line.cantidad}</span>
                     <button
                       type="button"
-                      onClick={() => changeQuantity(line.product.id, 1)}
+                      onClick={() => changeQuantity(line.lineId, 1)}
                       className="flex h-11 w-11 items-center justify-center rounded-xl text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       aria-label={`Agregar una unidad de ${line.product.name}`}
                     >
@@ -681,7 +683,7 @@ export function Waiter() {
                 </div>
                 <Input
                   value={line.nota}
-                  onChange={(event) => setLineNote(line.product.id, event.target.value)}
+                  onChange={(event) => setLineNote(line.lineId, event.target.value)}
                   placeholder="Nota: sin cebolla, salsa aparte…"
                   maxLength={140}
                   className="mt-3 h-11"

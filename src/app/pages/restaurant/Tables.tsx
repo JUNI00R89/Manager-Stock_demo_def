@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { imagesEnabled, productImageUrl } from '../../utils/productImage';
+import { mergeableLine } from '../../utils/orderCart';
 import { toastError } from '../../utils/notifications';
 import { dataService, type OrderRecord, type RestaurantTableRecord } from '../../services/dataService';
 import type { Product } from '../../utils/types';
@@ -51,12 +52,15 @@ const nextFreeNumber = (rows: RestaurantTableRecord[]) => {
 };
 
 interface CartItem {
+  lineId: string;
   productId: string;
   name: string;
   price: number;
   quantity: number;
   sku: string;
   sendToKitchen: boolean;
+  /** Kitchen note for this line ("sin cebolla"); travels as order_items.notes. */
+  notes: string;
 }
 
 interface TableView {
@@ -190,43 +194,43 @@ export function Tables() {
     [products, searchTerm, activeCategory]
   );
 
+  // Stock is checked against every line of the product: notes can split it into several lines.
+  const quantityInCart = (productId: string) => cart.reduce((sum, item) => sum + (item.productId === productId ? item.quantity : 0), 0);
+
   const addToCart = (product: Product) => {
-    const existing = cart.find((item) => item.productId === product.id);
-    if (existing) {
-      if (existing.quantity + 1 > product.stock) {
-        toast.error('Sin stock suficiente');
-        return;
-      }
-      setCart(cart.map((item) => (item.productId === product.id ? { ...item, quantity: item.quantity + 1 } : item)));
+    if (quantityInCart(product.id) + 1 > product.stock) {
+      toast.error(product.stock < 1 ? 'Producto sin stock' : 'Sin stock suficiente');
+      return;
+    }
+    const line = mergeableLine(cart, product.id, (item) => item.notes);
+    if (line) {
+      setCart(cart.map((item) => (item.lineId === line.lineId ? { ...item, quantity: item.quantity + 1 } : item)));
     } else {
-      if (product.stock < 1) {
-        toast.error('Producto sin stock');
-        return;
-      }
       setCart([
         ...cart,
-        { productId: product.id, name: product.name, price: product.price, quantity: 1, sku: product.sku, sendToKitchen: goesToKitchen(product.category) },
+        { lineId: crypto.randomUUID(), productId: product.id, name: product.name, price: product.price, quantity: 1, sku: product.sku, sendToKitchen: goesToKitchen(product.category), notes: '' },
       ]);
     }
   };
 
-  const updateQuantity = (productId: string, delta: number) => {
-    const product = products.find((p) => p.id === productId);
-    const cartItem = cart.find((item) => item.productId === productId);
+  const updateQuantity = (lineId: string, delta: number) => {
+    const cartItem = cart.find((item) => item.lineId === lineId);
+    const product = products.find((p) => p.id === cartItem?.productId);
     if (!product || !cartItem) return;
     const newQty = cartItem.quantity + delta;
     if (newQty < 1) {
-      setCart(cart.filter((item) => item.productId !== productId));
+      setCart(cart.filter((item) => item.lineId !== lineId));
       return;
     }
-    if (newQty > product.stock) {
+    if (delta > 0 && quantityInCart(product.id) + delta > product.stock) {
       toast.error('Sin stock suficiente');
       return;
     }
-    setCart(cart.map((item) => (item.productId === productId ? { ...item, quantity: newQty } : item)));
+    setCart(cart.map((item) => (item.lineId === lineId ? { ...item, quantity: newQty } : item)));
   };
 
-  const removeFromCart = (productId: string) => setCart(cart.filter((item) => item.productId !== productId));
+  const updateLine = (lineId: string, change: Partial<CartItem>) => setCart(cart.map((item) => (item.lineId === lineId ? { ...item, ...change } : item)));
+  const removeFromCart = (lineId: string) => setCart(cart.filter((item) => item.lineId !== lineId));
 
   const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const cartItemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -352,7 +356,7 @@ export function Tables() {
         channel: 'table', customer: customerName.trim() || `Mesa ${selectedTable.number}`,
         tableId: selectedTable.id, tableNumber: selectedTable.number,
         waiter: user?.name || '',
-        items: cart.map(item => ({ productId: item.productId, quantity: item.quantity })),
+        items: cart.map(item => ({ productId: item.productId, quantity: item.quantity, notes: item.notes.trim() })),
         restaurantMetadata: { mesaId: selectedTable.id, meseroId: user?.id || '', directProductIds: billOnlyItems.map(item => item.productId) },
       });
 
@@ -666,6 +670,7 @@ export function Tables() {
                           <li key={`${order.id}-${item.productId}-${index}`} className="flex justify-between gap-2">
                             <span className="text-foreground">
                               {item.quantity} × {item.productName}
+                              {item.notes ? <span className="text-xs text-muted-foreground"> · {item.notes}</span> : null}
                             </span>
                             <span className="text-muted-foreground">{money(item.unitPrice * item.quantity)}</span>
                           </li>
@@ -697,21 +702,19 @@ export function Tables() {
                     </div>
                   ) : (
                     cart.map((item) => (
-                      <div key={item.productId} className="bg-accent/50 rounded-lg p-3 border border-border">
+                      <div key={item.lineId} className="bg-accent/50 rounded-lg p-3 border border-border">
                         <div className="flex justify-between items-start mb-2">
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold text-foreground truncate">{item.name}</p>
                             <p className="text-xs text-muted-foreground">{money(item.price)} c/u</p>
                           </div>
-                          <button onClick={() => removeFromCart(item.productId)} className="ml-1 p-1 hover:text-rose-500 text-muted-foreground">
+                          <button onClick={() => removeFromCart(item.lineId)} aria-label={`Quitar ${item.name}`} className="ml-1 p-1 hover:text-rose-500 text-muted-foreground">
                             <X size={14} />
                           </button>
                         </div>
                         <div className="flex items-center justify-between mb-1">
                           <button
-                            onClick={() =>
-                              setCart(cart.map((c) => (c.productId === item.productId ? { ...c, sendToKitchen: !c.sendToKitchen } : c)))
-                            }
+                            onClick={() => updateLine(item.lineId, { sendToKitchen: !item.sendToKitchen })}
                             className={`text-[11px] px-2 py-1 rounded-md font-medium transition-colors ${
                               item.sendToKitchen ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
                             }`}
@@ -722,14 +725,14 @@ export function Tables() {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-1">
                             <button
-                              onClick={() => updateQuantity(item.productId, -1)}
+                              onClick={() => updateQuantity(item.lineId, -1)}
                               className="w-8 h-8 rounded border border-border flex items-center justify-center hover:bg-accent"
                             >
                               <Minus size={14} />
                             </button>
                             <span className="w-8 text-center text-base font-bold">{item.quantity}</span>
                             <button
-                              onClick={() => updateQuantity(item.productId, 1)}
+                              onClick={() => updateQuantity(item.lineId, 1)}
                               className="w-8 h-8 rounded border border-border flex items-center justify-center hover:bg-accent"
                             >
                               <Plus size={14} />
@@ -737,6 +740,14 @@ export function Tables() {
                           </div>
                           <span className="text-sm font-bold text-primary">{money(item.price * item.quantity)}</span>
                         </div>
+                        <Input
+                          value={item.notes}
+                          onChange={(event) => updateLine(item.lineId, { notes: event.target.value })}
+                          maxLength={300}
+                          placeholder="Nota para cocina (ej. sin cebolla)"
+                          aria-label={`Nota para cocina de ${item.name}`}
+                          className="mt-2 h-8 text-xs"
+                        />
                       </div>
                     ))
                   )}
