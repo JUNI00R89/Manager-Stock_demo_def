@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { GripVertical } from 'lucide-react';
-import type { Habitacion, ReservaHotel } from '../../utils/mockData';
+import type { Habitacion, ReservaHotel } from '../../utils/types';
 
 const DAY_WIDTH = 88;
 export const calendarDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;

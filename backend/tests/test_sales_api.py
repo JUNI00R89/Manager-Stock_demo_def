@@ -109,6 +109,11 @@ def run() -> None:
         refreshed = {product["id"]: product for product in client.get("/api/products", headers=auth).json()}
         assert refreshed[burger["id"]]["stock"] == before_burger - 2
         assert refreshed[empanada["id"]]["stock"] == before_empanada - 1
+        # The batched list must return exactly what the per-sale detail returns (items, payments, totals).
+        listed = client.get("/api/sales", headers=auth).json()
+        assert listed and listed[0]["items"] and listed[0]["payments"] is not None
+        for listed_sale in listed:
+            assert listed_sale == client.get(f"/api/sales/{listed_sale['id']}", headers=auth).json()
         page_one = client.get("/api/sales?limit=1&offset=0", headers=auth).json()
         page_two = client.get("/api/sales?limit=1&offset=1", headers=auth).json()
         assert len(page_one) == 1 and page_one[0]["id"] == sale["id"]

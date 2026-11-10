@@ -11,7 +11,7 @@ from backend.core.context import current_business_id, current_identity
 from backend.core.db import audit, connection
 from backend.schemas import PaymentPartPayload, SaleItemPayload, SalePayload
 from backend.services.inventory import allows_negative_stock, consume_product_stock, recipe_ingredient_usage, recipe_unit_cost, reverse_movements, validate_product_quantity
-from backend.services.sales import get_sale
+from backend.services.sales import get_sale, get_sales
 
 
 router = APIRouter()
@@ -19,7 +19,7 @@ router = APIRouter()
 
 @router.get("/api/sales")
 def list_sales(search: str = "", status: str | None = None, limit: int = Query(default=500, ge=1, le=500), offset: int = Query(default=0, ge=0)):
-    query = "SELECT id FROM sales WHERE business_id = ?"
+    query = "SELECT * FROM sales WHERE business_id = ?"
     params: list = [current_business_id()]
     if current_identity()["role"] == "cashier":
         query += " AND created_by = ?"
@@ -34,8 +34,7 @@ def list_sales(search: str = "", status: str | None = None, limit: int = Query(d
     query += " ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?"
     params.extend([limit, offset])
     with connection() as conn:
-        ids = [row["id"] for row in conn.execute(query, params).fetchall()]
-        return [get_sale(conn, sale_id) for sale_id in ids]
+        return get_sales(conn, conn.execute(query, params).fetchall())
 
 
 @router.get("/api/sales/by-key/{idempotency_key}")

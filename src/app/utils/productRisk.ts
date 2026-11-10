@@ -1,6 +1,6 @@
 import { colombiaDateKey } from '../services/dataService';
 import type { SaleRecord } from '../services/dataService';
-import type { Product } from './mockData';
+import type { Product } from './types';
 import { buildRevenueProjection } from './revenueForecast';
 
 /**

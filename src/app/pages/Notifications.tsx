@@ -8,7 +8,7 @@ import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { dataService, type SaleRecord } from '../services/dataService';
-import type { Product } from '../utils/mockData';
+import type { Product } from '../utils/types';
 import { useAuth } from '../context/AuthContext';
 
 type NotificationType = 'low_stock' | 'sale';

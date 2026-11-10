@@ -1,4 +1,4 @@
-import type { Product, Supplier } from '../utils/mockData';
+import type { Product, Supplier } from '../utils/types';
 import { desktop, isDesktopMode } from './desktop';
 
 export type SaleStatus = 'completed' | 'pending' | 'cancelled';
@@ -1071,7 +1071,11 @@ export const dataService = {
           localStorage.setItem(backupKey, JSON.stringify({ savedAt: new Date().toISOString(), sales: [...allSales.values()], note: 'Registros que existían en modo local y no están en la base SQLite del servidor. No fueron importados automáticamente para evitar duplicar ventas e inventario.' }));
         } catch { /* Preserve the current server data even if the browser cannot create a backup. */ }
       }
-      local.sales = data; writeLocal(local); return data;
+      // Con sesión el servidor es la fuente de verdad y la copia local nunca se lee
+      // (canFallbackToLocal). Guardar todo el historial llenaba el límite de ~5 MB de
+      // localStorage y rompía Ventas/Reportes/Dashboard en negocios con muchas ventas.
+      if (isDesktopMode() || !hasAuthenticatedSession()) { local.sales = data; writeLocal(local); }
+      return data;
     } catch (error) {
       if (!canFallbackToLocal(error)) throw error;
       return readLocal().sales.sort((a, b) => b.date.localeCompare(a.date));

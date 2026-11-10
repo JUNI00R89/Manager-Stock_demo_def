@@ -11,7 +11,7 @@ import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Switch } from '../components/ui/switch';
 import { dataService, getProductCategories, createProductCategory, type ProductCategoryRecord, type InventoryLocationRecord } from '../services/dataService';
-import type { Product, Supplier } from '../utils/mockData';
+import type { Product, Supplier } from '../utils/types';
 import { useBusiness, type BusinessType } from '../context/BusinessContext';
 
 const CATEGORY_PRESETS: Record<BusinessType, string[]> = {

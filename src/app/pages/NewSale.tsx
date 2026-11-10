@@ -10,7 +10,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { dataService, type PaymentMethod } from '../services/dataService';
 import { useBusiness } from '../context/BusinessContext';
-import type { Product } from '../utils/mockData';
+import type { Product } from '../utils/types';
 
 type CartItem = { product: Product; quantity: number };
 const money = (v: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(v);
