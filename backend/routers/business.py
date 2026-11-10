@@ -147,15 +147,21 @@ def list_custom_roles():
         return [{"id": r["id"], "name": r["name"], "permissions": json.loads(r["permissions_json"] or "[]"), "createdAt": r["created_at"]} for r in rows]
 
 
-@router.post("/api/custom-roles", status_code=201)
-def create_custom_role(payload: CustomRolePayload):
+def require_role_owner() -> dict:
     identity = current_identity()
     if identity["role"] != "owner" or identity.get("custom_role_id"):
-        raise HTTPException(403, "Solo el propietario puede crear roles personalizados.")
-    role_id = f"ROLE-{uuid.uuid4().hex[:12].upper()}"
+        raise HTTPException(403, "Solo el propietario puede administrar roles personalizados.")
+    return identity
+
+
+def custom_role_out(row: sqlite3.Row) -> dict:
+    return {"id": row["id"], "name": row["name"], "permissions": json.loads(row["permissions_json"]), "createdAt": row["created_at"]}
+
+
+def expand_role_permissions(requested: list[str]) -> list[str]:
     # Every custom role must be able to land on a safe dashboard after login.
     # Add only the read/operational prerequisites required for granted actions to work.
-    permission_set = set(payload.permissions)
+    permission_set = set(requested)
     permission_set.add("dashboard.view")
     dependencies = {
         "catalog.create": {"catalog.view"},
@@ -185,7 +191,14 @@ def create_custom_role(payload: CustomRolePayload):
             if not required.issubset(permission_set):
                 permission_set.update(required)
                 changed = True
-    permissions = ["dashboard.view", *sorted(permission_set - {"dashboard.view"})]
+    return ["dashboard.view", *sorted(permission_set - {"dashboard.view"})]
+
+
+@router.post("/api/custom-roles", status_code=201)
+def create_custom_role(payload: CustomRolePayload):
+    identity = require_role_owner()
+    role_id = f"ROLE-{uuid.uuid4().hex[:12].upper()}"
+    permissions = expand_role_permissions(payload.permissions)
     with connection() as conn:
         try:
             conn.execute("INSERT INTO custom_roles (id,business_id,name,permissions_json,created_by) VALUES (?,?,?,?,?)",
@@ -193,8 +206,39 @@ def create_custom_role(payload: CustomRolePayload):
         except sqlite3.IntegrityError as exc:
             raise HTTPException(409, "Ya existe un rol con ese nombre en este negocio.") from exc
         audit(conn, "create", "custom_role", role_id, {"name": payload.name, "permissions": permissions})
-        row = conn.execute("SELECT id,name,permissions_json,created_at FROM custom_roles WHERE id=?", (role_id,)).fetchone()
-        return {"id": row["id"], "name": row["name"], "permissions": json.loads(row["permissions_json"]), "createdAt": row["created_at"]}
+        return custom_role_out(conn.execute("SELECT id,name,permissions_json,created_at FROM custom_roles WHERE id=?", (role_id,)).fetchone())
+
+
+@router.put("/api/custom-roles/{role_id}")
+def update_custom_role(role_id: str, payload: CustomRolePayload):
+    require_role_owner()
+    permissions = expand_role_permissions(payload.permissions)
+    with connection() as conn:
+        try:
+            cursor = conn.execute("UPDATE custom_roles SET name=?,permissions_json=? WHERE id=? AND business_id=?",
+                                  (payload.name, json.dumps(permissions), role_id, current_business_id()))
+        except sqlite3.IntegrityError as exc:
+            raise HTTPException(409, "Ya existe un rol con ese nombre en este negocio.") from exc
+        if cursor.rowcount == 0:
+            raise HTTPException(404, "Rol no encontrado.")
+        # The middleware reads role permissions on every request, so holders get the change immediately.
+        audit(conn, "update", "custom_role", role_id, {"name": payload.name, "permissions": permissions})
+        return custom_role_out(conn.execute("SELECT id,name,permissions_json,created_at FROM custom_roles WHERE id=?", (role_id,)).fetchone())
+
+
+@router.delete("/api/custom-roles/{role_id}", status_code=204)
+def delete_custom_role(role_id: str):
+    require_role_owner()
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        if not conn.execute("SELECT 1 FROM custom_roles WHERE id=? AND business_id=?", (role_id, current_business_id())).fetchone():
+            conn.rollback(); raise HTTPException(404, "Rol no encontrado.")
+        holders = conn.execute("SELECT count(*) FROM auth_users WHERE custom_role_id=?", (role_id,)).fetchone()[0]
+        if holders:
+            conn.rollback(); raise HTTPException(409, f"Reasigna primero {holders} usuario(s) que tienen este rol.")
+        conn.execute("DELETE FROM custom_roles WHERE id=? AND business_id=?", (role_id, current_business_id()))
+        audit(conn, "delete", "custom_role", role_id, {})
+        conn.commit()
 
 
 @router.post("/api/users", status_code=201)

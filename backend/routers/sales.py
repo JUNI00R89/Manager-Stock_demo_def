@@ -82,6 +82,14 @@ def create_sale(payload: SalePayload):
             if not active_session:
                 conn.rollback()
                 raise HTTPException(409, "La caja seleccionada no está abierta o no pertenece a tu turno.")
+        elif payload.paymentMethod == "cash" or any(part.method == "cash" for part in payload.payments):
+            # Cash outside a session never shows up in any till count, whoever sells it.
+            own_session = conn.execute("SELECT id FROM cash_sessions WHERE business_id=? AND opened_by_user_id=? AND status='open' LIMIT 1",
+                                       (current_business_id(), current_identity()["id"])).fetchone()
+            if not own_session:
+                conn.rollback()
+                raise HTTPException(409, "Abre tu turno de caja para recibir pagos en efectivo.")
+            payload = payload.model_copy(update={"cashSessionId": own_session["id"]})
         business_settings = conn.execute("SELECT currency,tax_rate FROM businesses WHERE id=?", (current_business_id(),)).fetchone()
         if not business_settings:
             conn.rollback()

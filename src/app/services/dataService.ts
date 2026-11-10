@@ -892,6 +892,12 @@ export async function createCustomRole(payload: { name: string; permissions: str
   if (isDesktopMode()) return desktop.users.createRole(payload);
   return api<CustomRoleRecord>('/custom-roles', { method: 'POST', body: JSON.stringify(payload) });
 }
+export async function updateCustomRole(id: string, payload: { name: string; permissions: string[] }) {
+  return api<CustomRoleRecord>(`/custom-roles/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(payload) });
+}
+export async function deleteCustomRole(id: string) {
+  await api<void>(`/custom-roles/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
 export async function createBusinessUser(payload: { name: string; email: string; password: string; role: 'business_admin' | 'cashier'; customRoleId?: string | null }) {
   if (isDesktopMode()) return desktop.users.create(payload);
   return api<BusinessUserRecord>('/users', { method: 'POST', body: JSON.stringify(payload) });
