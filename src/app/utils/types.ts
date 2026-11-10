@@ -233,6 +233,7 @@ export interface Cita {
   horaFin: string;
   estado: 'reservada' | 'confirmada' | 'atendida' | 'cancelada' | 'no_asistio';
   notas?: string;
+  saleId?: string | null;
 }
 
 export interface Cliente {

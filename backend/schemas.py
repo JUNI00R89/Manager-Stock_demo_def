@@ -183,6 +183,7 @@ class SalePayload(BaseModel):
     idempotencyKey: str = Field(min_length=8, max_length=100)
     items: list[SaleItemPayload] = Field(default_factory=list, max_length=200)
     orderIds: list[str] = Field(default_factory=list, max_length=200)
+    appointmentIds: list[str] = Field(default_factory=list, max_length=50)
     customer: str = Field(default="Cliente general", max_length=120)
     paymentMethod: Literal["cash", "card", "digital", "split", "transfer"] = "cash"
     payments: list[PaymentPartPayload] = Field(default_factory=list, max_length=10)

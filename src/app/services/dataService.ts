@@ -50,6 +50,8 @@ export interface SaleRecord {
 export interface CreateSaleInput {
   /** Order lines are resolved by the server; items contains only extras. */
   orderIds?: string[];
+  /** Attended appointments, charged by the server at their booked price. */
+  appointmentIds?: string[];
   items: SaleItemInput[];
   customer?: string;
   paymentMethod?: PaymentMethod;
@@ -766,7 +768,7 @@ export interface ServiceProfessionalRecord { id: string; nombre: string; name: s
 export interface ServiceAppointmentRecord {
   id: string; clienteId?: string | null; clienteNombre: string; clienteTelefono: string; clienteEmail: string;
   servicioId: string; servicioNombre: string; profesionalId: string; profesionalNombre: string;
-  fecha: string; horaInicio: string; horaFin: string; estado: 'reserved' | 'confirmed' | 'attended' | 'cancelled' | 'no_show';
+  fecha: string; horaInicio: string; horaFin: string; estado: 'reserved' | 'confirmed' | 'attended' | 'cancelled' | 'no_show'; saleId?: string | null;
   notes: string; durationMinutes: number; price: number; createdAt: string;
 }
 export async function getServicesCatalog() {

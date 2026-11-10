@@ -5,7 +5,7 @@ import {
   Store, UtensilsCrossed, Hotel, Warehouse, Scissors,
   ChevronRight, ChevronLeft, Check, Sandwich, Building2, ShoppingBag, Bike,
   Armchair, Pizza, Soup, Beef, CookingPot, Pencil, ClipboardList, Wallet,
-  Package, Truck, type LucideIcon
+  Package, type LucideIcon
 } from 'lucide-react';
 import { useBusiness, DEFAULT_CONFIGS, DEFAULT_BUSINESS_THEMES, type BusinessType, type BusinessConfig, type FoodBusinessConfig } from '../context/BusinessContext';
 import { Button } from '../components/ui/button';
@@ -90,7 +90,7 @@ const MODULE_OPTIONS = [
   { id: 'caja',        label: 'Caja / Ventas',          icon: Wallet, desc: 'Cobrar, tickets, cierre' },
   { id: 'inventario',  label: 'Inventario',             icon: Package, desc: 'Existencias de productos preparados o envasados' },
   { id: 'mesas',       label: 'Mesas',                  icon: Armchair, desc: 'Mapa de mesas y comandas' },
-  { id: 'domicilios',  label: 'Domicilios',             icon: Truck, desc: 'Gestión de repartidores' },
+  // 'domicilios' se ofrecerá cuando exista su pantalla; activarlo no mostraba nada.
 ];
 
 // ─── MultiSelect chip ─────────────────────────────────────────────────────────
@@ -205,12 +205,11 @@ export function BusinessSetup() {
 
     if (isFood) {
       const hasMesas = activeModules.includes('mesas');
-      const hasDelivery = activeModules.includes('domicilios');
 
       features = {
         ...features,
         tables: hasMesas,
-        delivery: hasDelivery,
+        delivery: false,
         pos: activeModules.includes('caja'),
         inventory: activeModules.includes('inventario'),
       };
@@ -346,8 +345,7 @@ export function BusinessSetup() {
             {MODULE_OPTIONS.map(mod => {
               // Auto-hide mesas if mode not selected, but still show it
               const active = activeModules.includes(mod.id);
-              const suggested = (mod.id === 'mesas' && serviceModes.includes('mesas')) ||
-                                (mod.id === 'domicilios' && serviceModes.includes('domicilio'));
+              const suggested = mod.id === 'mesas' && serviceModes.includes('mesas');
               return (
                 <button
                   key={mod.id}
