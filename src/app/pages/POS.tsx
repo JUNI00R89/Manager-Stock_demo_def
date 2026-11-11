@@ -383,7 +383,9 @@ export function POS() {
                   >
                     <div className="space-y-2">
                       {productImageUrl(product.image, imagesEnabled(config)) && (
-                        <img src={productImageUrl(product.image, true)!} alt={product.name} loading="lazy" className="h-24 w-full rounded-lg bg-muted/40 object-contain" />
+                        <div className="flex h-24 items-center justify-center">
+                          <img src={productImageUrl(product.image, true)!} alt={product.name} loading="lazy" className="max-h-full max-w-full rounded-lg object-contain" />
+                        </div>
                       )}
                       <div className="flex justify-between items-start">
                         <h3 className="text-sm font-semibold text-foreground line-clamp-2 leading-tight">{product.name}</h3>

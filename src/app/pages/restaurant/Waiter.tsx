@@ -430,7 +430,9 @@ export function Waiter() {
                         return (
                           <article key={product.id} className="flex min-h-36 flex-col rounded-2xl border border-border bg-card p-4 shadow-sm">
                             {productImageUrl(product.image, imagesEnabled(config)) && (
-                              <img src={productImageUrl(product.image, true)!} alt={product.name} loading="lazy" className="mb-3 h-24 w-full rounded-lg bg-muted/40 object-contain" />
+                              <div className="mb-3 flex h-24 items-center justify-center">
+                                <img src={productImageUrl(product.image, true)!} alt={product.name} loading="lazy" className="max-h-full max-w-full rounded-lg object-contain" />
+                              </div>
                             )}
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
