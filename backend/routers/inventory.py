@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from backend.core.context import current_business_id, current_identity
 from backend.core.db import audit, connection, timestamp_iso
 from backend.core.security import has_permission
-from backend.services.inventory import WASTE_REASON_LABELS, add_product_stock, allows_negative_stock, consume_product_stock, convert_quantity, days_until, fetch_inventory_product, inventory_location_out, inventory_operation_out, inventory_product_out, inventory_settings, new_inventory_operation, normalize_date, normalize_waste_reason, require_inventory_location
+from backend.services.inventory import WASTE_REASON_LABELS, add_product_stock, allows_negative_stock, consume_product_stock, convert_quantity, days_until, fetch_inventory_product, inventory_location_out, inventory_operation_out, inventory_product_out, inventory_settings, new_inventory_operation, normalize_date, normalize_waste_reason, require_inventory_location, weighted_average_cost
 
 
 router = APIRouter()
@@ -330,7 +330,7 @@ def create_inventory_entry(payload: InventoryEntryPayload):
                 if item.unitCost > 0:
                     conn.execute(
                         "UPDATE products SET cost=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                        (item.unitCost, product["id"]),
+                        (weighted_average_cost(product, quantity, item.unitCost), product["id"]),
                     )
                     conn.execute(
                         """INSERT INTO supplier_price_history

@@ -19,6 +19,7 @@ def run():
         assert c.put('/api/business/config', headers=auth, json=config).status_code == 200
         product = c.post('/api/products', headers=auth, json={'name': 'Producto', 'sku': 'UNIT', 'category': 'Comidas rápidas', 'price': 1000, 'stock': 10, 'minStock': 1, 'unit': 'unidad'}).json()
         pid = product['id']
+        assert c.post('/api/cash/sessions', headers=auth, json={'openingAmount': 0}).status_code == 201  # cash needs an open shift
         def stock():
             return c.get('/api/products', headers=auth).json()[0]['stock']
         def sale(key, **fields):
@@ -60,6 +61,7 @@ def run():
         other = c.post('/api/auth/register', json={'name': 'Other', 'email': 'other@test.local', 'password': 'TestPassword123!'}).json()
         other_auth = {'Authorization': 'Bearer ' + other['access_token']}
         c.put('/api/business/config', headers=other_auth, json=config)
+        c.post('/api/cash/sessions', headers=other_auth, json={'openingAmount': 0})  # so the 404 proves isolation, not a missing shift
         assert c.post('/api/sales', headers=other_auth, json={'idempotencyKey': 'cross-tenant-test', 'orderIds': [oid2]}).status_code == 404
         # Login configuration is readable by employees; changing it stays forbidden.
         c.get('/api/subscription', headers=auth)

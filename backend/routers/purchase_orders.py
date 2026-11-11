@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from backend.core.context import current_business_id, current_identity
 from backend.core.db import audit, connection, timestamp_iso
-from backend.services.inventory import add_product_stock, convert_quantity, current_operator, fetch_inventory_product, inventory_settings, new_inventory_operation, normalize_date, require_inventory_location
+from backend.services.inventory import add_product_stock, convert_quantity, current_operator, fetch_inventory_product, inventory_settings, new_inventory_operation, normalize_date, require_inventory_location, weighted_average_cost
 
 
 router = APIRouter()
@@ -225,7 +225,7 @@ def receive_purchase_order(order_id: str, payload: PurchaseOrderReceivePayload):
                 if unit_cost > 0:
                     conn.execute(
                         "UPDATE products SET cost=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                        (unit_cost, product["id"]),
+                        (weighted_average_cost(product, quantity, unit_cost), product["id"]),
                     )
                     conn.execute(
                         """INSERT INTO supplier_price_history

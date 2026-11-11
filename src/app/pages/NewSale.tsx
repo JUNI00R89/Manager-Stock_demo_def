@@ -11,9 +11,9 @@ import { Label } from '../components/ui/label';
 import { dataService, type PaymentMethod } from '../services/dataService';
 import { useBusiness } from '../context/BusinessContext';
 import type { Product } from '../utils/types';
+import { formatMoney as money } from '../utils/restaurantFormat';
 
 type CartItem = { product: Product; quantity: number };
-const money = (v: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(v);
 
 export function NewSale() {
   const navigate = useNavigate();

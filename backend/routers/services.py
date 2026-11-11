@@ -31,6 +31,20 @@ def professional_out(row: sqlite3.Row) -> dict:
             "active": bool(row["active"])}
 
 
+def outside_schedule(professional: sqlite3.Row, start_dt: datetime, end_time: str) -> bool:
+    """True when the professional has a schedule and [start, end] fits in no block of that day.
+
+    `dia` follows JavaScript getDay() (0=domingo, 1=lunes), as the agenda saves it.
+    A professional without schedule stays unrestricted, as before.
+    """
+    blocks = professional_out(professional)["availability"]
+    if not blocks:
+        return False
+    day, start = start_dt.isoweekday() % 7, start_dt.strftime("%H:%M")
+    return not any(isinstance(b, dict) and b.get("dia") == day and str(b.get("inicio", "")) <= start and end_time <= str(b.get("fin", ""))
+                   for b in blocks)
+
+
 def appointment_out(row: sqlite3.Row) -> dict:
     return {"id": row["id"], "clienteId": row["client_id"] if "client_id" in row.keys() else None,
             "clienteNombre": row["client_name"], "clienteTelefono": row["client_phone"], "clienteEmail": row["client_email"],
@@ -38,7 +52,8 @@ def appointment_out(row: sqlite3.Row) -> dict:
             "profesionalId": row["professional_id"], "profesionalNombre": row["professional_name_snapshot"],
             "fecha": row["appointment_date"], "horaInicio": row["start_time"], "horaFin": row["end_time"],
             "estado": row["status"], "notes": row["notes"], "durationMinutes": row["duration_minutes"],
-            "price": row["price_snapshot"], "createdAt": timestamp_iso(row["created_at"])}
+            "price": row["price_snapshot"], "saleId": row["sale_id"] if "sale_id" in row.keys() else None,
+            "createdAt": timestamp_iso(row["created_at"])}
 
 
 @router.get("/api/services/catalog")
@@ -130,12 +145,14 @@ def create_service_appointment(payload: AppointmentPayload):
             conn.rollback()
             raise HTTPException(404, "Selecciona un servicio y un profesional activos de este negocio.")
         start_dt = datetime.strptime(f"{payload.appointmentDate} {payload.startTime}", "%Y-%m-%d %H:%M")
-        from datetime import time as datetime_time
         end_dt = start_dt + timedelta(minutes=service["duration_minutes"])
         end_time = end_dt.strftime("%H:%M")
         if end_dt.date().isoformat() != payload.appointmentDate:
             conn.rollback()
             raise HTTPException(422, "La cita no puede terminar después de la medianoche.")
+        if outside_schedule(professional, start_dt, end_time):
+            conn.rollback()
+            raise HTTPException(422, "La cita queda fuera del horario de atención del profesional.")
         conflict = conn.execute("SELECT id FROM service_appointments WHERE business_id=? AND professional_id=? AND appointment_date=? AND status IN ('reserved','confirmed') AND start_time<? AND end_time>? LIMIT 1", (business_id,payload.professionalId,payload.appointmentDate,end_time,payload.startTime)).fetchone()
         if conflict:
             conn.rollback()
@@ -195,6 +212,8 @@ def edit_service_appointment(appointment_id: str, payload: AppointmentPayload):
         end_time = end_dt.strftime("%H:%M")
         if end_dt.date().isoformat() != payload.appointmentDate:
             conn.rollback(); raise HTTPException(422, "La cita no puede terminar después de la medianoche.")
+        if outside_schedule(professional, start_dt, end_time):
+            conn.rollback(); raise HTTPException(422, "La cita queda fuera del horario de atención del profesional.")
         conflict = conn.execute("SELECT id FROM service_appointments WHERE business_id=? AND professional_id=? AND appointment_date=? AND status IN ('reserved','confirmed') AND id<>? AND start_time<? AND end_time>? LIMIT 1", (business_id, payload.professionalId, payload.appointmentDate, appointment_id, end_time, payload.startTime)).fetchone()
         if conflict:
             conn.rollback(); raise HTTPException(409, "El profesional ya tiene una cita en ese horario.")

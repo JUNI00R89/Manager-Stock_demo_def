@@ -17,14 +17,3 @@ export function PedidoStatusBadge({ estado, className = '' }: { estado: PedidoEs
     </Badge>
   );
 }
-
-export function EstadoDot({ estado }: { estado: PedidoEstado }) {
-  const colors: Record<PedidoEstado, string> = {
-    pendiente: 'bg-amber-500',
-    en_preparacion: 'bg-sky-500',
-    finalizado: 'bg-emerald-500',
-    entregado: 'bg-muted-foreground/50',
-    cancelado: 'bg-rose-500',
-  };
-  return <span aria-hidden="true" className={`inline-block h-2 w-2 rounded-full ${colors[estado]}`} />;
-}

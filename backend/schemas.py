@@ -62,6 +62,11 @@ class ProductPayload(BaseModel):
         return self
 
 
+class ProductImagePayload(BaseModel):
+    # ~500 KB of image once base64-decoded, plus the data-URL header.
+    dataUrl: str = Field(min_length=20, max_length=700_000)
+
+
 class ProductCategoryPayload(BaseModel):
     name: str = Field(min_length=2, max_length=80)
     description: str = Field(default="", max_length=400)
@@ -183,6 +188,7 @@ class SalePayload(BaseModel):
     idempotencyKey: str = Field(min_length=8, max_length=100)
     items: list[SaleItemPayload] = Field(default_factory=list, max_length=200)
     orderIds: list[str] = Field(default_factory=list, max_length=200)
+    appointmentIds: list[str] = Field(default_factory=list, max_length=50)
     customer: str = Field(default="Cliente general", max_length=120)
     paymentMethod: Literal["cash", "card", "digital", "split", "transfer"] = "cash"
     payments: list[PaymentPartPayload] = Field(default_factory=list, max_length=10)

@@ -9,8 +9,7 @@ import { Input } from './ui/input';
 import { motion, AnimatePresence } from 'motion/react';
 import type { Product } from '../utils/types';
 import { toast } from 'sonner';
-
-const money = (value: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(value);
+import { formatMoney as money } from '../utils/restaurantFormat';
 
 type ScannerState = 'scanning' | 'detected' | 'not_found' | 'typing';
 type ScannerContext = 'pos' | 'receive' | 'count' | 'products';

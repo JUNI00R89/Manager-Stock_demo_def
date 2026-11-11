@@ -10,8 +10,8 @@ import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
 import { AnimatedCounter } from '../components/motion/AnimatedCounter';
 import { dataService, colombiaDateKey, type SaleRecord } from '../services/dataService';
+import { formatMoney as money } from '../utils/restaurantFormat';
 
-const money = (value: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(value);
 const daysAgo = (days: number) => colombiaDateKey(new Date(Date.now() - days * 86400000));
 const formatDate = (value: string) => new Intl.DateTimeFormat('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(value));
 

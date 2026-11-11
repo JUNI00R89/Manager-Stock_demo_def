@@ -87,6 +87,7 @@ def run() -> None:
                 {"productId": empanada["id"], "quantity": 1, "discountPercent": 0},
             ], "customer": "Cliente de prueba", "paymentMethod": "cash", "taxRate": 0, "status": "completed",
         }
+        assert client.post("/api/cash/sessions", headers=auth, json={"openingAmount": 0}).status_code == 201  # cash needs an open shift
         first = client.post("/api/sales", headers=auth, json=payload)
         assert first.status_code == 201, first.text
         sale = first.json()

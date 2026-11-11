@@ -61,13 +61,24 @@ def process_due_type_transitions() -> int:
             # If the business has switched back to the old type, keep those module records.
             deleted_tables: list[str] = []
             final_status = "preserved" if active_type == canonical_business_type(transition["old_type"]) else "expired"
+            kept_reason = None
             if business and final_status == "expired":
-                deleted_tables = delete_business_type_data(conn, transition["business_id"], transition["old_type"])
+                # All-or-nothing per module: rows still referenced by history (stock movements,
+                # product locations...) make the whole module stay instead of failing the cleanup.
+                conn.execute("SAVEPOINT type_cleanup")
+                try:
+                    deleted_tables = delete_business_type_data(conn, transition["business_id"], transition["old_type"])
+                except sqlite3.IntegrityError:
+                    conn.execute("ROLLBACK TO type_cleanup")
+                    deleted_tables, kept_reason = [], "Datos conservados: el historial de inventario o ventas los referencia."
+                conn.execute("RELEASE type_cleanup")
             try:
                 details = json.loads(transition["cleanup_json"] or "{}")
             except json.JSONDecodeError:
                 details = {}
             details["deletedTables"] = deleted_tables
+            if kept_reason:
+                details["keptReason"] = kept_reason
             details["processedAt"] = now
             conn.execute("UPDATE business_type_transitions SET status=?,cleaned_at=?,cleanup_json=? WHERE id=? AND status='pending'", (final_status, now, json.dumps(details, ensure_ascii=False), transition["id"]))
             if table_exists(conn, "audit_log"):
