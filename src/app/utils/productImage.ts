@@ -21,7 +21,12 @@ export function resizeImage(file: File, maxSide = 400): Promise<string> {
       const canvas = document.createElement('canvas');
       canvas.width = Math.round(img.width * scale);
       canvas.height = Math.round(img.height * scale);
-      canvas.getContext('2d')?.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = '#ffffff'; // JPEG has no transparency: cut-out PNGs would turn black
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      }
       URL.revokeObjectURL(url);
       resolve(canvas.toDataURL('image/jpeg', 0.8));
     };
