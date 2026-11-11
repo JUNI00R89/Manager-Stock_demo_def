@@ -123,7 +123,6 @@ export function POS() {
     return matchSearch && matchCat;
   });
   const showPhotos = imagesEnabled(config);
-  const anyPhoto = filteredProducts.some(product => productImageUrl(product.image, showPhotos));
 
   const addToCart = (product: Product, quantity = 1) => {
     const existing = cart.find(item => item.productId === product.id);
@@ -363,7 +362,8 @@ export function POS() {
           </div>
 
           {/* Product grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[520px] overflow-y-auto pr-1">
+          {/* items-start: a card without photo keeps its own height instead of stretching to a photo card's. */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 items-start gap-3 max-h-[520px] overflow-y-auto pr-1">
             {filteredProducts.length === 0 ? (
               <div className="col-span-2 py-12 text-center text-muted-foreground sm:col-span-3">
                 <Package size={40} className="mx-auto mb-2 opacity-40" />
@@ -385,14 +385,7 @@ export function POS() {
                     onClick={() => !outOfStock && addToCart(product)}
                   >
                     <div className="space-y-2">
-                      {photoUrl ? (
-                        <img src={photoUrl} alt={product.name} loading="lazy" className="h-24 w-full rounded-lg object-cover" />
-                      ) : anyPhoto && (
-                        // Keeps cards in a row the same shape when only some products have a photo.
-                        <div aria-hidden="true" className="flex h-24 w-full items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                          <Package size={28} className="opacity-40" />
-                        </div>
-                      )}
+                      {photoUrl && <img src={photoUrl} alt={product.name} loading="lazy" className="h-24 w-full rounded-lg object-cover" />}
                       <div className="flex justify-between items-start">
                         <h3 className="text-sm font-semibold text-foreground line-clamp-2 leading-tight">{product.name}</h3>
                         {inCart && (

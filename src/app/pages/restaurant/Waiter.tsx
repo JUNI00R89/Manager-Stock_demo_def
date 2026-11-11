@@ -424,7 +424,7 @@ export function Waiter() {
                       <p className="mt-1 text-sm text-muted-foreground">Prueba con otro término o cambia de categoría.</p>
                     </div>
                   ) : (
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="mt-4 grid items-start gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       {filteredMenu.map((product) => {
                         const inCartQty = cart.reduce((sum, line) => sum + (line.productId === product.id ? line.cantidad : 0), 0);
                         return (
