@@ -35,25 +35,30 @@ export function resizeImage(file: File, maxSide = 400): Promise<string> {
   });
 }
 
-/** Crops a data-URL image to the given rect (fractions of the image, 0..1). */
-export function cropDataUrl(dataUrl: string, rect: { x: number; y: number; w: number; h: number }): Promise<string> {
+/** Crops an image (data URL, http(s) URL or raw base64) to the given rect (fractions 0..1, clamped). */
+export function cropDataUrl(source: string, rect: { x: number; y: number; w: number; h: number }): Promise<string> {
   return new Promise((resolve, reject) => {
-    const url = dataUrl.startsWith('data:') ? dataUrl : `data:image/png;base64,${dataUrl}`;
+    const isHttp = /^https?:\/\//i.test(source);
+    const src = source.startsWith('data:') || isHttp ? source : `data:image/png;base64,${source}`;
     const img = new Image();
+    if (isHttp) img.crossOrigin = 'anonymous';
     img.onload = () => {
+      const x = Math.max(0, Math.min(rect.x, 1));
+      const y = Math.max(0, Math.min(rect.y, 1));
+      const w = Math.max(0, Math.min(rect.w, 1 - x));
+      const h = Math.max(0, Math.min(rect.h, 1 - y));
       const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, Math.round(img.width * rect.w));
-      canvas.height = Math.max(1, Math.round(img.height * rect.h));
+      canvas.width = Math.max(1, Math.round(img.width * w));
+      canvas.height = Math.max(1, Math.round(img.height * h));
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = '#ffffff'; // JPEG has no transparency
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, Math.round(rect.x * img.width), Math.round(rect.y * img.height), Math.round(rect.w * img.width), Math.round(rect.h * img.height), 0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, Math.round(x * img.width), Math.round(y * img.height), Math.round(w * img.width), Math.round(h * img.height), 0, 0, canvas.width, canvas.height);
       }
-      URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL('image/jpeg', 0.8));
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
     };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('No se pudo leer la imagen.')); };
-    img.src = url;
+    img.onerror = () => reject(new Error('No se pudo leer la imagen.'));
+    img.src = src;
   });
 }

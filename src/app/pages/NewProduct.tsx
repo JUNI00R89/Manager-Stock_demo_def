@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { ArrowLeft, Boxes, Check, PackageCheck, Plus, Save, X } from 'lucide-react';
+import { ArrowLeft, Boxes, Camera, Check, Crop, PackageCheck, Plus, Save, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { toastError } from '../utils/notifications';
 import { Layout } from '../components/Layout';
+import { PhotoCropper } from '../components/PhotoCropper';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -13,7 +14,7 @@ import { Switch } from '../components/ui/switch';
 import { dataService, getProductCategories, createProductCategory, type ProductCategoryRecord, type InventoryLocationRecord } from '../services/dataService';
 import type { Product, Supplier } from '../utils/types';
 import { useBusiness, type BusinessType } from '../context/BusinessContext';
-import { cropDataUrl, productImageUrl, resizeImage } from '../utils/productImage';
+import { productImageUrl, resizeImage } from '../utils/productImage';
 import { formatMoney as money } from '../utils/restaurantFormat';
 
 const CATEGORY_PRESETS: Record<BusinessType, string[]> = {
@@ -51,9 +52,7 @@ export function NewProduct() {
   const pickPhoto = async (file: File | undefined) => {
     if (!file) return;
     try {
-      const resized = await resizeImage(file);
-      setNewPhoto(resized);
-      setCropRect({ x: 0, y: 0, w: 1, h: 1 });
+      setNewPhoto(await resizeImage(file));
       setCropOpen(true);
     } catch (error) { toastError(error, 'No se pudo leer la foto.'); }
   };
@@ -67,18 +66,8 @@ export function NewProduct() {
     event.target.value = '';
   };
 
+  // Recorte: se abre con la foto recién elegida o con la que ya está en pantalla.
   const [cropOpen, setCropOpen] = useState(false);
-  const [cropRect, setCropRect] = useState<{ x: number; y: number; w: number; h: number }>({ x: 0, y: 0, w: 1, h: 1 });
-  const cropDrag = useRef<{ ox: number; oy: number; sx: number; sy: number } | null>(null);
-
-  const applyCrop = async () => {
-    if (!newPhoto || !cropOpen) return;
-    const cropped = await cropDataUrl(newPhoto, cropRect);
-    setNewPhoto(cropped);
-    setCropOpen(false);
-  };
-
-  const closeCrop = () => { cropDrag.current = null; setCropOpen(false); };
 
   const discreteQuantity = useMemo(() => DISCRETE_UNITS.has(formData.unit.trim().toLocaleLowerCase('es')), [formData.unit]);
 
@@ -188,56 +177,35 @@ export function NewProduct() {
         <div className="border-t border-border/70 pt-6"><h2 className="font-semibold">Precios y stock</h2><div className="mt-4 grid gap-5 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="price">Precio de venta (COP) *</Label><Input id="price" type="number" min="0" step="1" value={formData.price} onChange={e => handleChange('price', e.target.value)} placeholder="18000" required className="h-11 rounded-xl"/></div><div className="space-y-2"><Label htmlFor="cost">Costo estimado (COP)</Label><Input id="cost" type="number" min="0" step="1" value={formData.cost} onChange={e => handleChange('cost', e.target.value)} placeholder="7200" className="h-11 rounded-xl"/><p className="text-xs text-muted-foreground">Sirve para estimar margen y rentabilidad.</p></div><div className="space-y-2"><Label htmlFor="stock">Existencias iniciales *</Label><Input id="stock" type="number" min="0" step={discreteQuantity ? '1' : '0.01'} value={formData.stock} onChange={e => handleChange('stock', e.target.value)} required className="h-11 rounded-xl" aria-describedby="stock-help"/><p id="stock-help" className="text-xs text-muted-foreground">{discreteQuantity ? 'Unidades enteras; las flechas incrementan de 1 en 1.' : 'Esta unidad admite cantidades fraccionarias.'}</p></div><div className="space-y-2"><Label htmlFor="minStock">Alerta de stock mínimo *</Label><Input id="minStock" type="number" min="0" step={discreteQuantity ? '1' : '0.01'} value={formData.minStock} onChange={e => handleChange('minStock', e.target.value)} required className="h-11 rounded-xl" aria-describedby="min-stock-help"/><p id="min-stock-help" className="text-xs text-muted-foreground">{discreteQuantity ? 'Número entero de unidades para activar la alerta.' : 'Se puede expresar en fracciones según la unidad.'}</p></div></div></div>
         <div className="space-y-2">
           <Label htmlFor="product-photo">Foto (opcional)</Label>
-          <div className="flex items-center gap-4">
-            {photoPreview
-              ? <img src={photoPreview} alt="Vista previa de la foto del producto" className="h-20 w-20 rounded-xl border border-border object-cover" />
-              : <div className="flex h-20 w-20 items-center justify-center rounded-xl border border-dashed border-border text-xs text-muted-foreground">Sin foto</div>}
-            <div className="flex flex-wrap gap-2">
-              <input ref={fileInputRef} id="product-photo" type="file" accept="image/jpeg,image/png,image/webp" onChange={handlePhotoChange} className="hidden" />
-              <Button type="button" variant="outline" className="rounded-xl" onClick={openPhotoPicker}>Cambiar foto</Button>
-              {photoPreview && <Button type="button" variant="outline" className="rounded-xl" onClick={() => setNewPhoto(null)}>Quitar foto</Button>}
+          <div className="flex flex-wrap items-start gap-4">
+            <button
+              type="button"
+              onClick={openPhotoPicker}
+              className="group relative h-28 w-28 shrink-0 overflow-hidden rounded-2xl border border-input bg-input-background outline-none transition hover:border-[var(--brand-primary)] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              aria-label={photoPreview ? 'Cambiar la foto del producto' : 'Agregar foto del producto'}
+            >
+              {photoPreview
+                ? <img src={photoPreview} alt="Foto del producto" className="h-full w-full object-cover" />
+                : <span className="flex h-full w-full flex-col items-center justify-center gap-1 text-muted-foreground"><Camera className="h-6 w-6" /><span className="text-[11px] font-medium">Agregar foto</span></span>}
+              <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-black/60 py-1 text-[10px] font-medium text-white opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100"><Camera className="h-3 w-3" />Cambiar</span>
+            </button>
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="flex flex-wrap gap-2">
+                <input ref={fileInputRef} id="product-photo" type="file" accept="image/jpeg,image/png,image/webp" onChange={handlePhotoChange} className="hidden" />
+                <Button type="button" variant="outline" className="rounded-xl" onClick={openPhotoPicker}>Cambiar foto</Button>
+                {photoPreview && <Button type="button" variant="outline" className="rounded-xl" onClick={() => setCropOpen(true)}><Crop className="h-4 w-4" />Ajustar recorte</Button>}
+                {photoPreview && <Button type="button" variant="outline" className="rounded-xl" onClick={() => setNewPhoto(null)}>Quitar foto</Button>}
+              </div>
+              <p className="text-xs text-muted-foreground">Toca el cuadro para elegir una foto y ajústala moviendo y acercando la imagen. Se muestra en el punto de venta si está activado en Configuración.</p>
             </div>
           </div>
-          <p className="text-xs text-muted-foreground">Se reduce automáticamente antes de subirla. Se muestra en el punto de venta si está activado en Configuración.</p>
         </div>
-        {cropOpen && newPhoto && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label="Recortar foto del producto">
-            <div className="w-full max-w-2xl rounded-2xl border border-border bg-card p-4 shadow-2xl">
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="font-semibold">Recortar foto</h3>
-                <Button variant="ghost" size="icon" aria-label="Cerrar recorte" onClick={closeCrop}><X className="h-4 w-4"/></Button>
-              </div>
-              <div
-                className="relative mt-3 h-64 w-full overflow-hidden rounded-xl border border-border bg-black"
-                onMouseDown={(e) => {
-                  if (!cropOpen) return;
-                  const area = e.currentTarget.getBoundingClientRect();
-                  const x = Math.max(0, Math.min((e.clientX - area.left) / area.width, 1));
-                  const y = Math.max(0, Math.min((e.clientY - area.top) / area.height, 1));
-                  setCropRect({ x: 0, y: 0, w: x, h: y });
-                }}
-                onMouseMove={(e) => {
-                  if (!cropOpen) return;
-                  const area = e.currentTarget.getBoundingClientRect();
-                  const x = Math.max(0, Math.min((e.clientX - area.left) / area.width, 1));
-                  const y = Math.max(0, Math.min((e.clientY - area.top) / area.height, 1));
-                  setCropRect({ x: 0, y: 0, w: x, h: y });
-                }}
-                onMouseUp={() => { cropDrag.current = null; }}
-              >
-                <img src={newPhoto} alt="Previsualizacion para recorte" className="h-full w-full object-contain" draggable={false} />
-                <div
-                  className="absolute border-2 border-[var(--brand-primary)] bg-[var(--brand-primary)]/20"
-                  style={{ left: `${cropRect.x * 100}%`, top: '0px', width: `${cropRect.w * 100}%`, height: `${cropRect.h * 100}%` }}
-                />
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">Arrastra dentro de la imagen para elegir el area que se veera en el recorte.</p>
-              <div className="mt-4 flex justify-end gap-2">
-                <Button variant="outline" className="rounded-xl" onClick={closeCrop}>Cancelar</Button>
-                <Button className="rounded-xl bg-[var(--brand-primary)] text-white hover:opacity-90" onClick={() => void applyCrop()}>Aplicar recorte</Button>
-              </div>
-            </div>
-          </div>
+        {cropOpen && photoPreview && (
+          <PhotoCropper
+            image={photoPreview}
+            onCancel={() => setCropOpen(false)}
+            onApply={cropped => { setNewPhoto(cropped); setCropOpen(false); }}
+          />
         )}
         <div className="space-y-2"><Label htmlFor="description">Descripción / notas</Label><Textarea id="description" value={formData.description} onChange={e => handleChange('description', e.target.value)} placeholder="Tamaño, presentación o notas…" rows={4} maxLength={1000} className="rounded-xl"/></div>
         <div className="flex flex-col-reverse gap-3 border-t border-border/70 pt-5 sm:flex-row sm:justify-end"><Button type="button" variant="outline" onClick={() => navigate('/products')} className="rounded-xl">Cancelar</Button><Button type="submit" disabled={saving || showCategoryForm} className="rounded-xl bg-[var(--brand-primary)] text-white hover:opacity-90"><Save className="mr-2 h-4 w-4"/>{saving ? 'Guardando…' : isEditing ? 'Guardar cambios' : 'Guardar producto'}</Button></div>
