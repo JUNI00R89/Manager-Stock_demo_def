@@ -13,7 +13,7 @@ import { Switch } from '../components/ui/switch';
 import { dataService, getProductCategories, createProductCategory, type ProductCategoryRecord, type InventoryLocationRecord } from '../services/dataService';
 import type { Product, Supplier } from '../utils/types';
 import { useBusiness, type BusinessType } from '../context/BusinessContext';
-import { productImageUrl, resizeImage } from '../utils/productImage';
+import { cropDataUrl, productImageUrl, resizeImage } from '../utils/productImage';
 import { formatMoney as money } from '../utils/restaurantFormat';
 
 const CATEGORY_PRESETS: Record<BusinessType, string[]> = {
@@ -50,7 +50,12 @@ export function NewProduct() {
   const photoPreview = newPhoto === null ? null : newPhoto ?? productImageUrl(currentImage, true);
   const pickPhoto = async (file: File | undefined) => {
     if (!file) return;
-    try { setNewPhoto(await resizeImage(file)); } catch (error) { toastError(error, 'No se pudo leer la foto.'); }
+    try {
+      const resized = await resizeImage(file);
+      setNewPhoto(resized);
+      setCropRect({ x: 0, y: 0, w: 1, h: 1 });
+      setCropOpen(true);
+    } catch (error) { toastError(error, 'No se pudo leer la foto.'); }
   };
 
   const openPhotoPicker = () => fileInputRef.current?.click();
@@ -61,6 +66,19 @@ export function NewProduct() {
     // Se limpia el input para permitir elegir el mismo archivo otra vez.
     event.target.value = '';
   };
+
+  const [cropOpen, setCropOpen] = useState(false);
+  const [cropRect, setCropRect] = useState<{ x: number; y: number; w: number; h: number }>({ x: 0, y: 0, w: 1, h: 1 });
+  const cropDrag = useRef<{ ox: number; oy: number; sx: number; sy: number } | null>(null);
+
+  const applyCrop = async () => {
+    if (!newPhoto || !cropOpen) return;
+    const cropped = await cropDataUrl(newPhoto, cropRect);
+    setNewPhoto(cropped);
+    setCropOpen(false);
+  };
+
+  const closeCrop = () => { cropDrag.current = null; setCropOpen(false); };
 
   const discreteQuantity = useMemo(() => DISCRETE_UNITS.has(formData.unit.trim().toLocaleLowerCase('es')), [formData.unit]);
 
@@ -182,6 +200,45 @@ export function NewProduct() {
           </div>
           <p className="text-xs text-muted-foreground">Se reduce automáticamente antes de subirla. Se muestra en el punto de venta si está activado en Configuración.</p>
         </div>
+        {cropOpen && newPhoto && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label="Recortar foto del producto">
+            <div className="w-full max-w-2xl rounded-2xl border border-border bg-card p-4 shadow-2xl">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="font-semibold">Recortar foto</h3>
+                <Button variant="ghost" size="icon" aria-label="Cerrar recorte" onClick={closeCrop}><X className="h-4 w-4"/></Button>
+              </div>
+              <div
+                className="relative mt-3 h-64 w-full overflow-hidden rounded-xl border border-border bg-black"
+                onMouseDown={(e) => {
+                  if (!cropOpen) return;
+                  const area = e.currentTarget.getBoundingClientRect();
+                  const x = Math.max(0, Math.min((e.clientX - area.left) / area.width, 1));
+                  const y = Math.max(0, Math.min((e.clientY - area.top) / area.height, 1));
+                  setCropRect({ x: 0, y: 0, w: x, h: y });
+                }}
+                onMouseMove={(e) => {
+                  if (!cropOpen) return;
+                  const area = e.currentTarget.getBoundingClientRect();
+                  const x = Math.max(0, Math.min((e.clientX - area.left) / area.width, 1));
+                  const y = Math.max(0, Math.min((e.clientY - area.top) / area.height, 1));
+                  setCropRect({ x: 0, y: 0, w: x, h: y });
+                }}
+                onMouseUp={() => { cropDrag.current = null; }}
+              >
+                <img src={newPhoto} alt="Previsualizacion para recorte" className="h-full w-full object-contain" draggable={false} />
+                <div
+                  className="absolute border-2 border-[var(--brand-primary)] bg-[var(--brand-primary)]/20"
+                  style={{ left: `${cropRect.x * 100}%`, top: '0px', width: `${cropRect.w * 100}%`, height: `${cropRect.h * 100}%` }}
+                />
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">Arrastra dentro de la imagen para elegir el area que se veera en el recorte.</p>
+              <div className="mt-4 flex justify-end gap-2">
+                <Button variant="outline" className="rounded-xl" onClick={closeCrop}>Cancelar</Button>
+                <Button className="rounded-xl bg-[var(--brand-primary)] text-white hover:opacity-90" onClick={() => void applyCrop()}>Aplicar recorte</Button>
+              </div>
+            </div>
+          </div>
+        )}
         <div className="space-y-2"><Label htmlFor="description">Descripción / notas</Label><Textarea id="description" value={formData.description} onChange={e => handleChange('description', e.target.value)} placeholder="Tamaño, presentación o notas…" rows={4} maxLength={1000} className="rounded-xl"/></div>
         <div className="flex flex-col-reverse gap-3 border-t border-border/70 pt-5 sm:flex-row sm:justify-end"><Button type="button" variant="outline" onClick={() => navigate('/products')} className="rounded-xl">Cancelar</Button><Button type="submit" disabled={saving || showCategoryForm} className="rounded-xl bg-[var(--brand-primary)] text-white hover:opacity-90"><Save className="mr-2 h-4 w-4"/>{saving ? 'Guardando…' : isEditing ? 'Guardar cambios' : 'Guardar producto'}</Button></div>
       </Card>

@@ -11,7 +11,7 @@ export function imagesEnabled(config: BusinessConfig | null): boolean {
   return config?.features.productImages !== false;
 }
 
-/** Shrinks a picked photo in the browser (longest side ≤ 400 px, JPEG 0.8) so uploads stay ~30 KB. */
+/** Shrinks a picked photo in the browser (longest side <= 400 px, JPEG 0.8) so uploads stay ~30 KB. */
 export function resizeImage(file: File, maxSide = 400): Promise<string> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
@@ -26,6 +26,29 @@ export function resizeImage(file: File, maxSide = 400): Promise<string> {
         ctx.fillStyle = '#ffffff'; // JPEG has no transparency: cut-out PNGs would turn black
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      }
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg', 0.8));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('No se pudo leer la imagen.')); };
+    img.src = url;
+  });
+}
+
+/** Crops a data-URL image to the given rect (fractions of the image, 0..1). */
+export function cropDataUrl(dataUrl: string, rect: { x: number; y: number; w: number; h: number }): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = dataUrl.startsWith('data:') ? dataUrl : `data:image/png;base64,${dataUrl}`;
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(img.width * rect.w));
+      canvas.height = Math.max(1, Math.round(img.height * rect.h));
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, Math.round(rect.x * img.width), Math.round(rect.y * img.height), Math.round(rect.w * img.width), Math.round(rect.h * img.height), 0, 0, canvas.width, canvas.height);
       }
       URL.revokeObjectURL(url);
       resolve(canvas.toDataURL('image/jpeg', 0.8));
