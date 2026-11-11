@@ -13,6 +13,7 @@ import type { Cita, Profesional, Servicio } from '../../utils/types';
 import { dataService, deleteServiceAppointment, editServiceAppointment, getServiceAppointments, getServiceProfessionals, getServicesCatalog, updateServiceAppointmentStatus, type ServiceAppointmentRecord, type ServiceCatalogRecord, type ServiceProfessionalRecord } from '../../services/dataService';
 import { toast } from 'sonner';
 import { toastError } from '../../utils/notifications';
+import { uniqueRestaurantId } from '../../utils/restaurantStorage';
 
 type ViewMode = 'semana' | 'dia';
 
@@ -66,7 +67,7 @@ export function Appointments() {
     try {
       // The server charges the booked price and rejects a second charge, so a fresh key per click is safe.
       const session = await dataService.getCurrentCashSession();
-      const sale = await dataService.createSale({ items: [], appointmentIds: [appointment.id], customer: appointment.clienteNombre, paymentMethod, cashSessionId: session?.id, idempotencyKey: crypto.randomUUID() });
+      const sale = await dataService.createSale({ items: [], appointmentIds: [appointment.id], customer: appointment.clienteNombre, paymentMethod, cashSessionId: session?.id, idempotencyKey: uniqueRestaurantId('cobro-cita') });
       toast.success('Cita cobrada.', { description: `Venta ${sale.id}` });
       await load(); setSelectedCita(null);
     } catch (error) { toastError(error, 'No se pudo cobrar la cita.'); }

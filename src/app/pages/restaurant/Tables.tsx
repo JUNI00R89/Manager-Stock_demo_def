@@ -33,6 +33,7 @@ import {
 import { toast } from 'sonner';
 import { imagesEnabled, productImageUrl } from '../../utils/productImage';
 import { mergeableLine } from '../../utils/orderCart';
+import { uniqueRestaurantId } from '../../utils/restaurantStorage';
 import { toastError } from '../../utils/notifications';
 import { dataService, type OrderRecord, type RestaurantTableRecord } from '../../services/dataService';
 import type { Product } from '../../utils/types';
@@ -208,7 +209,7 @@ export function Tables() {
     } else {
       setCart([
         ...cart,
-        { lineId: crypto.randomUUID(), productId: product.id, name: product.name, price: product.price, quantity: 1, sku: product.sku, sendToKitchen: goesToKitchen(product.category), notes: '' },
+        { lineId: uniqueRestaurantId('linea'), productId: product.id, name: product.name, price: product.price, quantity: 1, sku: product.sku, sendToKitchen: goesToKitchen(product.category), notes: '' },
       ]);
     }
   };
@@ -387,7 +388,7 @@ export function Tables() {
       const keyName = `table_checkout_${view.table.id}`;
       let key = localStorage.getItem(keyName);
       if (!key) {
-        key = crypto.randomUUID();
+        key = uniqueRestaurantId('cobro-mesa');
         localStorage.setItem(keyName, key);
       }
       const session = await dataService.getCurrentCashSession();

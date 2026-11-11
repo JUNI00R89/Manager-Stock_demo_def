@@ -21,6 +21,7 @@ import {
 import { toast } from 'sonner';
 import { imagesEnabled, productImageUrl } from '../../utils/productImage';
 import { mergeableLine } from '../../utils/orderCart';
+import { uniqueRestaurantId } from '../../utils/restaurantStorage';
 import { toastError } from '../../utils/notifications';
 import { Layout } from '../../components/Layout';
 import { StaffSwitcher } from '../../components/restaurant/StaffSwitcher';
@@ -222,7 +223,7 @@ export function Waiter() {
       if (line) {
         return current.map((item) => item.lineId === line.lineId ? { ...item, cantidad: item.cantidad + 1 } : item);
       }
-      return [...current, { lineId: crypto.randomUUID(), productId: product.id, cantidad: 1, nota: '' }];
+      return [...current, { lineId: uniqueRestaurantId('linea'), productId: product.id, cantidad: 1, nota: '' }];
     });
   };
 

@@ -7,6 +7,7 @@ import { ConfirmActionDialog } from '../../components/ConfirmActionDialog';
 import { addHotelPayment, closeHotelAccount, dataService, type CashSessionRecord, type HotelAccount, type HotelPaymentInput, type PaymentPartMethod } from '../../services/dataService';
 import { downloadHotelReceipt } from '../../utils/hotelReceipt';
 import { useAuth } from '../../context/AuthContext';
+import { uniqueRestaurantId } from '../../utils/restaurantStorage';
 const money=(v:number)=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP'}).format(v);
 const methods: Record<PaymentPartMethod,string> = {cash:'Efectivo',card:'Tarjeta',transfer:'Transferencia',digital:'Pago digital'};
 
@@ -39,7 +40,7 @@ export function HotelPaymentsPanel({account,canCollect,busy,onBusy,onAccount,onS
   const run=async(action:()=>Promise<void>)=>{if(busy||submitting.current)return;submitting.current=true;onBusy(true);setError('');try{await action();}catch(e){setError(e instanceof Error?e.message:'No se pudo completar la operación.');throw e;}finally{submitting.current=false;onBusy(false);}};
   const open=()=>run(async()=>{setSession(await dataService.openCashSession(Number(cashAmount),user?.name||''));});
   const pay=()=>run(async()=>{
-    const input=pending||{amount:Number(amount),method,reference:reference.trim(),cashSessionId:session?.id||'',idempotencyKey:crypto.randomUUID()};
+    const input=pending||{amount:Number(amount),method,reference:reference.trim(),cashSessionId:session?.id||'',idempotencyKey:uniqueRestaurantId('hotel')};
     if(!input.cashSessionId)throw new Error('Abre un turno de caja.');
     if(!Number.isFinite(input.amount)||input.amount<=0)throw new Error('Ingresa un importe mayor que cero.');
     sessionStorage.setItem(key,JSON.stringify(input));setPending(input);
