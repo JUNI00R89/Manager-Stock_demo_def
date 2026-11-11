@@ -122,6 +122,8 @@ export function POS() {
     const matchCat = activeCategory === 'Todos' || product.category === activeCategory;
     return matchSearch && matchCat;
   });
+  const showPhotos = imagesEnabled(config);
+  const anyPhoto = filteredProducts.some(product => productImageUrl(product.image, showPhotos));
 
   const addToCart = (product: Product, quantity = 1) => {
     const existing = cart.find(item => item.productId === product.id);
@@ -371,6 +373,7 @@ export function POS() {
               filteredProducts.map(product => {
                 const inCart = cart.find(item => item.productId === product.id);
                 const outOfStock = product.stock < 1;
+                const photoUrl = productImageUrl(product.image, showPhotos);
                 return (
                   <Card
                     key={product.id}
@@ -382,8 +385,13 @@ export function POS() {
                     onClick={() => !outOfStock && addToCart(product)}
                   >
                     <div className="space-y-2">
-                      {productImageUrl(product.image, imagesEnabled(config)) && (
-                        <img src={productImageUrl(product.image, true)!} alt={product.name} loading="lazy" className="h-24 w-full rounded-lg object-cover" />
+                      {photoUrl ? (
+                        <img src={photoUrl} alt={product.name} loading="lazy" className="h-24 w-full rounded-lg object-cover" />
+                      ) : anyPhoto && (
+                        // Keeps cards in a row the same shape when only some products have a photo.
+                        <div aria-hidden="true" className="flex h-24 w-full items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                          <Package size={28} className="opacity-40" />
+                        </div>
                       )}
                       <div className="flex justify-between items-start">
                         <h3 className="text-sm font-semibold text-foreground line-clamp-2 leading-tight">{product.name}</h3>
