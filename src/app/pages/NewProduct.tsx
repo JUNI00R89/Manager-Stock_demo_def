@@ -185,7 +185,7 @@ export function NewProduct() {
               aria-label={photoPreview ? 'Cambiar la foto del producto' : 'Agregar foto del producto'}
             >
               {photoPreview
-                ? <img src={photoPreview} alt="Foto del producto" className="h-full w-full object-cover" />
+                ? <img src={photoPreview} alt="Foto del producto" className="h-full w-full object-contain" />
                 : <span className="flex h-full w-full flex-col items-center justify-center gap-1 text-muted-foreground"><Camera className="h-6 w-6" /><span className="text-[11px] font-medium">Agregar foto</span></span>}
               <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-black/60 py-1 text-[10px] font-medium text-white opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100"><Camera className="h-3 w-3" />Cambiar</span>
             </button>
