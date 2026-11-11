@@ -14,6 +14,7 @@ import { dataService, getProductCategories, createProductCategory, type ProductC
 import type { Product, Supplier } from '../utils/types';
 import { useBusiness, type BusinessType } from '../context/BusinessContext';
 import { productImageUrl, resizeImage } from '../utils/productImage';
+import { formatMoney as money } from '../utils/restaurantFormat';
 
 const CATEGORY_PRESETS: Record<BusinessType, string[]> = {
   retail: ['Bebidas', 'Alimentos', 'Aseo', 'Accesorios', 'Tecnología', 'Ropa', 'Otros'],
@@ -25,7 +26,6 @@ const CATEGORY_PRESETS: Record<BusinessType, string[]> = {
 const DISCRETE_UNITS = new Set(['unidad', 'porción', 'porcion', 'paquete', 'tajada', 'caja', 'pieza', 'par', 'botella', 'lata', 'servicio']);
 type ProductForm = { name: string; sku: string; category: string; price: string; cost: string; stock: string; minStock: string; description: string; productType: 'sale_item' | 'ingredient' | 'supplies'; unit: string; supplierId: string; barcode: string; trackLots: boolean; defaultLocationId: string };
 const emptyForm: ProductForm = { name: '', sku: '', category: '', price: '', cost: '', stock: '0', minStock: '5', description: '', productType: 'sale_item', unit: 'unidad', supplierId: '', barcode: '', trackLots: false, defaultLocationId: '' };
-const money = (v: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(v || 0);
 
 export function NewProduct() {
   const navigate = useNavigate();

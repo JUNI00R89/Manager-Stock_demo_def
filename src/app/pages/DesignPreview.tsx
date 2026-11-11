@@ -8,8 +8,8 @@ import { toast } from 'sonner';
 import { Layout } from '../components/Layout';
 import { Button } from '../components/ui/button';
 import './design-preview.css';
+import { formatMoney as money } from '../utils/restaurantFormat';
 
-const money = (value: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(value);
 const compactMoney = (value: number) => {
   if (!Number.isFinite(value)) return '$0';
   if (Math.abs(value) >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;

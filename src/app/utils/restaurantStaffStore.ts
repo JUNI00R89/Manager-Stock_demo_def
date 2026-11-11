@@ -161,10 +161,3 @@ export function useRestaurantStaff(scope: string, currentUserName: string) {
     toEmployee,
   };
 }
-
-export function getActiveRestaurantStaff(scope: string, role: EmpleadoRol): RestaurantStaff | null {
-  const state = staffStore.get(scope);
-  return state.staff.find((item) => item.id === state.activeByRole[role] && item.active && item.role === role)
-    ?? state.staff.find((item) => item.role === role && item.active)
-    ?? null;
-}

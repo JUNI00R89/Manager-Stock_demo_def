@@ -11,8 +11,8 @@ import {
   estimateOccupancy,
   weekdayOfKey,
 } from '../../utils/revenueForecast';
+import { formatMoney as money } from '../../utils/restaurantFormat';
 
-const money = (value: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(value);
 const percent = (value: number) => `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
 const labelOf = (key: string) => `${WEEKDAY_SHORT[weekdayOfKey(key)]} ${dayOfMonthOfKey(key)}`;
 const weekdayList = (weekdays: number[]) => weekdays.map(day => WEEKDAY_SHORT[day]).join(' y ');

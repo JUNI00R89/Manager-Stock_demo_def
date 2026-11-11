@@ -23,6 +23,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { ConfirmActionDialog } from '../components/ConfirmActionDialog';
 import { Card } from '../components/ui/card';
 import { SupportCenter } from '../components/SupportCenter';
+import { formatMoney as money } from '../utils/restaurantFormat';
 
 interface PlatformStats {
   businesses: number; activeBusinesses: number; users: number; activeUsers: number; completedSales: number; salesVolumeCOP: number;
@@ -111,8 +112,6 @@ const DETAIL_LABELS: Record<string, string> = {
   verificationMode: 'Verificación',
 };
 
-const copFormatter = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
-const money = (value: number) => copFormatter.format(value || 0);
 const plural = (count: number, singular: string, pluralForm: string) => `${count} ${count === 1 ? singular : pluralForm}`;
 
 function isTabId(value: string | null): value is TabId {

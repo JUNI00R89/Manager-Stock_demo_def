@@ -7,8 +7,8 @@ import { Check, Crown, LoaderCircle, RefreshCw, ShieldCheck, Users, Package, Cre
 import { toast } from 'sonner';
 import { toastError } from '../utils/notifications';
 import { getBusinessSubscription, getSubscriptionPlans, selectSubscriptionPlan, type BusinessSubscriptionRecord, type SubscriptionPlanRecord } from '../services/dataService';
+import { formatMoney as money } from '../utils/restaurantFormat';
 
-const money = (value: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(value);
 const descriptions: Record<string, string[]> = {
   free: ['Hasta 100 productos activos', '1 usuario en total', 'Módulos disponibles según el negocio'],
   entrepreneur: ['Hasta 1.000 productos activos', 'Hasta 3 usuarios en total', 'Módulos disponibles según el negocio'],

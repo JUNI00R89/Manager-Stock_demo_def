@@ -39,8 +39,7 @@ import { dataService, type OrderRecord, type RestaurantTableRecord } from '../..
 import type { Product } from '../../utils/types';
 import { useAuth } from '../../context/AuthContext';
 import { useBusiness } from '../../context/BusinessContext';
-
-const money = (value: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(value);
+import { formatMoney as money } from '../../utils/restaurantFormat';
 
 const NON_KITCHEN_CATEGORIES = ['bebidas', 'gaseosas', 'aguas', 'jugos', 'café', 'te', 'cervezas', 'vinos', 'licores', 'refrescos', 'sodas'];
 const goesToKitchen = (category: string) => !NON_KITCHEN_CATEGORIES.some((c) => category.toLowerCase().includes(c));
