@@ -7,6 +7,8 @@ ROOT = Path(__file__).resolve().parents[2]  # raíz del repositorio (backend/cor
 
 
 DB_PATH = Path(os.getenv("MANAGER_STOCK_DB", str(ROOT / "backend" / "data" / "manager_stock.db")))
+# Uploaded files live next to the database, so tests and backups follow MANAGER_STOCK_DB.
+UPLOADS_DIR = DB_PATH.parent / "uploads"
 
 
 SCHEMA_PATH = ROOT / "database" / "schema.sql"

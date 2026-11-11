@@ -16,8 +16,8 @@ import { SupportCenter } from '../components/SupportCenter';
 import { RevenueForecastCard } from '../components/dashboard/RevenueForecastCard';
 import { ProductRiskCard } from '../components/dashboard/ProductRiskCard';
 import { AnimatedCounter } from '../components/motion/AnimatedCounter';
+import { formatMoney as money } from '../utils/restaurantFormat';
 
-const money = (v: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(v);
 const days = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
 
 export function Dashboard() {

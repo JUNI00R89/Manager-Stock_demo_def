@@ -201,6 +201,26 @@ def init_database() -> None:
         item_columns = {row["name"] for row in conn.execute("PRAGMA table_info(sale_items)").fetchall()}
         if "unit_cost_snapshot" not in item_columns:
             conn.execute("ALTER TABLE sale_items ADD COLUMN unit_cost_snapshot REAL NOT NULL DEFAULT 0")
+        if any(row["name"] == "product_id" and row["notnull"] for row in conn.execute("PRAGMA table_info(sale_items)")):
+            # Service lines (charged appointments) have no product. SQLite cannot drop NOT NULL,
+            # so rebuild keeping every row; no table references sale_items.
+            conn.execute("PRAGMA foreign_keys = OFF")
+            conn.execute("BEGIN IMMEDIATE")  # all-or-nothing: a crash mid-rebuild must not lose sale lines
+            conn.execute("ALTER TABLE sale_items RENAME TO sale_items_legacy")
+            conn.execute("""CREATE TABLE sale_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, sale_id TEXT NOT NULL REFERENCES sales(id),
+                product_id TEXT REFERENCES products(id), product_name TEXT NOT NULL, sku_snapshot TEXT NOT NULL DEFAULT '',
+                quantity REAL NOT NULL CHECK(quantity > 0), unit_price REAL NOT NULL CHECK(unit_price >= 0),
+                unit_cost_snapshot REAL NOT NULL DEFAULT 0 CHECK(unit_cost_snapshot >= 0),
+                discount_percent REAL NOT NULL DEFAULT 0, line_total REAL NOT NULL CHECK(line_total >= 0))""")
+            conn.execute("""INSERT INTO sale_items (id,sale_id,product_id,product_name,sku_snapshot,quantity,unit_price,unit_cost_snapshot,discount_percent,line_total)
+                SELECT id,sale_id,product_id,product_name,sku_snapshot,quantity,unit_price,unit_cost_snapshot,discount_percent,line_total FROM sale_items_legacy""")
+            conn.execute("DROP TABLE sale_items_legacy")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON sale_items(sale_id)")
+            conn.execute("COMMIT")
+            conn.execute("PRAGMA foreign_keys = ON")
+        if not table_has_column(conn, "service_appointments", "sale_id"):
+            conn.execute("ALTER TABLE service_appointments ADD COLUMN sale_id TEXT REFERENCES sales(id)")
         # Mesas del salón: columnas añadidas por versiones anteriores de Manager Stock.
         order_columns = {row["name"] for row in conn.execute("PRAGMA table_info(orders)").fetchall()}
         if "table_number" not in order_columns:

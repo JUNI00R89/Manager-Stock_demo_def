@@ -13,6 +13,7 @@ La lógica vive en:
 from __future__ import annotations
 
 import asyncio
+import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -78,7 +79,10 @@ for module in (
 @app.on_event("startup")
 async def startup():
     init_database()
-    process_due_type_transitions()
+    try:
+        process_due_type_transitions()
+    except Exception:  # a pending cleanup must never keep every business offline; the worker retries
+        logging.getLogger("manager_stock").exception("Fallo la limpieza de cambios de tipo al arrancar")
     app.state.transition_cleanup_task = asyncio.create_task(transition_cleanup_worker())
 
 

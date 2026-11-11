@@ -82,6 +82,14 @@ def create_sale(payload: SalePayload):
             if not active_session:
                 conn.rollback()
                 raise HTTPException(409, "La caja seleccionada no está abierta o no pertenece a tu turno.")
+        elif payload.paymentMethod == "cash" or any(part.method == "cash" for part in payload.payments):
+            # Cash outside a session never shows up in any till count, whoever sells it.
+            own_session = conn.execute("SELECT id FROM cash_sessions WHERE business_id=? AND opened_by_user_id=? AND status='open' LIMIT 1",
+                                       (current_business_id(), current_identity()["id"])).fetchone()
+            if not own_session:
+                conn.rollback()
+                raise HTTPException(409, "Abre tu turno de caja para recibir pagos en efectivo.")
+            payload = payload.model_copy(update={"cashSessionId": own_session["id"]})
         business_settings = conn.execute("SELECT currency,tax_rate FROM businesses WHERE id=?", (current_business_id(),)).fetchone()
         if not business_settings:
             conn.rollback()
@@ -91,8 +99,8 @@ def create_sale(payload: SalePayload):
 
         # Resolve linked orders under the same write lock as the sale. Clients
         # supply only extra items; order lines and ownership come from SQLite.
-        if payload.orderIds and payload.status != "completed":
-            raise HTTPException(422, "El cobro de pedidos debe ser una venta completada.")
+        if (payload.orderIds or payload.appointmentIds) and payload.status != "completed":
+            raise HTTPException(422, "El cobro de pedidos o citas debe ser una venta completada.")
         linked_orders = []
         items = list(payload.items)
         for order_id in dict.fromkeys(payload.orderIds):
@@ -106,8 +114,19 @@ def create_sale(payload: SalePayload):
             if order["stock_consumed"]:
                 movements = conn.execute("SELECT * FROM inventory_movements WHERE order_id=? AND movement_type IN ('consumption','recipe_consumption') ORDER BY id", (order_id,)).fetchall()
                 reverse_movements(conn, movements, f"Traslado a venta del pedido {order_id}", "adjustment")
-        if not items:
-            raise HTTPException(422, "Agrega al menos un producto o pedido a la venta.")
+        # Attended appointments become service lines (no product, no stock) at their booked price.
+        appointments = []
+        for appointment_id in dict.fromkeys(payload.appointmentIds):
+            appointment = conn.execute("SELECT * FROM service_appointments WHERE id=? AND business_id=?", (appointment_id, current_business_id())).fetchone()
+            if not appointment:
+                raise HTTPException(404, "Cita no encontrada.")
+            if appointment["status"] != "attended":
+                raise HTTPException(409, "Marca la cita como atendida antes de cobrarla.")
+            if appointment["sale_id"]:  # cancel_sale clears it, so set means a live charge
+                raise HTTPException(409, "La cita ya fue cobrada.")
+            appointments.append(appointment)
+        if not items and not appointments:
+            raise HTTPException(422, "Agrega al menos un producto, pedido o cita a la venta.")
         payload = payload.model_copy(update={"items": items})
 
         product_rows: dict[str, sqlite3.Row] = {}
@@ -167,6 +186,7 @@ def create_sale(payload: SalePayload):
             subtotal += gross
             line_discount += disc
             resolved_items.append((item, product, gross, disc, line_total))
+        subtotal += sum(float(appointment["price_snapshot"]) for appointment in appointments)
         subtotal = round(subtotal, 2)
         line_discount = round(line_discount, 2)
         after_line_discount = max(0, round(subtotal - line_discount, 2))
@@ -223,7 +243,15 @@ def create_sale(payload: SalePayload):
 
         for order in linked_orders:
             conn.execute("UPDATE orders SET sale_id=?,status='delivered',stock_consumed=0,updated_at=CURRENT_TIMESTAMP WHERE id=?", (sale_id, order["id"]))
-        audit(conn, "create", "sale", sale_id, {"total": total, "items": len(resolved_items), "taxRate": sale_tax_rate, "paymentMethod": payload.paymentMethod})
+        for appointment in appointments:
+            price = float(appointment["price_snapshot"])
+            conn.execute(
+                """INSERT INTO sale_items (sale_id,product_id,product_name,sku_snapshot,quantity,unit_price,unit_cost_snapshot,discount_percent,line_total)
+                   VALUES (?,NULL,?,'SERVICIO',1,?,0,0,?)""",
+                (sale_id, appointment["service_name_snapshot"], price, price),
+            )
+            conn.execute("UPDATE service_appointments SET sale_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", (sale_id, appointment["id"]))
+        audit(conn, "create", "sale", sale_id, {"total": total, "items": len(resolved_items) + len(appointments), "taxRate": sale_tax_rate, "paymentMethod": payload.paymentMethod})
         conn.commit()
         return get_sale(conn, sale_id)
 
@@ -245,6 +273,7 @@ def cancel_sale(sale_id: str):
         ).fetchall()
         reverse_movements(conn, movements, f"Reversión de venta {sale_id}", "sale_cancelled")
         conn.execute("UPDATE sales SET status='cancelled' WHERE id=?", (sale_id,))
+        conn.execute("UPDATE service_appointments SET sale_id=NULL WHERE sale_id=? AND business_id=?", (sale_id, current_business_id()))
         audit(conn, "cancel", "sale", sale_id, {"restoredMovements": len(movements)})
         conn.commit()
         return get_sale(conn, sale_id)

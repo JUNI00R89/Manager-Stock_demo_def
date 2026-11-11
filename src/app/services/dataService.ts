@@ -50,6 +50,8 @@ export interface SaleRecord {
 export interface CreateSaleInput {
   /** Order lines are resolved by the server; items contains only extras. */
   orderIds?: string[];
+  /** Attended appointments, charged by the server at their booked price. */
+  appointmentIds?: string[];
   items: SaleItemInput[];
   customer?: string;
   paymentMethod?: PaymentMethod;
@@ -360,6 +362,8 @@ const API_BASE = (
       : 'http://127.0.0.1:8000/api'
   )
 ).replace(/\/$/, '');
+/** Server origin without `/api`, for files served outside the API (product photos). */
+export const API_ORIGIN = API_BASE.replace(/\/api$/, '');
 const STORAGE_KEY = 'manager_stock_database_v1';
 const CURRENCY = 'COP';
 const DEFAULT_TAX_RATE = 0.19;
@@ -766,7 +770,7 @@ export interface ServiceProfessionalRecord { id: string; nombre: string; name: s
 export interface ServiceAppointmentRecord {
   id: string; clienteId?: string | null; clienteNombre: string; clienteTelefono: string; clienteEmail: string;
   servicioId: string; servicioNombre: string; profesionalId: string; profesionalNombre: string;
-  fecha: string; horaInicio: string; horaFin: string; estado: 'reserved' | 'confirmed' | 'attended' | 'cancelled' | 'no_show';
+  fecha: string; horaInicio: string; horaFin: string; estado: 'reserved' | 'confirmed' | 'attended' | 'cancelled' | 'no_show'; saleId?: string | null;
   notes: string; durationMinutes: number; price: number; createdAt: string;
 }
 export async function getServicesCatalog() {
@@ -889,6 +893,12 @@ export async function getCustomRoles() {
 export async function createCustomRole(payload: { name: string; permissions: string[] }) {
   if (isDesktopMode()) return desktop.users.createRole(payload);
   return api<CustomRoleRecord>('/custom-roles', { method: 'POST', body: JSON.stringify(payload) });
+}
+export async function updateCustomRole(id: string, payload: { name: string; permissions: string[] }) {
+  return api<CustomRoleRecord>(`/custom-roles/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(payload) });
+}
+export async function deleteCustomRole(id: string) {
+  await api<void>(`/custom-roles/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 export async function createBusinessUser(payload: { name: string; email: string; password: string; role: 'business_admin' | 'cashier'; customRoleId?: string | null }) {
   if (isDesktopMode()) return desktop.users.create(payload);
@@ -1019,6 +1029,12 @@ export const dataService = {
       if (created.stock > 0) db.movements.unshift({ id: uniqueId('MOV'), productId: created.id, productName: created.name, movementType: 'opening', quantityDelta: created.stock, stockBefore: 0, stockAfter: created.stock, note: 'Existencias iniciales del producto', createdAt: new Date().toISOString() });
       writeLocal(db); return created;
     }
+  },
+  uploadProductImage(id: string, dataUrl: string): Promise<Product> {
+    return api<Product>(`/products/${encodeURIComponent(id)}/image`, { method: 'PUT', body: JSON.stringify({ dataUrl }) });
+  },
+  removeProductImage(id: string): Promise<Product> {
+    return api<Product>(`/products/${encodeURIComponent(id)}/image`, { method: 'DELETE' });
   },
   async updateProduct(id: string, input: Omit<Product, 'id'> & { cost?: number; productType?: 'sale_item' | 'ingredient' | 'supplies'; unit?: string }): Promise<Product> {
     const payload = { ...input, productType: input.productType || 'sale_item', unit: input.unit || 'unidad', cost: input.cost || 0 };

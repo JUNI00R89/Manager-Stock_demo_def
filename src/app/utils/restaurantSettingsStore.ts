@@ -57,7 +57,3 @@ export function useRestaurantSettings(scope: string) {
     }),
   };
 }
-
-export function getRestaurantSettings(scope: string): RestaurantSettings {
-  return settingsStore.get(scope);
-}

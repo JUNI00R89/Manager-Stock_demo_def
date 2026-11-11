@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -18,3 +19,8 @@ target = backup_dir / f"manager_stock_{datetime.now().strftime('%Y%m%d_%H%M%S')}
 with sqlite3.connect(source) as src, sqlite3.connect(target) as dst:
     src.backup(dst)
 print(f"Copia de seguridad creada: {target}")
+uploads = source.parent / "uploads"  # product photos live next to the database
+if uploads.is_dir():
+    photos_target = target.with_name(f"{target.stem}_uploads")
+    shutil.copytree(uploads, photos_target)
+    print(f"Fotos copiadas: {photos_target}")

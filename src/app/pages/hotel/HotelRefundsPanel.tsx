@@ -7,6 +7,7 @@ import { ConfirmActionDialog } from '../../components/ConfirmActionDialog';
 import { refundHotelPayment, type CashSessionRecord, type HotelAccount, type HotelRefundInput } from '../../services/dataService';
 import { downloadHotelRefund } from '../../utils/hotelReceipt';
 import { toast } from 'sonner';
+import { uniqueRestaurantId } from '../../utils/restaurantStorage';
 const money=(amount:number)=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP'}).format(amount);
 const methods={cash:'Efectivo',card:'Tarjeta',transfer:'Transferencia',digital:'Pago digital'};
 
@@ -33,7 +34,7 @@ export function HotelRefundsPanel({account,session,canCollect,busy,onBusy,onAcco
   const available=(id:string)=>Math.round(((account.payments.find(p=>p.id===id)?.amount||0)-refunds.filter(r=>r.paymentId===id).reduce((sum,r)=>sum+r.amount,0))*100)/100;
   const prepare=()=>{
     setError('');
-    const input=pending || {paymentId,cashSessionId:session?.id||'',amount:Number(amount),reason:reason.trim(),idempotencyKey:crypto.randomUUID()};
+    const input=pending || {paymentId,cashSessionId:session?.id||'',amount:Number(amount),reason:reason.trim(),idempotencyKey:uniqueRestaurantId('hotel')};
     if(!input.paymentId || !input.cashSessionId || !Number.isFinite(input.amount) || input.amount<=0 || input.amount>available(input.paymentId) || Math.abs(input.amount-Math.round(input.amount*100)/100)>0.000001 || input.reason.length<3){setError('Selecciona un pago, un importe válido y el motivo (mínimo 3 caracteres).');return;}
     setReview(input);
   };

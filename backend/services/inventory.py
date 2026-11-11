@@ -177,6 +177,17 @@ def add_product_stock(
     return {"movementId": movement_id, "lotId": lot_id, "stockBefore": before, "stockAfter": after}
 
 
+def weighted_average_cost(product: sqlite3.Row, quantity: float, unit_cost: float) -> float:
+    """Cost after receiving `quantity` at `unit_cost`, using the stock on hand *before* the receipt.
+
+    No positive stock or no known previous cost -> the new unit cost.
+    """
+    before, old_cost = float(product["stock"] or 0), float(product["cost"] or 0)
+    if before <= 0 or old_cost <= 0:
+        return round(unit_cost, 4)
+    return round((before * old_cost + quantity * unit_cost) / (before + quantity), 4)
+
+
 def validate_product_quantity(product, quantity: float):
     unit = unicodedata.normalize("NFKD", product["unit"]).encode("ascii", "ignore").decode().casefold()
     if unit in DISCRETE_UNITS and not float(quantity).is_integer():
