@@ -62,6 +62,17 @@ def run() -> None:
         assert client.put(url, headers=other, json={"dataUrl": data_url(PNG_1X1)}).status_code == 404
         assert client.delete(url, headers=other).status_code == 404
 
+        # A client cannot point a product at a stored photo through the normal save, then delete it.
+        victim_file = UPLOADS_DIR / "products" / second.rsplit("/", 1)[1]
+        hijack = client.post("/api/products", headers=other, json={"name": "Robo", "sku": "RB1", "category": "Bebidas", "price": 1, "cost": 0, "stock": 1, "minStock": 0, "image": second})
+        assert hijack.status_code == 201 and hijack.json()["image"] == "", "create ignores client-sent upload paths"
+        plain = client.post("/api/products", headers=other, json={"name": "Otro", "sku": "OT1", "category": "Bebidas", "price": 1, "cost": 0, "stock": 1, "minStock": 0}).json()
+        edited_other = client.put(f"/api/products/{plain['id']}", headers=other, json={"name": "Otro", "sku": "OT1", "category": "Bebidas", "price": 1, "cost": 0, "stock": 1, "minStock": 0, "image": second})
+        assert edited_other.json()["image"] == "", "update ignores client-sent upload paths"
+        for hijacked_id in (hijack.json()["id"], plain["id"]):
+            client.delete(f"/api/products/{hijacked_id}/image", headers=other)
+        assert victim_file.exists(), "another business's photo survives"
+
         removed = client.delete(url, headers=h)
         assert removed.status_code == 200 and removed.json()["image"] == ""
         assert not (UPLOADS_DIR / "products" / second.rsplit("/", 1)[1]).exists(), "removing deletes the file"

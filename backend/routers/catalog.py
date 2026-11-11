@@ -101,7 +101,7 @@ def create_product(payload: ProductPayload):
                    supplier_id,barcode,track_lots,default_location_id)
                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (product_id, current_business_id(), payload.name.strip(), payload.sku, payload.category.strip(), payload.price,
-                 payload.cost, payload.stock, payload.minStock, payload.description.strip(), payload.image,
+                 payload.cost, payload.stock, payload.minStock, payload.description.strip(), client_image_key(payload.image),
                  payload.productType, payload.unit, payload.supplierId, payload.barcode.strip(), 1 if payload.trackLots else 0,
                  payload.defaultLocationId),
             )
@@ -149,7 +149,7 @@ def update_product(product_id: str, payload: ProductPayload):
                 (payload.name.strip(), payload.sku, payload.category.strip(), payload.price, payload.cost,
                  payload.minStock, payload.description.strip(),
                  # An uploaded photo is only changed through /image; an edit sending an icon key keeps it.
-                 old["image"] if (old["image"] or "").startswith(PRODUCT_IMAGE_PREFIX) else payload.image,
+                 old["image"] if (old["image"] or "").startswith(PRODUCT_IMAGE_PREFIX) else client_image_key(payload.image),
                  payload.productType, payload.unit,
                  payload.supplierId, payload.barcode.strip(), 1 if payload.trackLots else 0, payload.defaultLocationId,
                  product_id, current_business_id()),
@@ -185,6 +185,12 @@ PRODUCT_IMAGES_DIR = UPLOADS_DIR / "products"
 PRODUCT_IMAGE_PREFIX = "/uploads/products/"
 MAX_PRODUCT_IMAGE_BYTES = 500 * 1024
 SAFE_IMAGE_NAME = re.compile(r"^[0-9a-f]{32}\.(jpg|png|webp)$")
+
+
+def client_image_key(value: str) -> str:
+    """Icon keys from the client are fine; upload paths are only ever set by set_product_image,
+    otherwise a product could point at (and later delete) another business's photo."""
+    return "" if (value or "").startswith(PRODUCT_IMAGE_PREFIX) else value
 
 
 def image_extension(raw: bytes) -> str | None:
