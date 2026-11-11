@@ -270,9 +270,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 ::selection { background: color-mix(in srgb, var(--brand-primary) 20%, transparent); }
 
 /* Brand-aware gradients for common legacy utility classes. */
-.from-orange-400, .from-orange-500, .from-orange-600 { --tw-gradient-from: var(--brand-primary) var(--tw-gradient-from-position) !important; }
-.to-yellow-500, .to-amber-500, .to-orange-600, .to-orange-700 { --tw-gradient-to: var(--brand-secondary) var(--tw-gradient-to-position) !important; }
-.from-orange-50 { --tw-gradient-from: var(--brand-soft) var(--tw-gradient-from-position) !important; }
+.from-orange-400, .from-orange-500, .from-orange-600 { --tw-gradient-from: var(--brand-primary) !important; }
+.to-yellow-500, .to-amber-500, .to-orange-600, .to-orange-700 { --tw-gradient-to: var(--brand-secondary) !important; }
+.from-orange-50 { --tw-gradient-from: var(--brand-soft) !important; }
 .border-orange-200, .border-orange-300 { border-color: color-mix(in srgb, var(--brand-primary) 22%, white) !important; }
 
 /* ── Avisos y tarjetas con colores fijos en modo oscuro ─────────────────────
