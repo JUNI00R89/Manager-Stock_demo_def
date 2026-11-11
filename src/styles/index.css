@@ -365,3 +365,19 @@ html.theme-transitioning * {
 @media (prefers-reduced-motion: reduce) {
   html.theme-transitioning, html.theme-transitioning * { transition: none !important; }
 }
+
+/* Notificaciones de error: el detalle debe leerse completo y con buen contraste. */
+[data-sonner-toast] [data-description] {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  opacity: 0.95;
+}
+
+@media (max-width: 639px) {
+  [data-sonner-toaster] {
+    --width: min(92vw, 380px);
+  }
+}

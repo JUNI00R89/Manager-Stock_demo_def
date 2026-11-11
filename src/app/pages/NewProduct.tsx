@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { ArrowLeft, Boxes, Check, PackageCheck, Plus, Save, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -43,6 +43,7 @@ export function NewProduct() {
   const [savingCategory, setSavingCategory] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [locations, setLocations] = useState<InventoryLocationRecord[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   // Saved photo path, and the pending change: undefined = keep, data URL = new photo, null = remove.
   const [currentImage, setCurrentImage] = useState('');
   const [newPhoto, setNewPhoto] = useState<string | null | undefined>(undefined);
@@ -50,6 +51,15 @@ export function NewProduct() {
   const pickPhoto = async (file: File | undefined) => {
     if (!file) return;
     try { setNewPhoto(await resizeImage(file)); } catch (error) { toastError(error, 'No se pudo leer la foto.'); }
+  };
+
+  const openPhotoPicker = () => fileInputRef.current?.click();
+
+  const handlePhotoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) void pickPhoto(file);
+    // Se limpia el input para permitir elegir el mismo archivo otra vez.
+    event.target.value = '';
   };
 
   const discreteQuantity = useMemo(() => DISCRETE_UNITS.has(formData.unit.trim().toLocaleLowerCase('es')), [formData.unit]);
@@ -165,7 +175,8 @@ export function NewProduct() {
               ? <img src={photoPreview} alt="Vista previa de la foto del producto" className="h-20 w-20 rounded-xl border border-border object-cover" />
               : <div className="flex h-20 w-20 items-center justify-center rounded-xl border border-dashed border-border text-xs text-muted-foreground">Sin foto</div>}
             <div className="flex flex-wrap gap-2">
-              <Input id="product-photo" type="file" accept="image/jpeg,image/png,image/webp" className="max-w-64 rounded-xl" onChange={e => void pickPhoto(e.target.files?.[0])} />
+              <input ref={fileInputRef} id="product-photo" type="file" accept="image/jpeg,image/png,image/webp" onChange={handlePhotoChange} className="hidden" />
+              <Button type="button" variant="outline" className="rounded-xl" onClick={openPhotoPicker}>Cambiar foto</Button>
               {photoPreview && <Button type="button" variant="outline" className="rounded-xl" onClick={() => setNewPhoto(null)}>Quitar foto</Button>}
             </div>
           </div>
