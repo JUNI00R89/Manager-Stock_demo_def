@@ -25,6 +25,10 @@ def required_permission_for_request(path: str, method: str) -> str | None:
         return "services.view" if method == "GET" else "services.manage"
     if path == "/api/products":
         return "catalog.view" if method == "GET" else "catalog.create"
+    if path == "/api/products/import/template":
+        return "catalog.view"
+    if path.startswith("/api/products/import"):
+        return "catalog.create"
     if path.startswith("/api/products/"):
         return "catalog.view" if method == "GET" else "catalog.edit"
     if path == "/api/suppliers":

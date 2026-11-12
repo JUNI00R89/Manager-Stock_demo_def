@@ -67,6 +67,12 @@ class ProductImagePayload(BaseModel):
     dataUrl: str = Field(min_length=20, max_length=700_000)
 
 
+class ProductImportPayload(BaseModel):
+    fileName: str = Field(min_length=5, max_length=200)
+    # A little over 2 MB once base64-decoded, so the 2 MB check in the service gives the friendly message.
+    dataUrl: str = Field(min_length=20, max_length=2_900_000)
+
+
 class ProductCategoryPayload(BaseModel):
     name: str = Field(min_length=2, max_length=80)
     description: str = Field(default="", max_length=400)
