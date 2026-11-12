@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import sqlite3
 from datetime import datetime, timezone
@@ -86,15 +85,3 @@ def process_due_type_transitions() -> int:
             conn.commit()
             processed += 1
     return processed
-
-
-async def transition_cleanup_worker():
-    while True:
-        try:
-            process_due_type_transitions()
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            # The next cycle retries. The persisted queue remains intact.
-            pass
-        await asyncio.sleep(60)
