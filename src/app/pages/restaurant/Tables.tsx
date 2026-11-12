@@ -643,7 +643,7 @@ export function Tables() {
                   </button>
                 ))}
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 max-h-[50vh] sm:max-h-[60vh] overflow-y-auto pr-1">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 items-start gap-3 max-h-[50vh] sm:max-h-[60vh] overflow-y-auto pr-1">
                 {filteredProducts.map((product) => (
                   <Card
                     key={product.id}

@@ -122,6 +122,7 @@ export function POS() {
     const matchCat = activeCategory === 'Todos' || product.category === activeCategory;
     return matchSearch && matchCat;
   });
+  const showPhotos = imagesEnabled(config);
 
   const addToCart = (product: Product, quantity = 1) => {
     const existing = cart.find(item => item.productId === product.id);
@@ -361,7 +362,8 @@ export function POS() {
           </div>
 
           {/* Product grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[520px] overflow-y-auto pr-1">
+          {/* items-start: a card without photo keeps its own height instead of stretching to a photo card's. */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 items-start gap-3 max-h-[520px] overflow-y-auto pr-1">
             {filteredProducts.length === 0 ? (
               <div className="col-span-2 py-12 text-center text-muted-foreground sm:col-span-3">
                 <Package size={40} className="mx-auto mb-2 opacity-40" />
@@ -371,6 +373,7 @@ export function POS() {
               filteredProducts.map(product => {
                 const inCart = cart.find(item => item.productId === product.id);
                 const outOfStock = product.stock < 1;
+                const photoUrl = productImageUrl(product.image, showPhotos);
                 return (
                   <Card
                     key={product.id}
@@ -382,9 +385,9 @@ export function POS() {
                     onClick={() => !outOfStock && addToCart(product)}
                   >
                     <div className="space-y-2">
-                      {productImageUrl(product.image, imagesEnabled(config)) && (
+                      {photoUrl && (
                         <div className="flex h-24 items-center justify-center">
-                          <img src={productImageUrl(product.image, true)!} alt={product.name} loading="lazy" className="max-h-full max-w-full rounded-lg object-contain" />
+                          <img src={photoUrl} alt={product.name} loading="lazy" className="max-h-full max-w-full rounded-lg object-contain" />
                         </div>
                       )}
                       <div className="flex justify-between items-start">

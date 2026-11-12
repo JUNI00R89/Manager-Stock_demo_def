@@ -200,6 +200,15 @@ html[data-design="editorial"] [data-slot="button"]:not(.rounded-full) {
   letter-spacing: 0.005em;
 }
 
+/* Sin degradado, los botones naranjas quedaban con texto blanco sobre fondo transparente. */
+html[data-design="editorial"] :is([data-slot="button"], [data-slot="badge"])[class*="from-orange-"] {
+  background-color: var(--brand-primary) !important;
+}
+
+html[data-design="editorial"] [data-slot="button"][class*="from-orange-"]:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--brand-primary) 86%, black) !important;
+}
+
 html[data-design="editorial"] [data-slot="button"]:not(.rounded-full):active {
   transform: translateY(1px);
 }
