@@ -90,6 +90,16 @@ def run() -> None:
         again = client.post("/api/products/import", headers=h, json=xlsx_body(rows)).json()
         assert again["created"] == 0 and len(again["skipped"]) == 5
 
+        # A deactivated category with the same name is reactivated, not a 500 from the unique index.
+        assert client.post("/api/product-categories", headers=h, json={"name": "Congelados", "active": False}).status_code == 201
+        frozen = [["Helado", "HE1", "congelados", 7000, 2]]
+        frozen_preview = client.post("/api/products/import/preview", headers=h, json=xlsx_body(frozen)).json()
+        assert frozen_preview["newCategories"] == ["Congelados"], frozen_preview
+        frozen_import = client.post("/api/products/import", headers=h, json=xlsx_body(frozen))
+        assert frozen_import.status_code == 200 and frozen_import.json()["created"] == 1, frozen_import.text
+        assert "Congelados" in [c["name"] for c in client.get("/api/product-categories", headers=h).json()]
+        assert client.get("/api/products", headers=h).json() and next(p for p in client.get("/api/products", headers=h).json() if p["sku"] == "HE1")["category"] == "Congelados"
+
         # Catalog changes between preview and confirm: the new SKU is skipped, not a server error.
         late = [["Nuevo", "NEW1", "Bebidas", 1000, 0]]
         assert len(client.post("/api/products/import/preview", headers=h, json=xlsx_body(late)).json()["toCreate"]) == 1

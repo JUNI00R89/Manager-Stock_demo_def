@@ -111,16 +111,21 @@ def product_import_template():
     return {"fileName": "plantilla-productos.xlsx", "dataUrl": f"data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{data}"}
 
 
-def build_import_report(conn: sqlite3.Connection, payload: ProductImportPayload) -> tuple[dict, list[ProductPayload], list[str]]:
-    """Reads the file and decides, row by row, what would be created; saves nothing."""
+def parse_import_file(payload: ProductImportPayload) -> list[tuple[int, dict[str, str]]]:
     try:
-        rows = read_rows(payload.fileName, decode_data_url(payload.dataUrl))
+        return read_rows(payload.fileName, decode_data_url(payload.dataUrl))
     except ImportFileError as exc:
         raise HTTPException(422, str(exc)) from exc
+
+
+def build_import_report(conn: sqlite3.Connection, rows: list[tuple[int, dict[str, str]]]) -> tuple[dict, list[ProductPayload]]:
+    """Decides, row by row, what would be created; saves nothing."""
     business_id = current_business_id()
     taken = {row["sku"] for row in conn.execute("SELECT sku FROM products WHERE business_id=?", (business_id,))}
     _, options = product_category_options(conn, business_id)
     known = {normalize_category_name(option["name"]): option["name"] for option in options}
+    # Deactivated categories still hold their name in the unique index, so they are reused, not duplicated.
+    inactive = {normalize_category_name(row["name"]): row["name"] for row in conn.execute("SELECT name FROM product_categories WHERE business_id=? AND active=0", (business_id,))}
     plan = subscription_for_business(conn, business_id)["plan"]
     active = conn.execute("SELECT count(*) FROM products WHERE business_id=? AND active=1", (business_id,)).fetchone()[0]
     slots = max(0, plan["maxProducts"] - active)
@@ -141,31 +146,37 @@ def build_import_report(conn: sqlite3.Connection, payload: ProductImportPayload)
         taken.add(product.sku)
         key = normalize_category_name(product.category)
         if key not in known:
-            known[key] = " ".join(product.category.split())
+            known[key] = inactive.get(key) or " ".join(product.category.split())
             report["newCategories"].append(known[key])
         # Products from the file use the spelling the business already has for the category.
         product = product.model_copy(update={"category": known[key]})
         payloads.append(product)
         report["toCreate"].append({"row": number, "sku": product.sku, "name": product.name, "category": product.category})
-    return report, payloads, report["newCategories"]
+    return report, payloads
 
 
 @router.post("/api/products/import/preview")
 def preview_product_import(payload: ProductImportPayload):
+    rows = parse_import_file(payload)
     with connection() as conn:
-        return build_import_report(conn, payload)[0]
+        return build_import_report(conn, rows)[0]
 
 
 @router.post("/api/products/import")
 def import_products(payload: ProductImportPayload):
+    rows = parse_import_file(payload)  # outside the write lock: reading a big file must not block other businesses
+    business_id = current_business_id()
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
         try:
-            # Re-read inside the write lock: anything created since the preview is skipped, not duplicated.
-            report, payloads, new_categories = build_import_report(conn, payload)
-            for name in new_categories:
+            # Re-check inside the write lock: anything created since the preview is skipped, not duplicated.
+            report, payloads = build_import_report(conn, rows)
+            for name in report["newCategories"]:
+                if conn.execute("UPDATE product_categories SET active=1 WHERE business_id=? AND name=? AND active=0", (business_id, name)).rowcount:
+                    audit(conn, "reactivate", "product_category", name, {"source": "import"})
+                    continue
                 category_id = f"CAT-{uuid.uuid4().hex[:12].upper()}"
-                conn.execute("INSERT INTO product_categories (id,business_id,name,description,active) VALUES (?,?,?,?,1)", (category_id, current_business_id(), name, ""))
+                conn.execute("INSERT INTO product_categories (id,business_id,name,description,active) VALUES (?,?,?,?,1)", (category_id, business_id, name, ""))
                 audit(conn, "create", "product_category", category_id, {"name": name, "source": "import"})
             for product in payloads:
                 insert_product(conn, product, f"PRD-{uuid.uuid4().hex[:10].upper()}")

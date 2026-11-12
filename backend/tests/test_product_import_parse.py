@@ -60,6 +60,31 @@ def run() -> None:
     raises(decode_data_url, "data:text/csv;base64,@@@", contains="archivo")
     raises(decode_data_url, "data:text/csv;base64," + "A" * (3 * 1024 * 1024), contains="2 MB")
 
+    # Numeric cells with decimals keep their value (0.125 kg is not 125).
+    decimals = xlsx([["Nombre", "SKU", "Categoría", "Precio", "Stock", "Costo"], ["Queso", "QS1", "Lácteos", 1.25, 0.125, 1250.5]])
+    fields = read_rows("d.xlsx", decimals)[0][1]
+    payload = row_to_payload({**fields, "unit": "kg"})
+    assert (payload.price, payload.stock, payload.cost) == (1.25, 0.125, 1250.5), (payload.price, payload.stock, payload.cost)
+
+    # A huge sheet stops at the row limit instead of reading everything first.
+    from openpyxl import Workbook as _Workbook
+    import time
+    book = _Workbook(write_only=True)
+    sheet = book.create_sheet()
+    sheet.append(["Nombre", "SKU", "Categoría", "Precio"])
+    for i in range(150_000):
+        sheet.append([f"P{i}", f"S{i}", "C", 1])
+    big = BytesIO()
+    book.save(big)
+    from openpyxl import load_workbook
+    started = time.perf_counter()
+    load_workbook(BytesIO(big.getvalue()), read_only=True, data_only=True).worksheets[0]
+    opening = time.perf_counter() - started  # bounded by the 2 MB file limit; reading every row costs ~5x more
+    started = time.perf_counter()
+    raises(read_rows, "big.xlsx", big.getvalue(), contains="2000")
+    elapsed = time.perf_counter() - started
+    assert elapsed < opening + 1.5, f"read_rows took {elapsed:.1f}s vs {opening:.1f}s to open: it should stop after 2001 rows"
+
     template_rows = read_rows("t.xlsx", build_template())
     assert template_rows and template_rows[0][1]["sku"] and row_to_payload(template_rows[0][1])
 

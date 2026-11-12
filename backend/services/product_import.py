@@ -7,6 +7,7 @@ import csv
 import io
 import re
 import unicodedata
+from collections.abc import Iterator
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font
@@ -56,19 +57,21 @@ def decode_data_url(data_url: str) -> bytes:
 def _cell_text(value) -> str:
     if value is None:
         return ""
-    if isinstance(value, float) and value.is_integer():
-        return str(int(value))
+    if isinstance(value, float):
+        # Comma decimal, so parse_number never mistakes 0.125 for the Colombian "125".
+        return str(int(value)) if value.is_integer() else repr(value).replace(".", ",")
     return str(value).strip()
 
 
-def _table(file_name: str, raw: bytes) -> list[list[str]]:
+def _table(file_name: str, raw: bytes) -> Iterator[list[str]]:
+    """Rows are produced lazily, so a huge sheet is never read past the row limit."""
     name = file_name.lower()
     if name.endswith(".xlsx"):
         try:
             sheet = load_workbook(io.BytesIO(raw), read_only=True, data_only=True).worksheets[0]
         except Exception as exc:  # openpyxl raises many types for a damaged file
             raise ImportFileError("No se pudo abrir el Excel. Guárdalo de nuevo como .xlsx e inténtalo otra vez.") from exc
-        return [[_cell_text(v) for v in row] for row in sheet.iter_rows(values_only=True)]
+        return ([_cell_text(v) for v in row] for row in sheet.iter_rows(values_only=True))
     if name.endswith(".csv"):
         try:
             text = raw.decode("utf-8-sig")
@@ -76,25 +79,26 @@ def _table(file_name: str, raw: bytes) -> list[list[str]]:
             text = raw.decode("cp1252", errors="replace")  # what Excel on Windows writes
         first_line = text.split("\n", 1)[0]
         delimiter = ";" if first_line.count(";") >= first_line.count(",") else ","
-        return [[cell.strip() for cell in row] for row in csv.reader(io.StringIO(text), delimiter=delimiter)]
+        return ([cell.strip() for cell in row] for row in csv.reader(io.StringIO(text), delimiter=delimiter))
     raise ImportFileError("El archivo debe ser .xlsx o .csv.")
 
 
 def read_rows(file_name: str, raw: bytes) -> list[tuple[int, dict[str, str]]]:
     table = _table(file_name, raw)
-    if not table:
+    header = next(table, None)
+    if header is None:
         raise ImportFileError("El archivo está vacío.")
-    columns = [HEADER_ALIASES.get(_key(header)) for header in table[0]]
+    columns = [HEADER_ALIASES.get(_key(cell)) for cell in header]
     missing = [label for field, label in REQUIRED.items() if field not in columns]
     if missing:
         raise ImportFileError(f"Faltan columnas obligatorias: {', '.join(missing)}.")
     rows = []
-    for number, cells in enumerate(table[1:], start=2):
+    for number, cells in enumerate(table, start=2):
         fields = {field: cell for field, cell in zip(columns, cells) if field and cell}
         if fields:
             rows.append((number, fields))
-    if len(rows) > MAX_IMPORT_ROWS:
-        raise ImportFileError(f"El archivo tiene {len(rows)} productos; el máximo por archivo es {MAX_IMPORT_ROWS}.")
+            if len(rows) > MAX_IMPORT_ROWS:
+                raise ImportFileError(f"El archivo tiene más de {MAX_IMPORT_ROWS} productos; el máximo por archivo es {MAX_IMPORT_ROWS}.")
     return rows
 
 
