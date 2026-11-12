@@ -9,7 +9,7 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
 import { dataService, type InventoryMovementRecord } from '../../services/dataService';
-import { dateTime, fmtQty, PageTitle, ProductSelect, useWarehouseRefs } from './shared';
+import { dateTime, fmtQty, PageTitle, ProductSelect, useWarehouseRefs, withoutLine } from './shared';
 
 type AdjustmentLine = { key: string; productId: string; quantityDelta: string; unit: string };
 const newLine = (): AdjustmentLine => ({ key: `${Date.now()}-${Math.random().toString(36).slice(2)}`, productId: '', quantityDelta: '', unit: '' });
@@ -34,7 +34,7 @@ export function WarehouseAdjustments() {
   const totalDelta = validLines.reduce((sum, line) => sum + Number(line.quantityDelta), 0);
 
   const updateLine = (key: string, patch: Partial<AdjustmentLine>) => setLines(current => current.map(line => line.key === key ? { ...line, ...patch } : line));
-  const removeLine = (key: string) => setLines(current => current.length === 1 ? current : current.filter(line => line.key !== key));
+  const removeLine = (key: string) => setLines(current => withoutLine(current, key));
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();

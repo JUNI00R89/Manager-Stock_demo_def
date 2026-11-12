@@ -10,7 +10,7 @@ import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
 import { Badge } from '../../components/ui/badge';
 import { dataService, type PhysicalCountRecord } from '../../services/dataService';
-import { dateTime, fmtQty, PageTitle, ProductSelect, useWarehousePermissions, useWarehouseRefs } from './shared';
+import { dateTime, fmtQty, PageTitle, ProductSelect, useWarehousePermissions, useWarehouseRefs, withoutLine } from './shared';
 
 type CountLine = { key: string; productId: string; countedQuantity: string };
 const newLine = (): CountLine => ({ key: `${Date.now()}-${Math.random().toString(36).slice(2)}`, productId: '', countedQuantity: '' });
@@ -45,7 +45,7 @@ export function WarehouseCounts() {
   const totalDifference = differences.reduce((sum, value) => sum + (value ?? 0), 0);
 
   const updateLine = (key: string, patch: Partial<CountLine>) => setLines(current => current.map(line => line.key === key ? { ...line, ...patch } : line));
-  const removeLine = (key: string) => setLines(current => current.length === 1 ? current : current.filter(line => line.key !== key));
+  const removeLine = (key: string) => setLines(current => withoutLine(current, key));
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();

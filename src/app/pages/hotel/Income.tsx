@@ -5,9 +5,9 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { getHotelIncomeReport, type HotelIncomeReport } from '../../services/dataService';
+import { HOTEL_PAYMENT_LABELS as methods } from '../../utils/hotelReceipt';
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota'}).format(new Date());
 const money=(value:number)=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP'}).format(value);
-const methods={cash:'Efectivo',card:'Tarjeta',transfer:'Transferencia',digital:'Pago digital'};
 function downloadCSV(report:HotelIncomeReport){
   const rows=[['Fecha (Colombia)','Tipo','Habitación','Huésped','Medio','Importe COP','Referencia','Reserva','Registro'],...report.transactions.map(r=>[new Date(r.createdAt).toLocaleString('es-CO',{timeZone:'America/Bogota'}),r.kind==='payment'?'Cobro':'Devolución',r.roomNumber,r.guestName,methods[r.method],(r.kind==='payment'?r.amount:-r.amount).toFixed(2),r.reference,r.reservationId,r.id])];
   // Quote cells and neutralize spreadsheet formula prefixes in guest-entered data.

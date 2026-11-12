@@ -11,7 +11,7 @@ import { Textarea } from '../../components/ui/textarea';
 import { Badge } from '../../components/ui/badge';
 import { dataService, type InventoryLotRecord, type TransferRecord } from '../../services/dataService';
 import type { Product } from '../../utils/types';
-import { dateTime, fmtQty, LotSelect, PageTitle, ProductSelect, useWarehousePermissions, useWarehouseRefs } from './shared';
+import { dateTime, fmtQty, LotSelect, PageTitle, ProductSelect, useWarehousePermissions, useWarehouseRefs, withoutLine } from './shared';
 
 type TransferLine = { key: string; productId: string; quantity: string; unit: string; lotId: string };
 const newLine = (): TransferLine => ({ key: `${Date.now()}-${Math.random().toString(36).slice(2)}`, productId: '', quantity: '1', unit: '', lotId: '' });
@@ -60,7 +60,7 @@ export function WarehouseTransfers() {
     const product = productById.get(productId);
     updateLine(key, { productId, unit: product?.unit || '', lotId: '' });
   };
-  const removeLine = (key: string) => setLines(current => current.length === 1 ? current : current.filter(line => line.key !== key));
+  const removeLine = (key: string) => setLines(current => withoutLine(current, key));
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();

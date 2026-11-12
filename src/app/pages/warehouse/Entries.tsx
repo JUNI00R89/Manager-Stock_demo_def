@@ -10,7 +10,7 @@ import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
 import { dataService, type InventoryMovementRecord } from '../../services/dataService';
 import type { Product } from '../../utils/types';
-import { BarcodeScan, dateTime, fmtQty, money, PageTitle, ProductSelect, useWarehouseRefs } from './shared';
+import { BarcodeScan, dateTime, fmtQty, money, PageTitle, ProductSelect, useWarehouseRefs, withoutLine } from './shared';
 
 type EntryLine = {
   key: string;
@@ -63,7 +63,7 @@ export function WarehouseEntries() {
     });
   };
   const addLine = () => setLines(current => [...current, newLine()]);
-  const removeLine = (key: string) => setLines(current => current.length === 1 ? current : current.filter(line => line.key !== key));
+  const removeLine = (key: string) => setLines(current => withoutLine(current, key));
   const addScannedProduct = (scanned: Product[]) => {
     const product = scanned[0];
     if (!product) return;

@@ -5,11 +5,10 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { ConfirmActionDialog } from '../../components/ConfirmActionDialog';
 import { refundHotelPayment, type CashSessionRecord, type HotelAccount, type HotelRefundInput } from '../../services/dataService';
-import { downloadHotelRefund } from '../../utils/hotelReceipt';
+import { downloadHotelRefund, HOTEL_PAYMENT_LABELS as methods } from '../../utils/hotelReceipt';
 import { toast } from 'sonner';
 import { uniqueRestaurantId } from '../../utils/restaurantStorage';
 const money=(amount:number)=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP'}).format(amount);
-const methods={cash:'Efectivo',card:'Tarjeta',transfer:'Transferencia',digital:'Pago digital'};
 
 export function HotelRefundsPanel({account,session,canCollect,busy,onBusy,onAccount,onSaved,onPending}:{
   account:HotelAccount;session:CashSessionRecord|null;canCollect:boolean;busy:boolean;

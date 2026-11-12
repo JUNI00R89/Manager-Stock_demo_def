@@ -44,7 +44,7 @@ import { useRestaurantStaff } from '../../utils/restaurantStaffStore';
 import { useRestaurantSettings } from '../../utils/restaurantSettingsStore';
 import { useRestaurantCatalog, type RestaurantCatalogProduct } from '../../utils/restaurantCatalogStore';
 import { useNow, useRestaurantOrders, useRestaurantTables } from '../../utils/restaurantOrdersHook';
-import { getJornadaKey, formatJornadaTitle, formatMoney, formatTime, minutesSince, orderItemSummary } from '../../utils/restaurantFormat';
+import { getJornadaKey, formatJornadaTitle, formatMoney, formatTime, minutesSince, orderItemSummary, normalizeText } from '../../utils/restaurantFormat';
 import type { Pedido } from '../../utils/restaurantTypes';
 import { deliverRestaurantOrder } from '../../utils/restaurantOrdersService';
 import { primeRestaurantAudio, playReadyOrderChime, vibrateReadyOrder } from '../../utils/restaurantAudio';
@@ -68,9 +68,6 @@ const FILTER_LABELS: Record<OrderFilter, string> = {
   entregados: 'Entregados',
 };
 
-function normalizeText(value: string) {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-}
 
 function tableDisplayName(table: { id: string; number: number }, names: Record<string, string>) {
   return names[table.id] || `Mesa ${table.number}`;

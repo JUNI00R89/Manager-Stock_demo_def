@@ -48,6 +48,7 @@ import {
   getJornadaKey,
   minutesSince,
   orderItemSummary,
+  normalizeText,
 } from '../../utils/restaurantFormat';
 import { deliverRestaurantOrder } from '../../utils/restaurantOrdersService';
 import { PedidoConflictoError, type Pedido } from '../../utils/restaurantTypes';
@@ -59,9 +60,6 @@ interface NewOrderLine {
   cantidad: number;
 }
 
-function normalizeText(value: string) {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-}
 
 function tableName(table: { id: string; number: number }, names: Record<string, string>) {
   return names[table.id] || `Mesa ${table.number}`;

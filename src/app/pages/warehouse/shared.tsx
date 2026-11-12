@@ -15,6 +15,10 @@ export const fmtQty = (value: number) => new Intl.NumberFormat('es-CO', { maximu
 export const dateOnly = (value: string | null | undefined) => value ? new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium' }).format(new Date(`${value.length === 10 ? `${value}T12:00:00` : value}`)) : '—';
 export const dateTime = (value: string | null | undefined) => value ? new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
 
+/** Removes a form line but always keeps at least one. */
+export const withoutLine = <T extends { key: string }>(lines: T[], key: string): T[] =>
+  lines.length === 1 ? lines : lines.filter(line => line.key !== key);
+
 export function useWarehouseRefs() {
   const [products, setProducts] = useState<Product[]>([]);
   const [locations, setLocations] = useState<InventoryLocationRecord[]>([]);
