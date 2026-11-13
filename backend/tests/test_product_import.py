@@ -113,6 +113,12 @@ def run() -> None:
         assert skus["Pan blanco"] == "PAN-0010", "generated code avoids the typed PAN-0009 from the same file"
         assert client.post("/api/products/import", headers=h, json=xlsx_body(bread)).json()["created"] == 0
 
+        # An archived product's name does not block importing it again without a code.
+        old_bread = client.post("/api/products", headers=h, json={"name": "Pan viejo", "category": "Panadería", "price": 400, "cost": 0, "stock": 0, "minStock": 0}).json()
+        assert client.delete(f"/api/products/{old_bread['id']}", headers=h).status_code in (200, 204)
+        revived = client.post("/api/products/import", headers=h, json=xlsx_body([["Pan viejo", None, "Panadería", 450, 3]])).json()
+        assert revived["created"] == 1 and revived["skipped"] == [], revived
+
         # Catalog changes between preview and confirm: the new SKU is skipped, not a server error.
         late = [["Nuevo", "NEW1", "Bebidas", 1000, 0]]
         assert len(client.post("/api/products/import/preview", headers=h, json=xlsx_body(late)).json()["toCreate"]) == 1

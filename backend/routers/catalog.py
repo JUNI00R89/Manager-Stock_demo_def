@@ -123,10 +123,11 @@ def parse_import_file(payload: ProductImportPayload) -> list[tuple[int, dict[str
 def build_import_report(conn: sqlite3.Connection, rows: list[tuple[int, dict[str, str]]]) -> tuple[dict, list[ProductPayload]]:
     """Decides, row by row, what would be created; saves nothing."""
     business_id = current_business_id()
-    existing = conn.execute("SELECT sku, name FROM products WHERE business_id=?", (business_id,)).fetchall()
+    existing = conn.execute("SELECT sku, name, active FROM products WHERE business_id=?", (business_id,)).fetchall()
     taken = {row["sku"] for row in existing}
     # Rows without a code have nothing else to match on, so the same name counts as "already exists".
-    names = {normalize_category_name(row["name"]) for row in existing}
+    # Archived products keep their code (unique index) but not their name: the user cannot see them.
+    names = {normalize_category_name(row["name"]) for row in existing if row["active"]}
     _, options = product_category_options(conn, business_id)
     known = {normalize_category_name(option["name"]): option["name"] for option in options}
     # Deactivated categories still hold their name in the unique index, so they are reused, not duplicated.
