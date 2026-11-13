@@ -90,7 +90,7 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: Props) 
           {report && (
             <section aria-label="Vista previa" className="space-y-2 rounded-xl border border-border/70 p-3 text-sm">
               <p className="flex items-center gap-2 font-medium"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{count} productos se crearán</p>
-              {report.skipped.length > 0 && <p className="flex items-start gap-2"><SkipForward className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />{report.skipped.length} ya existen (se saltan): {report.skipped.map(item => item.sku).join(', ')}</p>}
+              {report.skipped.length > 0 && <p className="flex items-start gap-2"><SkipForward className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />{report.skipped.length} ya existen (se saltan): {report.skipped.map(item => item.sku || item.name).join(', ')}</p>}
               {report.newCategories.length > 0 && <p className="flex items-start gap-2"><FolderPlus className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />Categorías nuevas: {report.newCategories.join(', ')}</p>}
               {report.errors.length > 0 && <div className="space-y-1">
                 <p className="flex items-center gap-2 font-medium text-rose-600"><XCircle className="h-4 w-4" />{report.errors.length} filas con error</p>

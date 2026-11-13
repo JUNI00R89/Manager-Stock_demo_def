@@ -7,7 +7,7 @@ export type PaymentPartMethod = 'cash' | 'card' | 'digital' | 'transfer';
 /** Result of reading a product spreadsheet; `row` is the spreadsheet row number (header = 1). */
 export type ImportReport = {
   toCreate: { row: number; sku: string; name: string; category: string }[];
-  skipped: { row: number; sku: string }[];
+  skipped: { row: number; sku: string; name: string }[];
   errors: { row: number; message: string }[];
   newCategories: string[];
   created: number;

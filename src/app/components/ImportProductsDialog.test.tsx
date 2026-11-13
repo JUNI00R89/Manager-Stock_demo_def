@@ -14,7 +14,7 @@ import { ImportProductsDialog } from './ImportProductsDialog'
 
 const report = (toCreate: ImportReport['toCreate']): ImportReport => ({
   toCreate,
-  skipped: [{ row: 5, sku: 'AG1' }],
+  skipped: [{ row: 5, sku: 'AG1', name: 'Agua' }, { row: 6, sku: '', name: 'Pan blanco' }],
   errors: [{ row: 8, message: 'Falta el precio.' }],
   newCategories: ['Aseo'],
   created: 0,
@@ -37,6 +37,7 @@ describe('ImportProductsDialog', () => {
 
     expect(await screen.findByText(/2 productos se crearán/)).toBeTruthy()
     expect(screen.getByText(/AG1/)).toBeTruthy()
+    expect(screen.getByText(/Pan blanco/)).toBeTruthy() // skipped by name: no code to show
     expect(screen.getByText('Fila 8: Falta el precio.')).toBeTruthy()
     expect(screen.getByText(/Aseo/)).toBeTruthy()
     expect((screen.getByRole('button', { name: 'Importar 2 productos' }) as HTMLButtonElement).disabled).toBe(false)
