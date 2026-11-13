@@ -20,11 +20,11 @@ MAX_IMPORT_BYTES = 2 * 1024 * 1024
 
 # Template headers, in order; each maps to a ProductPayload field.
 TEMPLATE_COLUMNS = [
-    ("Nombre", "name"), ("Código (SKU)", "sku"), ("Categoría", "category"), ("Precio", "price"),
+    ("Nombre", "name"), ("Código (SKU, opcional)", "sku"), ("Categoría", "category"), ("Precio", "price"),
     ("Costo", "cost"), ("Stock", "stock"), ("Stock mínimo", "minStock"), ("Unidad", "unit"),
     ("Código de barras", "barcode"), ("Descripción", "description"), ("Tipo", "productType"),
 ]
-REQUIRED = {"name": "Nombre", "sku": "Código (SKU)", "category": "Categoría", "price": "Precio"}
+REQUIRED = {"name": "Nombre", "category": "Categoría", "price": "Precio"}
 FIELD_LABELS = {field: header for header, field in TEMPLATE_COLUMNS}
 NUMERIC = ("price", "cost", "stock", "minStock")
 TYPES = {"venta": "sale_item", "insumo": "ingredient", "suministro": "supplies"}
@@ -40,7 +40,7 @@ def _key(text: str) -> str:
 
 
 HEADER_ALIASES = {_key(header): field for header, field in TEMPLATE_COLUMNS} | {
-    "codigo": "sku", "sku": "sku", "stock minimo": "minStock", "minimo": "minStock", "codigo barras": "barcode",
+    "codigo": "sku", "sku": "sku", "codigo (sku)": "sku", "stock minimo": "minStock", "minimo": "minStock", "codigo barras": "barcode",
 }
 
 

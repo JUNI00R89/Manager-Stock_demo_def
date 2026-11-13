@@ -85,6 +85,11 @@ def run() -> None:
     elapsed = time.perf_counter() - started
     assert elapsed < opening * 2 + 1, f"read_rows took {elapsed:.1f}s vs {opening:.1f}s to open: it should stop after 2001 rows"
 
+    # The code column is optional: without it the server generates the SKU.
+    no_code = read_rows("n.xlsx", xlsx([["Nombre", "Categoría", "Precio"], ["Pan", "Panadería", 500]]))
+    assert no_code == [(2, {"name": "Pan", "category": "Panadería", "price": "500"})]
+    assert row_to_payload(no_code[0][1]).sku == ""
+
     template_rows = read_rows("t.xlsx", build_template())
     assert template_rows and template_rows[0][1]["sku"] and row_to_payload(template_rows[0][1])
 

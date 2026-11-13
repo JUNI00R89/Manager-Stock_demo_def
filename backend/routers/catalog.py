@@ -123,7 +123,10 @@ def parse_import_file(payload: ProductImportPayload) -> list[tuple[int, dict[str
 def build_import_report(conn: sqlite3.Connection, rows: list[tuple[int, dict[str, str]]]) -> tuple[dict, list[ProductPayload]]:
     """Decides, row by row, what would be created; saves nothing."""
     business_id = current_business_id()
-    taken = {row["sku"] for row in conn.execute("SELECT sku FROM products WHERE business_id=?", (business_id,))}
+    existing = conn.execute("SELECT sku, name FROM products WHERE business_id=?", (business_id,)).fetchall()
+    taken = {row["sku"] for row in existing}
+    # Rows without a code have nothing else to match on, so the same name counts as "already exists".
+    names = {normalize_category_name(row["name"]) for row in existing}
     _, options = product_category_options(conn, business_id)
     known = {normalize_category_name(option["name"]): option["name"] for option in options}
     # Deactivated categories still hold their name in the unique index, so they are reused, not duplicated.
@@ -139,13 +142,16 @@ def build_import_report(conn: sqlite3.Connection, rows: list[tuple[int, dict[str
         except ValueError as exc:
             report["errors"].append({"row": number, "message": str(exc)})
             continue
-        if product.sku in taken:
-            report["skipped"].append({"row": number, "sku": product.sku})
+        name_key = normalize_category_name(product.name)
+        if product.sku in taken or (not product.sku and name_key in names):
+            report["skipped"].append({"row": number, "sku": product.sku, "name": product.name})
             continue
         if len(payloads) >= slots:
             report["errors"].append({"row": number, "message": f"El plan {plan['name']} permite hasta {plan['maxProducts']} productos activos. Cambia de plan para añadir más."})
             continue
-        taken.add(product.sku)
+        if product.sku:
+            taken.add(product.sku)
+        names.add(name_key)
         key = normalize_category_name(product.category)
         if key not in known:
             known[key] = inactive.get(key) or " ".join(product.category.split())
@@ -180,7 +186,11 @@ def import_products(payload: ProductImportPayload):
                 category_id = f"CAT-{uuid.uuid4().hex[:12].upper()}"
                 conn.execute("INSERT INTO product_categories (id,business_id,name,description,active) VALUES (?,?,?,?,1)", (category_id, business_id, name, ""))
                 audit(conn, "create", "product_category", category_id, {"name": name, "source": "import"})
+            typed = {product.sku for product in payloads if product.sku}
             for product in payloads:
+                if not product.sku:
+                    product = product.model_copy(update={"sku": next_sku(conn, business_id, product.category, reserved=typed)})
+                    typed.add(product.sku)
                 insert_product(conn, product, f"PRD-{uuid.uuid4().hex[:10].upper()}")
             audit(conn, "import", "product", "-", {"created": len(payloads), "file": payload.fileName})
             conn.commit()

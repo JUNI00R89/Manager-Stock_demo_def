@@ -48,10 +48,13 @@ def business_id(client: TestClient, headers: dict) -> str:
 
 
 def sql(query: str, params: tuple = ()) -> list:
-    with sqlite3.connect(DB) as conn:
+    conn = sqlite3.connect(DB)
+    try:
         rows = conn.execute(query, params).fetchall()
         conn.commit()
         return rows
+    finally:
+        conn.close()  # Windows cannot delete the temp DB while a connection is open
 
 
 def run() -> None:
@@ -73,7 +76,7 @@ def run() -> None:
         assert preview.status_code == 200, preview.text
         report = preview.json()
         assert [p["sku"] for p in report["toCreate"]] == ["LE1", "QU1", "JA1"]
-        assert report["skipped"] == [{"row": 5, "sku": "AG1"}, {"row": 6, "sku": "LE1"}]
+        assert report["skipped"] == [{"row": 5, "sku": "AG1", "name": "Agua otra"}, {"row": 6, "sku": "LE1", "name": "Leche 2"}]
         assert [e["row"] for e in report["errors"]] == [7] and "precio" in report["errors"][0]["message"].lower()
         assert report["newCategories"] == ["Lácteos"] and report["created"] == 0, "Aseo is a retail default category"
         assert len(client.get("/api/products", headers=h).json()) == before, "preview saves nothing"
@@ -100,12 +103,22 @@ def run() -> None:
         assert "Congelados" in [c["name"] for c in client.get("/api/product-categories", headers=h).json()]
         assert client.get("/api/products", headers=h).json() and next(p for p in client.get("/api/products", headers=h).json() if p["sku"] == "HE1")["category"] == "Congelados"
 
+        # Rows without a code get a generated SKU; without a code, duplicates are detected by name.
+        bread = [["Pan blanco", None, "Panadería", 500, 10], ["Pan integral", "PAN-0009", "Panadería", 700, 5], ["pan BLANCO", None, "Panadería", 500, 1]]
+        bread_preview = client.post("/api/products/import/preview", headers=h, json=xlsx_body(bread)).json()
+        assert [p["sku"] for p in bread_preview["toCreate"]] == ["", "PAN-0009"], bread_preview
+        assert bread_preview["skipped"] == [{"row": 4, "sku": "", "name": "pan BLANCO"}], bread_preview
+        assert client.post("/api/products/import", headers=h, json=xlsx_body(bread)).json()["created"] == 2
+        skus = {p["name"]: p["sku"] for p in client.get("/api/products", headers=h).json()}
+        assert skus["Pan blanco"] == "PAN-0010", "generated code avoids the typed PAN-0009 from the same file"
+        assert client.post("/api/products/import", headers=h, json=xlsx_body(bread)).json()["created"] == 0
+
         # Catalog changes between preview and confirm: the new SKU is skipped, not a server error.
         late = [["Nuevo", "NEW1", "Bebidas", 1000, 0]]
         assert len(client.post("/api/products/import/preview", headers=h, json=xlsx_body(late)).json()["toCreate"]) == 1
         assert client.post("/api/products", headers=h, json={"name": "Nuevo", "sku": "NEW1", "category": "Bebidas", "price": 1000, "cost": 0, "stock": 0, "minStock": 0}).status_code == 201
         raced = client.post("/api/products/import", headers=h, json=xlsx_body(late))
-        assert raced.status_code == 200 and raced.json()["created"] == 0 and raced.json()["skipped"] == [{"row": 2, "sku": "NEW1"}]
+        assert raced.status_code == 200 and raced.json()["created"] == 0 and raced.json()["skipped"] == [{"row": 2, "sku": "NEW1", "name": "Nuevo"}]
 
         # Plan limit (free plan: 100 active products). Fill up to 98, then import 3.
         bid = business_id(client, h)
