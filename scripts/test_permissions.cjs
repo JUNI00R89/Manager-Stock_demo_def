@@ -42,3 +42,14 @@ console.log('OK: navigation by business/modules, custom roles and employee actio
 
 assert.equal(access('/warehouse','owner',{type:'retail',features:{inventory:true,warehouse:false}}),false);
 assert.equal(access('/warehouse','owner',{type:'warehouse',features:{inventory:true,warehouse:true}}),true);
+assert.equal(access('/customers', 'cashier', hotel), true);
+assert.equal(access('/billing', 'cashier', hotel), false);
+assert.equal(access('/billing', 'cashier', hotel, ['billing.view']), true);
+assert.equal(action({role:'cashier',customRoleId:'billing_reader',permissions:['billing.view']}, 'billing.manage'), false);
+const warehouse = {type:'warehouse', features:{inventory:true,warehouse:true}};
+assert.equal(access('/warehouse/counts', 'cashier', warehouse, ['inventory.count']), true);
+assert.equal(access('/warehouse/adjustments', 'cashier', warehouse, ['inventory.count']), false);
+assert.equal(access('/products', 'cashier', warehouse, ['inventory.count']), false);
+assert.equal(access('/warehouse/counts', 'cashier', warehouse, ['inventory.adjust']), true);
+assert.equal(access('/hotel/today', 'cashier', hotel, ['hotel.view']), true);
+console.log('OK: customer, fiscal, Hotel Today and blind counter navigation permissions');

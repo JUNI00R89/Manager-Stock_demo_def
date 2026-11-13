@@ -84,6 +84,14 @@ def _inventory_permission(path: str, method: str) -> str:
 
 def required_permission_for_request(path: str, method: str) -> str | None:
     # Casos que no encajan en la tabla; ninguna entrada de ROUTE_PERMISSIONS los cubre antes.
+    if path.startswith('/api/customers'):
+        return 'customers.view' if method == 'GET' else 'customers.manage'
+    if path.startswith('/api/billing'):
+        return 'billing.view' if method == 'GET' else 'billing.manage'
+    if path.startswith('/api/inventory/count-reviews') or path == '/api/inventory/count-products':
+        return 'inventory.adjust' if path.endswith(('/approve', '/cancel')) else 'inventory.count'
+    if path.startswith('/api/sales/') and '/returns' in path:
+        return 'sales.cancel'
     if path.startswith("/api/inventory/"):
         return _inventory_permission(path, method)
     if path.startswith("/api/sales/") and path.endswith("/cancel"):
@@ -140,13 +148,15 @@ def _module_enabled(module: str, path: str, business_exists: bool, business_type
         return bool(features.get("inventory"))
     if module == "pos":
         hotel_cash = path.startswith("/api/cash/") and business_type == "hotel" and bool(features.get("rooms") or features.get("reservations"))
-        return bool(features.get("pos")) or hotel_cash
+        return bool(features.get("pos")) or hotel_cash or (path.startswith("/api/cash/") and business_type == "services" and bool(features.get("services") or features.get("reservations")))
     # orders
     return business_type == "food" and "pedidos" in food_modules
 
 
 # --- Rol base ---------------------------------------------------------------
 def _cashier_allowed(path: str, method: str) -> bool:
+    if path.startswith("/api/customers"):
+        return method in {"GET", "POST", "PUT"}
     if path in SESSION_PATHS:
         return True
     if path in {"/api/products", "/api/business/config", "/api/tables", "/api/dashboard"}:
@@ -198,7 +208,9 @@ def _custom_permissions(row: sqlite3.Row) -> set[str]:
     if row["custom_role_row_id"] is None:
         return set()
     try:
-        return set(json.loads(row["custom_permissions_json"] or "[]"))
+        permissions = set(json.loads(row["custom_permissions_json"] or "[]"))
+        if "inventory.adjust" in permissions: permissions.add("inventory.count")
+        return permissions
     except (json.JSONDecodeError, TypeError):
         return set()
 

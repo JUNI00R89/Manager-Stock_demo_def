@@ -14,6 +14,7 @@ export interface SaleItemInput {
 }
 
 export interface SaleItemRecord {
+  id?: number;
   productId: string;
   productName: string;
   sku?: string;
@@ -25,6 +26,12 @@ export interface SaleItemRecord {
 }
 
 export interface SaleRecord {
+  returns?: import('../components/SaleReturnsPanel').SaleReturnRecord[];
+  returnedTotal?: number;
+  returnableServiceAmount?: number;
+  netTotal?: number;
+  customerId?: string | null;
+  customerSnapshot?: import('./commerce').Customer | null;
   id: string;
   date: string;
   status: SaleStatus;
@@ -54,6 +61,7 @@ export interface CreateSaleInput {
   appointmentIds?: string[];
   items: SaleItemInput[];
   customer?: string;
+  customerId?: string;
   paymentMethod?: PaymentMethod;
   globalDiscountPercent?: number;
   taxRate?: number;
@@ -424,7 +432,7 @@ function extractApiErrorMessage(body: any, status: number, rawBody = ''): string
   return defaultHttpErrorMessage(status);
 }
 
-async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   // La app de escritorio no levanta FastAPI: todo se resuelve con el paquete
   // local. Lanzar TypeError permite que los métodos con respaldo local lo usen.
   if (isDesktopMode()) throw new TypeError('Modo escritorio local: los datos viven en este equipo.');
@@ -766,12 +774,33 @@ export async function getHotelIncomeReport(start: string, end: string): Promise<
 }
 
 export interface ServiceCatalogRecord { id: string; nombre: string; name: string; duracion: number; durationMinutes: number; precio: number; price: number; categoria: string; category: string; color: string; active: boolean; }
-export interface ServiceProfessionalRecord { id: string; nombre: string; name: string; especialidad: string; specialty: string; color: string; horario: { dia?: number; inicio?: string; fin?: string }[]; availability: { dia?: number; inicio?: string; fin?: string }[]; active: boolean; }
+export interface ServiceProfessionalRecord { bufferMinutes?: number; daysOff?: string[]; scheduleRevision?: number; id: string; nombre: string; name: string; especialidad: string; specialty: string; color: string; horario: { dia?: number; inicio?: string; fin?: string }[]; availability: { dia?: number; inicio?: string; fin?: string }[]; active: boolean; }
 export interface ServiceAppointmentRecord {
+  saleId?: string | null;
   id: string; clienteId?: string | null; clienteNombre: string; clienteTelefono: string; clienteEmail: string;
   servicioId: string; servicioNombre: string; profesionalId: string; profesionalNombre: string;
-  fecha: string; horaInicio: string; horaFin: string; estado: 'reserved' | 'confirmed' | 'attended' | 'cancelled' | 'no_show'; saleId?: string | null;
+  fecha: string; horaInicio: string; horaFin: string; estado: 'reserved' | 'confirmed' | 'attended' | 'cancelled' | 'no_show';
   notes: string; durationMinutes: number; price: number; createdAt: string;
+}
+export interface AppointmentMoveInput { professionalId: string; appointmentDate: string; startTime: string; expectedProfessionalId: string; expectedDate: string; expectedStartTime: string; expectedEndTime: string; }
+export async function moveServiceAppointment(id: string, input: AppointmentMoveInput) {
+  if (isDesktopMode()) {
+    const user = await authService.me();
+    const { canPerformAction } = await import('../security/permissions');
+    if (!canPerformAction(user, 'services.manage')) throw new Error('No tienes permiso para mover citas.');
+    const move = () => desktop.services.moveAppointment(id, input);
+    return navigator.locks ? navigator.locks.request(`service_schedule:${user.businessId}`, move) : move();
+  }
+  return api<ServiceAppointmentRecord>(`/services/appointments/${encodeURIComponent(id)}/schedule`, { method: 'PATCH', body: JSON.stringify(input) });
+}
+export async function saveProfessionalSchedule(id: string, input: import('../utils/serviceSchedule').ProfessionalSchedule) {
+  if (isDesktopMode()) {
+    const user = await authService.me();
+    const { canPerformAction } = await import('../security/permissions');
+    if (!canPerformAction(user, 'services.manage')) throw new Error('No tienes permiso para cambiar horarios.');
+    return desktop.services.saveSchedule(id, input);
+  }
+  return api<ServiceProfessionalRecord>(`/services/professionals/${encodeURIComponent(id)}/schedule`, { method: 'PUT', body: JSON.stringify(input) });
 }
 export async function getServicesCatalog() {
   if (isDesktopMode()) return desktop.services.catalog();
@@ -1145,6 +1174,18 @@ export const dataService = {
       const previous = db.sales.find(s => s.idempotencyKey === request.idempotencyKey || s.id === request.idempotencyKey);
       if (previous) return previous;
       if (request.orderIds?.length && request.status !== 'completed') throw new Error('El cobro de pedidos debe ser una venta completada.');
+      let customerSnapshot: import('./commerce').Customer | null = null;
+      if (request.customerId) {
+        const { listCustomers } = await import('./commerce');
+        // Paginate to resolve a customer independent of their position in the list.
+        for (let offset = 0; ; offset += 100) {
+          const batch = await listCustomers('', false, offset);
+          customerSnapshot = batch.find(c => c.id === request.customerId) ?? null;
+          if (customerSnapshot || batch.length < 100) break;
+        }
+        if (!customerSnapshot) throw new Error('Cliente no encontrado o inactivo.');
+        request.customer = customerSnapshot.name;
+      }
       const linkedOrders = [...new Set(request.orderIds || [])].map(id => {
         const order = db.orders.find(row => row.id === id);
         if (!order) throw new Error('Pedido no encontrado.');
@@ -1182,6 +1223,7 @@ export const dataService = {
       const tax = money(taxable * request.taxRate); const total = money(taxable + tax);
       const created: SaleRecord = {
         id: `VTA-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+        customerId: customerSnapshot?.id, customerSnapshot,
         date: new Date().toISOString(), status: request.status, customer: request.customer, paymentMethod: request.paymentMethod, currency: CURRENCY, cashSessionId: request.cashSessionId || null, payments: request.payments || (request.paymentMethod !== 'split' ? [{ method: request.paymentMethod as PaymentPartMethod, amount: total }] : []),
         subtotal, lineDiscount, globalDiscount, taxRate: request.taxRate, tax, totalPrice: total,
         productId: saleItems[0]?.productId || '', productName: saleItems.length > 2 ? `${saleItems[0].productName}, ${saleItems[1].productName} y ${saleItems.length - 2} más` : saleItems.map(i => i.productName).join(', '),

@@ -66,7 +66,20 @@ def run_maintenance() -> None:
 
 def prepare_database() -> None:
     """Crea/migra el esquema y ejecuta una limpieza inicial. Síncrono: lo usan también los scripts."""
+    from pathlib import Path
+    import os
+    from backend.core.config import DB_PATH
+    from backend.backups import create_backup
+    from backend.core.db import table_exists
+    with connection() as conn:
+        if table_exists(conn, 'businesses'):
+            applied = {r[0] for r in conn.execute('SELECT version FROM schema_migrations')} if table_exists(conn, 'schema_migrations') else set()
+            if any(p.name not in applied for p in (SCHEMA_PATH.parent / 'migrations').glob('*.sql')):
+                create_backup(DB_PATH, Path(os.getenv('MANAGER_STOCK_BACKUP_DIR', str(DB_PATH.parent / 'backups'))))
     init_database()
+    from backend.migrations import migrate
+    with connection() as conn:
+        migrate(conn)
     run_maintenance()
 
 
@@ -79,10 +92,17 @@ async def maintenance_worker() -> None:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     prepare_database()
+    import os
+    from backend.backups import backup_worker
+    backup_task = asyncio.create_task(backup_worker(DB_PATH)) if os.getenv('MANAGER_STOCK_AUTO_BACKUP', '1') != '0' else None
     task = asyncio.create_task(maintenance_worker())
     try:
         yield
     finally:
+        if backup_task:
+            backup_task.cancel()
+            try: await backup_task
+            except asyncio.CancelledError: pass
         task.cancel()
         try:
             await task
@@ -114,3 +134,21 @@ for module in (
     cash, hotel, services, orders, tables, recipes,
 ):
     app.include_router(module.router)
+
+from backend.core.config import DB_PATH
+from backend.core.context import current_business_id, current_identity
+from backend.core.db import audit
+from backend.services.inventory import current_operator
+from backend.core.security import has_permission
+from backend.schemas import SalePayload, SaleItemPayload, PaymentPartPayload
+from backend.services.inventory import add_product_stock, consume_product_stock, fetch_inventory_product, new_inventory_operation, validate_product_quantity
+from backend.services.sales import get_sale
+from backend.services.cash import cash_session_out
+from backend.services.business_types import delete_business_type_data
+from backend.routers.sales import create_sale
+from backend.routers.services import appointment_out, professional_out
+from backend.routers.inventory_counts import physical_count_out
+from backend import commerce, returns, scheduling, service_checkout, count_reviews
+for domain in (commerce, returns, scheduling, service_checkout, count_reviews):
+    app.include_router(domain.router)
+app.include_router(scheduling.appointment_router)

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import sqlite3
+import json
+from decimal import Decimal, ROUND_HALF_UP
 
 from backend.core.context import current_business_id
 from backend.core.db import timestamp_iso
@@ -8,7 +10,7 @@ from backend.core.db import timestamp_iso
 
 def _sale_out(sale: sqlite3.Row, items: list[sqlite3.Row], payment_rows: list[sqlite3.Row]) -> dict:
     mapped_items = [{
-        "productId": i["product_id"], "productName": i["product_name"], "sku": i["sku_snapshot"],
+        "id": i["id"] if i["product_id"] else None, "productId": i["product_id"], "productName": i["product_name"], "sku": i["sku_snapshot"],
         "quantity": i["quantity"], "price": i["unit_price"],
         "unitCost": i["unit_cost_snapshot"] if "unit_cost_snapshot" in i.keys() else 0,
         "discountPercent": i["discount_percent"], "subtotal": i["line_total"],
@@ -29,25 +31,53 @@ def _sale_out(sale: sqlite3.Row, items: list[sqlite3.Row], payment_rows: list[sq
     }
 
 
-def get_sale(conn: sqlite3.Connection, sale_id: str) -> dict | None:
-    sale = conn.execute("SELECT * FROM sales WHERE id = ? AND business_id = ?", (sale_id, current_business_id())).fetchone()
-    if not sale:
-        return None
-    items = conn.execute("SELECT * FROM sale_items WHERE sale_id = ? ORDER BY id", (sale_id,)).fetchall()
-    payment_rows = conn.execute("SELECT method, amount FROM sale_payments WHERE sale_id = ? ORDER BY id", (sale_id,)).fetchall()
-    return _sale_out(sale, items, payment_rows)
+def get_sale(conn, sale_id):
+    row = conn.execute('SELECT * FROM sales WHERE id=? AND business_id=?', (sale_id, current_business_id())).fetchone()
+    return get_sales(conn, [row])[0] if row else None
 
 
-def get_sales(conn: sqlite3.Connection, sales: list[sqlite3.Row]) -> list[dict]:
-    """Same output as get_sale for many sales, with 2 queries in total instead of 3 per sale."""
-    if not sales:
-        return []
-    ids = [sale["id"] for sale in sales]
-    marks = ",".join("?" * len(ids))  # list_sales caps a page at 500 ids, below SQLite's parameter limit
-    items: dict[str, list[sqlite3.Row]] = {sale_id: [] for sale_id in ids}
-    for row in conn.execute(f"SELECT * FROM sale_items WHERE sale_id IN ({marks}) ORDER BY id", ids):
-        items[row["sale_id"]].append(row)
-    payments: dict[str, list[sqlite3.Row]] = {sale_id: [] for sale_id in ids}
-    for row in conn.execute(f"SELECT sale_id, method, amount FROM sale_payments WHERE sale_id IN ({marks}) ORDER BY id", ids):
-        payments[row["sale_id"]].append(row)
-    return [_sale_out(sale, items[sale["id"]], payments[sale["id"]]) for sale in sales]
+def get_sales(conn, sales):
+    """Batch all receipt metadata; query count is independent of page size."""
+    if not sales: return []
+    ids = [s['id'] for s in sales]
+    marks = ','.join('?' for _ in ids)
+    def grouped(query, params, key):
+        result = {}
+        for row in conn.execute(query, params): result.setdefault(row[key], []).append(row)
+        return result
+    items = grouped(f'SELECT * FROM sale_items WHERE sale_id IN ({marks}) ORDER BY id', ids, 'sale_id')
+    payments = grouped(f'SELECT * FROM sale_payments WHERE sale_id IN ({marks}) ORDER BY id', ids, 'sale_id')
+    services = grouped(f'SELECT * FROM service_sale_lines WHERE sale_id IN ({marks})', ids, 'sale_id')
+    customers = grouped(f"SELECT * FROM customer_operations WHERE business_id=? AND source_type='sale' AND source_id IN ({marks})", [current_business_id(), *ids], 'source_id')
+    refunds = grouped(f'SELECT * FROM sale_returns WHERE business_id=? AND sale_id IN ({marks}) ORDER BY created_at,id', [current_business_id(), *ids], 'sale_id')
+    refund_ids = [r['id'] for rows in refunds.values() for r in rows]
+    ri, rp, rs = {}, {}, {}
+    if refund_ids:
+        rm = ','.join('?' for _ in refund_ids)
+        ri = grouped(f'SELECT * FROM sale_return_items WHERE return_id IN ({rm}) ORDER BY id', refund_ids, 'return_id')
+        rp = grouped(f'SELECT * FROM sale_return_payments WHERE return_id IN ({rm})', refund_ids, 'return_id')
+        rs = grouped(f'SELECT * FROM service_return_amounts WHERE return_id IN ({rm})', refund_ids, 'return_id')
+    out = []
+    cents = lambda n: Decimal(str(n)).quantize(Decimal('.01'), rounding=ROUND_HALF_UP)
+    for sale in sales:
+        sid = sale['id']; lines = items.get(sid, [])
+        value = _sale_out(sale, lines, payments.get(sid, []))
+        for service in services.get(sid, []):
+            value['items'].insert(0, dict(productId='service:'+service['service_id'], productName=service['service_name'], sku='SERVICIO', quantity=1, price=service['unit_price'], unitCost=0, discountPercent=0, subtotal=service['line_total']))
+        if services.get(sid):
+            value['productName'] = ', '.join(i['productName'] for i in value['items'][:2])
+            value['quantity'] = sum(i['quantity'] for i in value['items'])
+        value['returns'] = [dict(id=r['id'], saleId=sid, total=r['total'], reason=r['reason'], cashSessionId=r['cash_session_id'], createdAt=timestamp_iso(r['created_at']), serviceAmount=sum(a['amount'] for a in rs.get(r['id'], [])), items=[dict(itemId=i['sale_item_id'],quantity=i['quantity'],restock=bool(i['restock']),amount=i['amount']) for i in ri.get(r['id'], [])], payments=[dict(method=i['method'],amount=i['amount']) for i in rp.get(r['id'], [])]) for r in refunds.get(sid, [])]
+        returned = round(sum(r['total'] for r in value['returns']), 2)
+        value.update(returnedTotal=returned, netTotal=0 if sale['status']=='cancelled' else round(sale['total']-returned,2), returnableServiceAmount=0, customerId=None, customerSnapshot=None)
+        link = customers.get(sid, [])
+        if link: value.update(customerId=link[0]['customer_id'], customerSnapshot=json.loads(link[0]['customer_snapshot']))
+        if services.get(sid) or any(i['product_id'] is None for i in lines):
+            base = sum(Decimal(str(i['subtotal'])) for i in value['items'])
+            remaining = cents(sale['total'])
+            for i in lines:
+                if i['product_id']:
+                    remaining -= min(remaining, cents(Decimal(str(i['line_total'])) / base * cents(sale['total']))) if base else Decimal(0)
+            value['returnableServiceAmount'] = float(max(Decimal(0), remaining-sum(cents(r['serviceAmount']) for r in value['returns'])))
+        out.append(value)
+    return out

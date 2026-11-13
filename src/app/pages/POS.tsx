@@ -1,3 +1,7 @@
+import { uniqueRestaurantId } from '../utils/restaurantStorage';
+import { SavedCarts } from '../components/SavedCarts';
+import { CustomerPicker } from '../components/CustomerPicker';
+import type { Customer } from '../services/commerce';
 import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { Card } from '../components/ui/card';
@@ -8,10 +12,11 @@ import { Separator } from '../components/ui/separator';
 import {
   Search, Plus, Minus, Trash2, ShoppingCart, CreditCard, Banknote, Package,
   Smartphone, Receipt, X, Check, Barcode, ScanLine, Users, Percent,
-  Lock, Unlock, DollarSign, Split, Printer, MessageCircle, Mail
+  Lock, Unlock, DollarSign, Split, Printer, MessageCircle, Mail, Star
 } from 'lucide-react';
 import type { Product } from '../utils/types';
-import { dataService, type CashSessionRecord, type PaymentPartRecord } from '../services/dataService';
+import { dataService, type CashSessionRecord, type PaymentPartRecord, type CreateSaleInput } from '../services/dataService';
+import { isDesktopMode } from '../services/desktop';
 import { useAuth } from '../context/AuthContext';
 import { useBusiness } from '../context/BusinessContext';
 import { toast } from 'sonner';
@@ -38,10 +43,17 @@ interface SplitPayment {
 }
 
 type PosMode = 'open' | 'closed';
+interface PendingPayment { request: CreateSaleInput; received: number }
 
 export function POS() {
   const { config } = useBusiness();
   const { user } = useAuth();
+  const pendingKey = `pos_pending:${user?.businessId}:${user?.id}`;
+  const [pendingPayment, setPendingPayment] = useState<PendingPayment | null>(() => {
+    try { return JSON.parse(localStorage.getItem(pendingKey) || 'null'); } catch { return null; }
+  });
+  const favoriteKey = `pos_favorites:${user?.businessId}:${user?.id}`;
+  const [favorites, setFavorites] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(favoriteKey) || '[]'); } catch { return []; } });
   const [products, setProducts] = useState<Product[]>([]);
   const [processingPayment, setProcessingPayment] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -52,6 +64,7 @@ export function POS() {
   const [cashReceived, setCashReceived] = useState('');
   const [showScanner, setShowScanner] = useState(false);
   const [customerName, setCustomerName] = useState('');
+  const [customer, setCustomer] = useState<Customer | null>(null);
   const [globalDiscount, setGlobalDiscount] = useState(0);
   const [splitPayments, setSplitPayments] = useState<SplitPayment[]>([]);
   const [posMode, setPosMode] = useState<PosMode>('open');
@@ -113,13 +126,13 @@ export function POS() {
     finally { setSavingSession(false); }
   };
 
-  const categories = ['Todos', ...Array.from(new Set(products.map(p => p.category)))];
+  const categories = ['Todos', 'Favoritos', ...Array.from(new Set(products.map(p => p.category)))];
 
   const filteredProducts = products.filter(product => {
     const matchSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       product.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
       product.category.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchCat = activeCategory === 'Todos' || product.category === activeCategory;
+    const matchCat = activeCategory === 'Todos' || (activeCategory === 'Favoritos' ? favorites.includes(product.id) : product.category === activeCategory);
     return matchSearch && matchCat;
   });
   const showPhotos = imagesEnabled(config);
@@ -153,7 +166,7 @@ export function POS() {
   };
 
   const removeFromCart = (productId: string) => setCart(cart.filter(item => item.productId !== productId));
-  const clearCart = () => { setCart([]); setPaymentMethod(null); setCashReceived(''); setCustomerName(''); setGlobalDiscount(0); setSplitPayments([]); };
+  const clearCart = () => { setCart([]); setPaymentMethod(null); setCashReceived(''); setCustomerName(''); setCustomer(null); setGlobalDiscount(0); setSplitPayments([]); };
 
   const setItemDiscount = (productId: string, discount: number) => {
     setCart(cart.map(item => item.productId === productId ? { ...item, discount: Math.min(100, Math.max(0, discount)) } : item));
@@ -170,6 +183,8 @@ export function POS() {
   const splitRemaining = total - splitTotal;
 
   const handlePayment = async () => {
+    if (processingPayment) return;
+    if (!pendingPayment) {
     if (!paymentMethod) { toast.error('Selecciona un método de pago'); return; }
     if (cart.length === 0) { toast.error('El carrito está vacío'); return; }
     if (paymentMethod === 'cash') {
@@ -181,36 +196,43 @@ export function POS() {
       return;
     }
 
+    }
     setProcessingPayment(true);
     try {
-      const sale = await dataService.createSale({
+      const pending: PendingPayment = pendingPayment || { received: paymentMethod === 'cash' ? Number(cashReceived) : total, request: {
         items: cart.map(item => ({ productId: item.productId, quantity: item.quantity, discountPercent: item.discount })),
         customer: customerName || 'Cliente general',
-        paymentMethod,
+        customerId: customer?.id,
+        paymentMethod: paymentMethod!,
+        idempotencyKey: uniqueRestaurantId('op'),
         globalDiscountPercent: globalDiscount,
         taxRate: TAX_RATE,
         cashSessionId: cashSession?.id,
         payments: paymentMethod === 'split' ? splitPayments : undefined,
-      });
-      const refreshedProducts = await dataService.getProducts();
-      setProducts(refreshedProducts.filter(p => p.productType !== 'ingredient' && p.productType !== 'supplies'));
+      } };
+      if (!isDesktopMode()) { localStorage.setItem(pendingKey, JSON.stringify(pending)); setPendingPayment(pending); }
+      const sale = await dataService.createSale(pending.request);
+      localStorage.removeItem(pendingKey); setPendingPayment(null);
+      void dataService.getProducts().then(refreshed => setProducts(refreshed.filter(p => p.productType !== 'ingredient' && p.productType !== 'supplies'))).catch(() => toast.error('Venta guardada. Actualiza el catálogo para ver las existencias.'));
       const receipt = {
         id: sale.id,
         invoiceNumber: sale.id,
         date: sale.date,
-        customer: customerName || 'Cliente general',
-        items: cart,
-        subtotal, discountAmount, globalDiscount, afterDiscount, tax: sale.tax, total: sale.totalPrice,
-        paymentMethod,
-        splitPayments: paymentMethod === 'split' ? splitPayments : [],
-        cashReceived: paymentMethod === 'cash' ? parseFloat(cashReceived) : total,
-        change: paymentMethod === 'cash' ? parseFloat(cashReceived) - total : 0,
+        customer: sale.customer,
+        items: sale.items.map(item => ({ productId: item.productId, name: item.productName, sku: item.sku || '', price: item.price, quantity: item.quantity, discount: item.discountPercent })),
+        subtotal: sale.subtotal - sale.lineDiscount, discountAmount: sale.globalDiscount,
+        globalDiscount: pending.request.globalDiscountPercent || 0,
+        afterDiscount: sale.subtotal - sale.lineDiscount - sale.globalDiscount,
+        tax: sale.tax, total: sale.totalPrice, paymentMethod: sale.paymentMethod,
+        splitPayments: sale.payments || [], cashReceived: pending.received,
+        change: sale.paymentMethod === 'cash' ? Math.max(0, pending.received - sale.totalPrice) : 0,
       };
       setReceiptData(receipt);
       setShowReceipt(true);
       toast.success('Venta guardada correctamente', { description: `${sale.id} · ${money(sale.totalPrice)}` });
     } catch (error) {
-      toastError(error, 'No fue posible guardar la venta.');
+      if (error && typeof error === 'object' && 'status' in error && [400, 403, 404, 409, 422].includes(Number(error.status))) { localStorage.removeItem(pendingKey); setPendingPayment(null); }
+      toastError(error, 'No fue posible confirmar la venta.');
     } finally {
       setProcessingPayment(false);
     }
@@ -239,7 +261,7 @@ export function POS() {
   };
 
   // Open turn dialog
-  if (showOpenTurn) {
+  if (showOpenTurn && !pendingPayment) {
     return (
       <Layout>
         <div className="flex items-center justify-center min-h-[60vh]">
@@ -391,6 +413,7 @@ export function POS() {
                         </div>
                       )}
                       <div className="flex justify-between items-start">
+                        <button type="button" aria-label={`${favorites.includes(product.id) ? 'Quitar de' : 'Agregar a'} favoritos: ${product.name}`} aria-pressed={favorites.includes(product.id)} className="min-w-11 min-h-11 flex items-center justify-center rounded-lg hover:bg-accent" onClick={e => { e.stopPropagation(); setFavorites(current => { const next = current.includes(product.id) ? current.filter(id => id !== product.id) : [...current, product.id]; localStorage.setItem(favoriteKey, JSON.stringify(next)); return next; }); }}><Star size={18} fill={favorites.includes(product.id) ? 'currentColor' : 'none'} /></button>
                         <h3 className="text-sm font-semibold text-foreground line-clamp-2 leading-tight">{product.name}</h3>
                         {inCart && (
                           <span className="ml-1 w-5 h-5 bg-primary text-white text-[10px] rounded-full flex items-center justify-center font-bold flex-shrink-0">
@@ -430,11 +453,14 @@ export function POS() {
               </Badge>
             </div>
 
+            <div className="mb-3"><CustomerPicker value={customer} onChange={c => { setCustomer(c); setCustomerName(c?.name || ''); }} /></div>
+            <SavedCarts current={{ cart, customer, customerName, globalDiscount }} products={products} disabled={processingPayment || showReceipt || !!pendingPayment} onClear={clearCart} onRestore={draft => { clearCart(); setCart(draft.cart); setCustomer(draft.customer); setCustomerName(draft.customerName); setGlobalDiscount(draft.globalDiscount); }} />
             {/* Customer */}
             <div className="relative mb-3">
               <Users className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" size={14} />
               <Input
-                placeholder="Cliente (opcional)"
+                placeholder="Nombre libre (opcional)"
+                disabled={!!customer}
                 value={customerName}
                 onChange={e => setCustomerName(e.target.value)}
                 className="pl-8 h-9 text-sm"
@@ -583,8 +609,8 @@ export function POS() {
 
               {paymentMethod === 'cash' && (
                 <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Efectivo recibido</label>
-                  <Input type="number" placeholder="0.00" value={cashReceived} onChange={e => setCashReceived(e.target.value)} className="h-10" />
+                  <label htmlFor="pos-cash-received" className="text-xs text-muted-foreground">Efectivo recibido</label>
+                  <Input id="pos-cash-received" type="number" placeholder="0.00" value={cashReceived} onChange={e => setCashReceived(e.target.value)} className="h-10" />
                   {cashReceived && parseFloat(cashReceived) >= total && (
                     <div className="text-xs bg-green-50 dark:bg-green-950/30 p-2 rounded border border-green-200 dark:border-green-800 flex justify-between">
                       <span className="text-muted-foreground">Cambio:</span>
@@ -635,6 +661,11 @@ export function POS() {
       </div>
 
       {/* Receipt dialog */}
+      <Dialog open={!!pendingPayment && !processingPayment && !showReceipt}>
+        <DialogContent><DialogHeader><DialogTitle>Cobro pendiente de confirmar</DialogTitle><DialogDescription>La conexión no permitió confirmar el resultado. Reintenta el cobro guardado para consultar o registrar la misma venta, sin duplicarla.</DialogDescription></DialogHeader>
+          <Button className="min-h-11" onClick={() => void handlePayment()}>Confirmar venta pendiente</Button>
+        </DialogContent>
+      </Dialog>
       <Dialog open={showReceipt} onOpenChange={setShowReceipt}>
         <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -654,7 +685,7 @@ export function POS() {
                   </div>
                   <p className="font-bold text-base text-gray-900">{config?.name || 'Manager Stock'}</p>
                   <p className="text-[11px] text-gray-500">{new Date(receiptData.date).toLocaleString('es-CO')}</p>
-                  <p className="text-xs text-gray-500">Factura: {receiptData.invoiceNumber}</p>
+                  <p className="text-xs text-gray-500">Comprobante interno: {receiptData.invoiceNumber}</p><p className="text-[11px] text-gray-500">No es una factura electrónica.</p>
                   {receiptData.customer !== 'Cliente general' && (
                     <p className="text-xs font-medium text-gray-900 mt-1">Cliente: {receiptData.customer}</p>
                   )}
@@ -706,14 +737,14 @@ export function POS() {
                   <Printer size={14} className="mr-1" /> Imprimir
                 </Button>
                 <Button variant="outline" onClick={() => {
-                  const msg = `*${config?.name || 'Manager Stock'}*\nFactura: ${receiptData.invoiceNumber}\nFecha: ${new Date(receiptData.date).toLocaleString('es-CO')}\n\n${receiptData.items.map((i: CartItem) => `${i.quantity}x ${i.name} - ${money(itemSubtotal(i))}`).join('\n')}\n\nSubtotal: ${money(receiptData.subtotal)}\nIVA: ${money(receiptData.tax)}\n*Total: ${money(receiptData.total)}*\nMétodo: ${receiptData.paymentMethod === 'cash' ? 'Efectivo' : receiptData.paymentMethod === 'card' ? 'Tarjeta' : receiptData.paymentMethod === 'digital' ? 'Billetera digital' : receiptData.paymentMethod === 'transfer' ? 'Transferencia' : receiptData.paymentMethod === 'split' ? 'Pago dividido' : receiptData.paymentMethod}`;
+                  const msg = `*${config?.name || 'Manager Stock'}*\nComprobante interno: ${receiptData.invoiceNumber}\nFecha: ${new Date(receiptData.date).toLocaleString('es-CO')}\n\n${receiptData.items.map((i: CartItem) => `${i.quantity}x ${i.name} - ${money(itemSubtotal(i))}`).join('\n')}\n\nSubtotal: ${money(receiptData.subtotal)}\nIVA: ${money(receiptData.tax)}\n*Total: ${money(receiptData.total)}*\nMétodo: ${receiptData.paymentMethod === 'cash' ? 'Efectivo' : receiptData.paymentMethod === 'card' ? 'Tarjeta' : receiptData.paymentMethod === 'digital' ? 'Billetera digital' : receiptData.paymentMethod === 'transfer' ? 'Transferencia' : receiptData.paymentMethod === 'split' ? 'Pago dividido' : receiptData.paymentMethod}`;
                   window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
                 }} className="border-green-200 text-green-700 dark:border-green-800 dark:text-green-400 text-xs">
                   <MessageCircle size={14} className="mr-1" /> WhatsApp
                 </Button>
                 <Button variant="outline" onClick={() => {
                   const subject = encodeURIComponent(`Recibo ${receiptData.invoiceNumber} - ${config?.name || 'Manager Stock'}`);
-                  const body = encodeURIComponent(`Factura: ${receiptData.invoiceNumber}\nFecha: ${new Date(receiptData.date).toLocaleString('es-CO')}\n\n${receiptData.items.map((i: CartItem) => `${i.quantity}x ${i.name} - ${money(itemSubtotal(i))}`).join('\n')}\n\nSubtotal: ${money(receiptData.subtotal)}\nIVA: ${money(receiptData.tax)}\nTotal: ${money(receiptData.total)}\nMétodo: ${receiptData.paymentMethod}`);
+                  const body = encodeURIComponent(`Comprobante interno: ${receiptData.invoiceNumber}\nFecha: ${new Date(receiptData.date).toLocaleString('es-CO')}\n\n${receiptData.items.map((i: CartItem) => `${i.quantity}x ${i.name} - ${money(itemSubtotal(i))}`).join('\n')}\n\nSubtotal: ${money(receiptData.subtotal)}\nIVA: ${money(receiptData.tax)}\nTotal: ${money(receiptData.total)}\nMétodo: ${receiptData.paymentMethod}`);
                   window.location.href = `mailto:?subject=${subject}&body=${body}`;
                 }} className="border-blue-200 text-blue-700 dark:border-blue-800 dark:text-blue-400 text-xs col-span-2">
                   <Mail size={14} className="mr-1" /> Enviar por correo

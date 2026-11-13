@@ -1,3 +1,4 @@
+import { checkLocalServiceSlot, validateSchedule, type ProfessionalSchedule } from '../utils/serviceSchedule';
 /**
  * Modo escritorio 100 % local.
  *
@@ -801,6 +802,30 @@ export const desktop = {
       writeJson(servicesKey(businessId), { ...data, professionals: [...data.professionals, created] });
       return created;
     },
+    async moveAppointment(id: string, input: import('./dataService').AppointmentMoveInput): Promise<ServiceAppointmentRecord> {
+      const businessId = requireBusinessId(); const data = await this.data();
+      const old = data.appointments.find(a => a.id === id);
+      if (!old) throw new Error('Cita no encontrada.');
+      if (old.saleId || !['reserved', 'confirmed'].includes(old.estado)) throw new Error('Solo puedes mover citas pendientes sin cobrar.');
+      if (old.profesionalId === input.professionalId && old.fecha === input.appointmentDate && old.horaInicio === input.startTime) return old;
+      if (old.profesionalId !== input.expectedProfessionalId || old.fecha !== input.expectedDate || old.horaInicio !== input.expectedStartTime || old.horaFin !== input.expectedEndTime) throw new Error('La cita cambió. Actualiza antes de moverla.');
+      const pro = data.professionals.find(p => p.id === input.professionalId && p.active);
+      if (!pro) throw new Error('Profesional no encontrado.');
+      checkLocalServiceSlot(pro, data.appointments, input.appointmentDate, input.startTime, old.durationMinutes, id);
+      const [h, m] = input.startTime.split(':').map(Number); const end = h * 60 + m + old.durationMinutes;
+      const updated = { ...old, profesionalId: pro.id, profesionalNombre: pro.name, fecha: input.appointmentDate, horaInicio: input.startTime, horaFin: `${String(Math.floor(end / 60)).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}` };
+      writeJson(servicesKey(businessId), { ...data, appointments: data.appointments.map(a => a.id === id ? updated : a) });
+      return updated;
+    },
+    async saveSchedule(id: string, input: ProfessionalSchedule): Promise<ServiceProfessionalRecord> {
+      validateSchedule(input);
+      const businessId = requireBusinessId(); const data = await this.data();
+      const old = data.professionals.find(p => p.id === id);
+      if (!old || (old.scheduleRevision || 1) !== input.revision) throw new Error('El horario cambió. Actualiza antes de guardarlo.');
+      const updated = { ...old, availability: input.availability, horario: input.availability, daysOff: input.daysOff, bufferMinutes: input.bufferMinutes, scheduleRevision: input.revision + 1 };
+      writeJson(servicesKey(businessId), { ...data, professionals: data.professionals.map(p => p.id === id ? updated : p) });
+      return updated;
+    },
     async createAppointment(input: { serviceId: string; professionalId: string; clientName: string; clientEmail?: string; clientPhone?: string; appointmentDate: string; startTime: string; notes?: string }): Promise<ServiceAppointmentRecord> {
       const businessId = requireBusinessId();
       const data = await this.data();
@@ -809,6 +834,7 @@ export const desktop = {
       if (!service) throw new Error('Selecciona un servicio válido.');
       if (!professional) throw new Error('Selecciona un profesional válido.');
       const duration = service.durationMinutes || service.duracion || 30;
+      checkLocalServiceSlot(professional, data.appointments, input.appointmentDate, input.startTime, duration, '');
       const [hours, minutes] = input.startTime.split(':').map(Number);
       const end = new Date(2000, 0, 1, hours || 0, (minutes || 0) + duration);
       const endTime = `${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}`;
@@ -842,7 +868,9 @@ export const desktop = {
       const service = data.catalog.find((item: ServiceCatalogRecord) => item.id === input.serviceId) || data.catalog.find((item: ServiceCatalogRecord) => item.id === current.servicioId);
       const professional = data.professionals.find((item: ServiceProfessionalRecord) => item.id === input.professionalId) || data.professionals.find((item: ServiceProfessionalRecord) => item.id === current.profesionalId);
       if (!service || !professional) throw new Error('Servicio o profesional no válido.');
-      const duration = service.durationMinutes || service.duracion || 30;
+      const sameService = service.id === current.servicioId;
+      const duration = sameService ? (current.durationMinutes || service.durationMinutes || service.duracion || 30) : (service.durationMinutes || service.duracion || 30);
+      checkLocalServiceSlot(professional, data.appointments, input.appointmentDate, input.startTime, duration, id);
       const [hours, minutes] = input.startTime.split(':').map(Number);
       const end = new Date(2000, 0, 1, hours || 0, (minutes || 0) + duration);
       const endTime = `${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}`;
@@ -860,7 +888,7 @@ export const desktop = {
         horaFin: endTime,
         notes: input.notes || '',
         durationMinutes: duration,
-        price: service.price,
+        price: sameService ? current.price : service.price,
       };
       writeJson(servicesKey(businessId), { ...data, appointments: data.appointments.map((item: ServiceAppointmentRecord) => item.id === id ? updated : item) });
       return updated;
@@ -875,6 +903,12 @@ export const desktop = {
       const data = await this.data();
       const current = data.appointments.find((item: ServiceAppointmentRecord) => item.id === id);
       if (!current) throw new Error('No se encontró la cita.');
+      if (current.saleId && status !== 'attended') throw new Error('La cita ya fue cobrada.');
+      if (status === 'reserved' || status === 'confirmed') {
+        const pro = data.professionals.find(p => p.id === current.profesionalId);
+        if (!pro) throw new Error('Profesional no encontrado.');
+        checkLocalServiceSlot(pro, data.appointments, current.fecha, current.horaInicio, current.durationMinutes, id);
+      }
       const updated = { ...current, estado: status };
       writeJson(servicesKey(businessId), { ...data, appointments: data.appointments.map((item: ServiceAppointmentRecord) => item.id === id ? updated : item) });
       return updated;

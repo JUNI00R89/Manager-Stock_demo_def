@@ -1,3 +1,4 @@
+import { saleNetTotal, returnedUnits } from './saleMetrics';
 import { colombiaDateKey } from '../services/dataService';
 import type { SaleRecord } from '../services/dataService';
 import type { Product } from './types';
@@ -61,9 +62,9 @@ export function analyzeProductRisk(products: Product[], sales: SaleRecord[], win
     if (sale.status !== 'completed') continue;
     const key = colombiaDateKey(new Date(sale.date));
     if (key < cutoff) continue;
-    revenueWindow += sale.totalPrice;
+    revenueWindow += saleNetTotal(sale);
     for (const item of sale.items ?? []) {
-      units.set(item.productId, (units.get(item.productId) ?? 0) + item.quantity);
+      units.set(item.productId, (units.get(item.productId) ?? 0) + Math.max(0, item.quantity - returnedUnits(sale, item)));
     }
   }
 

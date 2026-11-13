@@ -114,7 +114,7 @@ Conserva una copia de `backend/data/manager_stock.db` antes de actualizaciones o
 .\.venv\Scripts\python.exe scripts\backup_database.py
 ```
 
-Las copias se escriben en `backups/`. Mantén una copia fuera del equipo y prueba periódicamente su restauración.
+Las copias se escriben por defecto en `backend/data/backups/` (o junto a la ruta configurada de la base). La API verifica una copia diaria mientras está encendida y guarda otra antes de aplicar migraciones nuevas. Configura `MANAGER_STOCK_BACKUP_DIR` para cambiar el destino. `python scripts/restore_database.py COPIA.db NUEVA_RUTA.db` restaura y verifica sin sobrescribir archivos existentes. Ver [operación y facturación en Colombia](docs/facturacion-colombia.md).
 
 ## Pruebas
 
@@ -330,6 +330,10 @@ las pruebas crean negocios y reservas de demostración.
 ```sh
 MANAGER_STOCK_E2E=1 python -m pytest backend/tests/test_hotel_browser.py backend/tests/test_hotel_local_browser.py
 ```
+
+## Clientes, operación y preparación fiscal
+
+Clientes compartidos por negocio, carritos guardados/favoritos, devoluciones parciales, cobros de mesas con varios medios, cobro de citas con productos, jornadas y agenda arrastrable, resumen diario del hotel y conteos con aprobación. La preparación fiscal conserva borradores internos; no emite ni simula facturas DIAN. Consulta alcance, limitaciones del modo local, investigación de proveedores y pendientes en [facturación Colombia](docs/facturacion-colombia.md).
 
 Todas las pruebas del backend se ejecutan con `python -m pytest` (instala antes
 `backend/requirements-dev.txt`); el detalle está en [`docs/TESTING.md`](docs/TESTING.md).

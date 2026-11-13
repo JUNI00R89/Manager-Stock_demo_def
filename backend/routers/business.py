@@ -164,11 +164,13 @@ def expand_role_permissions(requested: list[str]) -> list[str]:
     permission_set = set(requested)
     permission_set.add("dashboard.view")
     dependencies = {
+        "customers.manage": {"customers.view"},
+        "billing.manage": {"billing.view", "customers.view"},
         "catalog.create": {"catalog.view"},
         "catalog.edit": {"catalog.view"},
         "inventory.edit": {"inventory.view"},
         "inventory.entry": {"inventory.view", "catalog.view"},
-        "inventory.adjust": {"inventory.view", "catalog.view"},
+        "inventory.adjust": {"inventory.view", "catalog.view", "inventory.count"},
         "inventory.delete": {"inventory.view"},
         "inventory.negative": {"inventory.view"},
         "purchases.approve": {"inventory.view", "suppliers.view", "catalog.view"},

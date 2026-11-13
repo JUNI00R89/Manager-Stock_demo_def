@@ -70,6 +70,7 @@ def public_user(row: sqlite3.Row, conn: sqlite3.Connection | None = None) -> dic
 
 
 DELEGABLE_PERMISSIONS = {
+    "customers.view", "customers.manage", "billing.view", "billing.manage", "inventory.count",
     "dashboard.view", "catalog.view", "catalog.create", "catalog.edit",
     "inventory.view", "inventory.edit", "inventory.entry", "inventory.adjust",
     "inventory.delete", "inventory.negative", "purchases.approve",

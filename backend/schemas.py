@@ -143,6 +143,12 @@ class ProfessionalPayload(BaseModel):
     color: str = Field(default="#315F68", pattern=r"^#[0-9a-fA-F]{6}$")
     availability: list[dict] = Field(default_factory=list, max_length=100)
 
+    @field_validator("availability")
+    @classmethod
+    def valid_availability(cls, value):
+        from backend.scheduling import Schedule
+        return [p.model_dump() for p in Schedule(availability=value).availability]
+
 
 class AppointmentPayload(BaseModel):
     serviceId: str = Field(min_length=1, max_length=80)
@@ -181,7 +187,7 @@ class SaleItemPayload(BaseModel):
 
 class PaymentPartPayload(BaseModel):
     method: Literal["cash", "card", "digital", "transfer"]
-    amount: float = Field(ge=0)
+    amount: float = Field(ge=0, allow_inf_nan=False)
 
 
 class SalePayload(BaseModel):
@@ -190,6 +196,8 @@ class SalePayload(BaseModel):
     orderIds: list[str] = Field(default_factory=list, max_length=200)
     appointmentIds: list[str] = Field(default_factory=list, max_length=50)
     customer: str = Field(default="Cliente general", max_length=120)
+    customerId: str | None = Field(default=None, max_length=100)
+    appointmentId: str | None = Field(default=None, max_length=100)
     paymentMethod: Literal["cash", "card", "digital", "split", "transfer"] = "cash"
     payments: list[PaymentPartPayload] = Field(default_factory=list, max_length=10)
     cashSessionId: str | None = None

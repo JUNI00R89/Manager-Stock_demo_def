@@ -49,10 +49,10 @@ def dashboard():
         revenue_today = 0.0
         revenue_last_7_days = 0.0
         if pos_enabled:
-            today_query = """SELECT COUNT(*) AS count, COALESCE(SUM(total),0) AS revenue
+            today_query = """SELECT COUNT(*) AS count, COALESCE(SUM(MAX(0,total-COALESCE((SELECT SUM(r.total) FROM sale_returns r WHERE r.sale_id=sales.id),0))),0) AS revenue
                 FROM sales WHERE business_id=? AND status='completed'
                 AND julianday(created_at) >= julianday(?) AND julianday(created_at) < julianday(?)"""
-            last7_query = """SELECT COALESCE(SUM(total),0) FROM sales WHERE business_id=? AND status='completed'
+            last7_query = """SELECT COALESCE(SUM(MAX(0,total-COALESCE((SELECT SUM(r.total) FROM sale_returns r WHERE r.sale_id=sales.id),0))),0) FROM sales WHERE business_id=? AND status='completed'
                 AND julianday(created_at) >= julianday(?) AND julianday(created_at) <= julianday(?)"""
             today_params: list = [business_id, start_utc, end_utc]
             last7_params: list = [business_id, seven_days_ago_utc, now_utc]
