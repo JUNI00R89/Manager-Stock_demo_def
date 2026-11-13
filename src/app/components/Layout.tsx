@@ -453,7 +453,7 @@ function LayoutShell({ children }: LayoutProps) {
       <div className="flex flex-col h-full py-4">
         {/* Logo */}
         <div className={`flex items-center gap-3 px-4 py-2 mb-4 ${collapsed ? 'justify-center' : ''}`}>
-          <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-white" style={{ background: 'linear-gradient(135deg, #FF5A1F, #FF3D00)' }}>
+          <div className="app-brand-mark w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-white" style={{ background: 'linear-gradient(135deg, #FF5A1F, #FF3D00)' }}>
             <Warehouse className="text-white" size={20} />
           </div>
           {!collapsed && (

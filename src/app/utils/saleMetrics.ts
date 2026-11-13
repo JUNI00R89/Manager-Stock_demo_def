@@ -3,7 +3,7 @@ import type { SaleRecord, SaleItemRecord } from '../services/dataService';
 const cents = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 
 /** Sales are grouped by the original sale date, with all refunds known today. */
-export function saleNetTotal(sale: Pick<SaleRecord, 'status' | 'totalPrice' | 'returnedTotal'>) {
+export function saleNetTotal(sale: { status: string; totalPrice: number; returnedTotal?: number }) {
   return sale.status === 'completed' ? cents(Math.max(0, sale.totalPrice - (sale.returnedTotal || 0))) : 0;
 }
 

@@ -32,7 +32,10 @@ export interface SalesWindowStats {
 }
 
 export function salesWindowStats(sales: SaleRecord[], windowDays = 30): SalesWindowStats {
-  const cutoffKey = colombiaDateKey(new Date(Date.now() - windowDays * DAY_MS));
+  // La ventana incluye el día de hoy: con 30 días, la serie va de hace 29
+  // días hasta hoy. Antes el corte quedaba en hace 30 días y las ventas de hoy
+  // se descartaban de la serie diaria (demanda, stock de seguridad y XYZ).
+  const cutoffKey = colombiaDateKey(new Date(Date.now() - (windowDays - 1) * DAY_MS));
   const cutoffTime = Date.parse(`${cutoffKey}T00:00:00Z`);
   const singles = new Map<string, number>();
   const pairs = new Map<string, number>();

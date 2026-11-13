@@ -19,7 +19,7 @@ export interface ForecastSale {
   date: string;
   totalPrice: number;
   returnedTotal?: number;
-  status: 'completed' | 'pending' | 'cancelled';
+  status: string;
 }
 
 export interface DailyRevenue {

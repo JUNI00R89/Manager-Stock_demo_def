@@ -1,0 +1,305 @@
+/* ── Diseño editorial ────────────────────────────────────────────────────────
+   Se activa con <html data-design="editorial">. El modo clásico no se toca:
+   todas las reglas viven bajo ese atributo y, al quitarlo, la interfaz vuelve
+   exactamente al diseño original.
+
+   La idea es la misma de /design-preview: líneas finas, superficies planas,
+   radios pequeños, jerarquía tipográfica y cero cristal, sombras o cascadas. */
+
+html[data-design="editorial"] {
+  /* Radios compactos: las utilidades rounded-* usan estas variables. */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+  --radius-2xl: 10px;
+  --radius-3xl: 12px;
+  --radius-4xl: 14px;
+
+  /* Satoshi para titulares, Inter para lectura. */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Satoshi', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* Sin elevación ni vidrio. */
+  --app-shadow-card: none;
+  --app-shadow-card-hover: none;
+  --app-shadow-chrome: none;
+  --shadow-2xs: 0 0 #0000;
+  --shadow-xs: 0 0 #0000;
+  --shadow-sm: 0 0 #0000;
+  --shadow-md: 0 0 #0000;
+  --shadow-lg: 0 0 #0000;
+  --shadow-xl: 0 0 #0000;
+  --shadow-2xl: 0 0 #0000;
+
+  --nav-active-bg: color-mix(in srgb, var(--brand-primary) 9%, transparent);
+  --nav-active-fg: color-mix(in srgb, var(--brand-primary) 82%, var(--foreground));
+  --nav-active-border: transparent;
+  --nav-active-shadow: none;
+
+  --editorial-line: color-mix(in srgb, var(--foreground) 13%, transparent);
+  --editorial-line-strong: color-mix(in srgb, var(--foreground) 21%, transparent);
+  --editorial-muted: color-mix(in srgb, var(--foreground) 62%, transparent);
+}
+
+html[data-design="editorial"] body {
+  font-family: var(--font-sans);
+  background: var(--background);
+}
+
+html[data-design="editorial"] :is(h1, h2, h3, h4) {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+html[data-design="editorial"] h1 { letter-spacing: -0.04em; }
+html[data-design="editorial"] h3 { letter-spacing: -0.018em; }
+html[data-design="editorial"] h4 { letter-spacing: -0.012em; }
+
+/* Tailwind compila los radios y las sombras con valores fijos por el
+   `@theme inline` del proyecto. Se normalizan aquí para que toda la interfaz
+   comparta la misma escala editorial. */
+html[data-design="editorial"] :where(
+  .rounded-sm, .rounded, .rounded-md, .rounded-lg, .rounded-xl
+) {
+  border-radius: 6px;
+}
+
+html[data-design="editorial"] :where(.rounded-2xl, .rounded-3xl, .rounded-4xl) {
+  border-radius: 10px;
+}
+
+/* Radios arbitrarios de las portadas públicas. */
+html[data-design="editorial"] :is([class~="rounded-[2rem]"], [class~="rounded-[1.7rem]"]) {
+  border-radius: 12px;
+}
+
+html[data-design="editorial"] :is([class*="shadow-["]) {
+  box-shadow: none !important;
+}
+
+html[data-design="editorial"] :where(
+  .shadow-2xs, .shadow-xs, .shadow-sm, .shadow, .shadow-md,
+  .shadow-lg, .shadow-xl, .shadow-2xl
+) {
+  box-shadow: none !important;
+}
+
+html[data-design="editorial"] :where(
+  .backdrop-blur-xs, .backdrop-blur-sm, .backdrop-blur, .backdrop-blur-md,
+  .backdrop-blur-lg, .backdrop-blur-xl, .backdrop-blur-2xl, .backdrop-blur-3xl
+) {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* ── Marco ─────────────────────────────────────────────────────────────────── */
+
+html[data-design="editorial"] .app-shell {
+  background: var(--brand-background) !important;
+}
+
+html[data-design="editorial"] .app-sidebar {
+  margin: 0 !important;
+  border: 0 !important;
+  border-right: 1px solid var(--editorial-line) !important;
+  border-radius: 0 !important;
+  background: var(--brand-surface) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html[data-design="editorial"] .app-header {
+  margin: 0 !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--editorial-line) !important;
+  border-radius: 0 !important;
+  background: var(--brand-surface) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html[data-design="editorial"] .app-mobile-nav {
+  border-top: 1px solid var(--editorial-line) !important;
+  border-radius: 0 !important;
+  background: var(--brand-surface) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html[data-design="editorial"] .app-nav-indicator {
+  border: 0 !important;
+  border-left: 2px solid var(--brand-primary) !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html[data-design="editorial"] .app-sidebar :is(nav a, nav button, button) {
+  border-radius: 4px !important;
+}
+
+html[data-design="editorial"] .app-mobile-nav :is(a, button) {
+  border-radius: 0 !important;
+}
+
+/* Marca de la barra lateral: sello plano, sin degradado ni círculo. */
+html[data-design="editorial"] .app-brand-mark {
+  border-radius: 4px !important;
+  background: var(--brand-primary) !important;
+  background-image: none !important;
+}
+
+/* Los controles del header dejan de ser píldoras. */
+html[data-design="editorial"] .app-header .rounded-full {
+  border-radius: 6px !important;
+}
+
+/* ── Superficies ───────────────────────────────────────────────────────────── */
+
+html[data-design="editorial"] [data-slot="card"] {
+  border: 1px solid var(--editorial-line) !important;
+  border-radius: 10px !important;
+  background: var(--brand-surface) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  transition: none !important;
+  animation: none !important;
+}
+
+html[data-design="editorial"] [data-slot="card"]:hover {
+  border-color: var(--editorial-line-strong) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+/* Las tarjetas anidadas se distinguen con una línea, no con otra sombra. */
+html[data-design="editorial"] [data-slot="card"] [data-slot="card"] {
+  border-color: var(--editorial-line) !important;
+  background: color-mix(in srgb, var(--foreground) 2.5%, transparent) !important;
+}
+
+html[data-design="editorial"] [data-slot="card-header"],
+html[data-design="editorial"] [data-slot="card-footer"] {
+  border-color: var(--editorial-line) !important;
+}
+
+/* ── Controles ─────────────────────────────────────────────────────────────── */
+
+html[data-design="editorial"] [data-slot="button"]:not(.rounded-full) {
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  background-image: none !important;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+}
+
+html[data-design="editorial"] [data-slot="button"]:not(.rounded-full):active {
+  transform: translateY(1px);
+}
+
+html[data-design="editorial"] [data-slot="badge"] {
+  border-radius: 4px !important;
+  box-shadow: none !important;
+  background-image: none !important;
+  font-weight: 600;
+  letter-spacing: 0.015em;
+}
+
+html[data-design="editorial"] :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"], input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea) {
+  border-radius: 6px !important;
+  box-shadow: none !important;
+}
+
+html[data-design="editorial"] [data-slot="checkbox"],
+html[data-design="editorial"] [data-slot="switch"] {
+  border-radius: 4px !important;
+  box-shadow: none !important;
+}
+
+html[data-design="editorial"] [data-slot="switch"] {
+  border-radius: 999px !important;
+}
+
+/* ── Datos ─────────────────────────────────────────────────────────────────── */
+
+html[data-design="editorial"] table {
+  border-collapse: collapse;
+}
+
+html[data-design="editorial"] thead {
+  border-bottom: 1px solid var(--editorial-line-strong);
+}
+
+html[data-design="editorial"] th {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--editorial-muted);
+}
+
+html[data-design="editorial"] :is(td, th) {
+  border-color: var(--editorial-line);
+}
+
+html[data-design="editorial"] hr,
+html[data-design="editorial"] [data-slot="separator"] {
+  background: var(--editorial-line) !important;
+}
+
+/* ── Capas flotantes ───────────────────────────────────────────────────────── */
+
+html[data-design="editorial"] :is(
+  [data-slot="dialog-content"],
+  [data-slot="alert-dialog-content"],
+  [data-slot="popover-content"],
+  [data-slot="dropdown-menu-content"],
+  [data-slot="select-content"],
+  [data-slot="context-menu-content"],
+  [data-slot="command"]
+) {
+  border: 1px solid var(--editorial-line) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 24px 56px -38px rgba(0, 0, 0, 0.55) !important;
+}
+
+html[data-design="editorial"] :is(
+  [data-slot="dialog-overlay"],
+  [data-slot="alert-dialog-overlay"]
+) {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background: rgba(8, 11, 16, 0.48) !important;
+}
+
+html[data-design="editorial"] [data-sonner-toast] {
+  border-radius: 8px !important;
+  box-shadow: 0 18px 42px -32px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* ── Movimiento ────────────────────────────────────────────────────────────── */
+
+html[data-design="editorial"] [data-slot="card"],
+html[data-design="editorial"] .stagger-in > *,
+html[data-design="editorial"] .pop-in,
+html[data-design="editorial"] .bar-fill {
+  animation: none !important;
+}
+
+html[data-design="editorial"] .design-preview [data-slot="card"] {
+  border-radius: 10px !important;
+}
+
+/* En móvil el contenido respira igual que en la referencia. */
+@media (max-width: 639px) {
+  html[data-design="editorial"] .app-header {
+    height: 3.25rem;
+  }
+}

@@ -53,6 +53,7 @@ const PlatformAdmin = lazy(() => import('./pages/PlatformAdmin').then(module => 
 const SuspendedBusiness = lazy(() => import('./pages/SuspendedBusiness').then(module => ({ default: module.SuspendedBusiness })));
 const LandingPage = lazy(() => import('./pages/LandingPage').then(module => ({ default: module.LandingPage })));
 const Downloads = lazy(() => import('./pages/Downloads').then(module => ({ default: module.Downloads })));
+const DesignPreview = lazy(() => import('./pages/DesignPreview').then(module => ({ default: module.DesignPreview })));
 import { AppShell } from './components/AppShell';
 
 function Waiting() {
@@ -136,6 +137,7 @@ export const router = createBrowserRouter([
     errorElement: <RouteErrorFallback />,
     children: [
       { path: 'dashboard', element: <Dashboard /> },
+      { path: 'design-preview', element: <DesignPreview /> },
       { path: 'pos', element: <POS /> },
       { path: 'sales', element: <Sales /> },
       { path: 'sales/new', element: <NewSale /> },
