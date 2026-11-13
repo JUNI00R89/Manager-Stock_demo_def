@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import unicodedata
 
@@ -90,3 +91,18 @@ def insert_product(conn: sqlite3.Connection, payload, product_id: str, image: st
             unit_cost=payload.cost, lot_id=lot_id, location_id=payload.defaultLocationId,
         )
     audit(conn, "create", "product", product_id, {"sku": payload.sku})
+
+
+def sku_prefix(category: str) -> str:
+    """First 3 letters of the category, without accents: "Lácteos" -> "LAC"; no letters -> "PRD"."""
+    letters = "".join(ch for ch in unicodedata.normalize("NFD", category) if ch.isascii() and ch.isalpha())
+    return letters[:3].upper() or "PRD"
+
+
+def next_sku(conn: sqlite3.Connection, business_id: str, category: str, reserved: frozenset[str] | set[str] = frozenset()) -> str:
+    """Next free code for the category, after the highest existing number (typed or generated)."""
+    prefix = sku_prefix(category)
+    pattern = re.compile(rf"^{prefix}-(\d+)$")
+    existing = [row["sku"] for row in conn.execute("SELECT sku FROM products WHERE business_id=? AND sku LIKE ?", (business_id, f"{prefix}-%"))]
+    numbers = [int(match.group(1)) for sku in [*existing, *reserved] if (match := pattern.match(sku))]
+    return f"{prefix}-{max(numbers, default=0) + 1:04d}"

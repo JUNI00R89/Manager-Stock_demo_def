@@ -29,7 +29,7 @@ class PlatformCreateUserPayload(BaseModel):
 
 class ProductPayload(BaseModel):
     name: str = Field(min_length=2, max_length=120)
-    sku: str = Field(min_length=2, max_length=60)
+    sku: str = Field(default="", max_length=60)  # empty: the server generates one
     category: str = Field(min_length=2, max_length=80)
     price: float = Field(ge=0)
     stock: float = Field(ge=0)
@@ -47,7 +47,10 @@ class ProductPayload(BaseModel):
     @field_validator("sku")
     @classmethod
     def normalize_sku(cls, value: str):
-        return value.strip().upper()
+        value = value.strip().upper()
+        if len(value) == 1:
+            raise ValueError("El código debe tener entre 2 y 60 caracteres.")
+        return value
 
     @field_validator("name", "category", "unit")
     @classmethod

@@ -14,7 +14,7 @@ from backend.core.config import UPLOADS_DIR
 from backend.core.context import current_business_id, current_identity
 from backend.core.db import audit, connection, timestamp_iso
 from backend.schemas import ProductCategoryPayload, ProductImagePayload, ProductImportPayload, ProductPayload
-from backend.services.catalog import ensure_product_category, insert_product, normalize_category_name, product_category_options, product_out
+from backend.services.catalog import ensure_product_category, insert_product, next_sku, normalize_category_name, product_category_options, product_out
 from backend.services.product_import import ImportFileError, build_template, decode_data_url, read_rows, row_to_payload
 from backend.services.inventory import add_product_stock, allows_negative_stock, consume_product_stock, get_or_create_lot, insert_movement
 from backend.services.subscriptions import subscription_for_business
@@ -97,6 +97,8 @@ def create_product(payload: ProductPayload):
                 raise HTTPException(422, "La ubicación seleccionada no pertenece a este negocio.")
         try:
             conn.execute("BEGIN IMMEDIATE")
+            if not payload.sku:
+                payload = payload.model_copy(update={"sku": next_sku(conn, current_business_id(), payload.category)})
             insert_product(conn, payload, product_id, client_image_key(payload.image))
             conn.commit()
         except sqlite3.IntegrityError as exc:
@@ -206,6 +208,8 @@ def update_product(product_id: str, payload: ProductPayload):
             old = conn.execute("SELECT * FROM products WHERE id=? AND business_id=? AND active=1", (product_id, current_business_id())).fetchone()
             if not old:
                 raise HTTPException(404, "Producto no encontrado.")
+            if not payload.sku:
+                payload = payload.model_copy(update={"sku": old["sku"]})  # cleared field keeps the current code
             ensure_product_category(conn, current_business_id(), payload.category, allow_existing=(payload.category == old["category"]))
             delta = round(payload.stock - float(old["stock"] or 0), 6)
             conn.execute(
