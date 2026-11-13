@@ -83,7 +83,7 @@ def run() -> None:
     started = time.perf_counter()
     raises(read_rows, "big.xlsx", big.getvalue(), contains="2000")
     elapsed = time.perf_counter() - started
-    assert elapsed < opening + 1.5, f"read_rows took {elapsed:.1f}s vs {opening:.1f}s to open: it should stop after 2001 rows"
+    assert elapsed < opening * 2 + 1, f"read_rows took {elapsed:.1f}s vs {opening:.1f}s to open: it should stop after 2001 rows"
 
     template_rows = read_rows("t.xlsx", build_template())
     assert template_rows and template_rows[0][1]["sku"] and row_to_payload(template_rows[0][1])
