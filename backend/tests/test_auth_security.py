@@ -1,6 +1,7 @@
 """Login/register rate limiting and CORS origin policy on a disposable SQLite DB."""
 from __future__ import annotations
 
+import hashlib
 import os
 import sys
 import tempfile
@@ -122,15 +123,36 @@ def check_lan_regex() -> None:
         assert not lan.match(bad), bad
 
 
+def check_expired_session_purge(client: TestClient) -> None:
+    from backend.core.db import connection
+    from backend.core.security import purge_expired_sessions
+
+    rate_limit.reset_all()
+    assert client.post("/api/auth/register", json={"name": "Dueña Sesiones", "email": "sesiones@test.local", "password": PASSWORD}).status_code == 201
+    live = login(client, "sesiones@test.local", PASSWORD).json()["access_token"]
+    stale = login(client, "sesiones@test.local", PASSWORD).json()["access_token"]
+    stale_hash = hashlib.sha256(stale.encode("utf-8")).hexdigest()
+    with connection() as conn:
+        conn.execute("UPDATE auth_sessions SET expires_at=? WHERE token_hash=?", ("2000-01-01T00:00:00+00:00", stale_hash))
+        before = conn.execute("SELECT count(*) FROM auth_sessions").fetchone()[0]
+    assert purge_expired_sessions() >= 1
+    with connection() as conn:
+        assert conn.execute("SELECT 1 FROM auth_sessions WHERE token_hash=?", (stale_hash,)).fetchone() is None
+        assert conn.execute("SELECT count(*) FROM auth_sessions").fetchone()[0] < before
+    assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {live}"}).status_code == 200, "a live session must survive the purge"
+    assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {stale}"}).status_code == 401
+
+
 def run() -> None:
     with TestClient(app) as client:
         check_login_limits(client)
         check_concurrent_logins(client)
         check_register_limit(client)
         check_cors(client)
+        check_expired_session_purge(client)
     check_lan_regex()
     check_key_sweep()
-    print("OK: login rate limit (email/IP, reset on success, 429 + Retry-After, atomic under concurrency), key sweep, register limit, CORS loopback-only and LAN opt-in.")
+    print("OK: login rate limit (email/IP, reset on success, 429 + Retry-After, atomic under concurrency), key sweep, register limit, CORS loopback-only and LAN opt-in, expired-session purge.")
     TEMP.cleanup()
 
 

@@ -186,6 +186,20 @@ def init_database() -> None:
                 expires_at TEXT,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
+            -- Un registro por cobro verificado. La referencia es única para que el mismo
+            -- pago (p. ej. un cobro mensual de Mercado Pago) no pueda sumar días dos veces.
+            CREATE TABLE IF NOT EXISTS subscription_payments (
+                id TEXT PRIMARY KEY,
+                business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+                plan_id TEXT NOT NULL,
+                amount_cop INTEGER NOT NULL,
+                payment_reference TEXT NOT NULL UNIQUE,
+                period_start TEXT NOT NULL,
+                period_end TEXT NOT NULL,
+                recorded_by TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_subscription_payments_business ON subscription_payments(business_id,created_at DESC);
         """)
         user_columns = {row["name"] for row in conn.execute("PRAGMA table_info(auth_users)").fetchall()}
         if "custom_role_id" not in user_columns:

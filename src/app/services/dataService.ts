@@ -820,7 +820,8 @@ export async function updateServiceAppointmentStatus(id: string, status: Service
   return api<ServiceAppointmentRecord>(`/services/appointments/${encodeURIComponent(id)}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
 }
 
-export interface SubscriptionPlanRecord { id: 'free' | 'entrepreneur' | 'business' | 'enterprise'; name: string; priceCOP: number; maxUsers: number; maxProducts: number; }
+/** paymentUrl: link de suscripción del proveedor (Mercado Pago); null mientras no esté configurado. */
+export interface SubscriptionPlanRecord { id: 'free' | 'entrepreneur' | 'business' | 'enterprise'; name: string; priceCOP: number; maxUsers: number; maxProducts: number; paymentUrl?: string | null; }
 export interface BusinessSubscriptionRecord { businessId: string; plan: SubscriptionPlanRecord; status: 'active' | 'pending_payment' | 'expired' | 'cancelled'; pendingPlan: SubscriptionPlanRecord | null; startedAt: string | null; expiresAt: string | null; updatedAt: string | null; }
 export async function getSubscriptionPlans() {
   if (isDesktopMode()) return desktop.subscription.plans();
@@ -835,14 +836,18 @@ export async function selectSubscriptionPlan(planId: SubscriptionPlanRecord['id'
   return api<BusinessSubscriptionRecord>('/subscription', { method: 'PUT', body: JSON.stringify({ planId }) });
 }
 
-export interface PlatformSubscriptionRecord extends BusinessSubscriptionRecord { businessName: string; }
+export interface SubscriptionPaymentRecord { planId: SubscriptionPlanRecord['id']; amountCOP: number; paymentReference: string; periodStart: string; periodEnd: string; createdAt: string | null; }
+export interface PlatformSubscriptionRecord extends BusinessSubscriptionRecord { businessName: string; lastPayment?: SubscriptionPaymentRecord | null; }
+/** confirm_payment: activa la solicitud pendiente. renew: registra el cobro de un periodo sin solicitud. */
+export type PlatformSubscriptionAction = 'confirm_payment' | 'renew' | 'cancel_request';
+export type PaidPlanId = Exclude<SubscriptionPlanRecord['id'], 'free'>;
 export async function getPlatformSubscriptions() {
   if (isDesktopMode()) return desktop.platform.subscriptions();
   return api<PlatformSubscriptionRecord[]>('/platform/subscriptions');
 }
-export async function updatePlatformSubscription(businessId: string, action: 'confirm_payment' | 'cancel_request', paymentReference?: string) {
-  if (isDesktopMode()) return desktop.platform.updateSubscription(businessId, action, paymentReference);
-  return api<BusinessSubscriptionRecord>(`/platform/subscriptions/${encodeURIComponent(businessId)}`, { method: 'PATCH', body: JSON.stringify({ action, paymentReference }) });
+export async function updatePlatformSubscription(businessId: string, action: PlatformSubscriptionAction, paymentReference?: string, planId?: PaidPlanId) {
+  if (isDesktopMode()) return desktop.platform.updateSubscription(businessId, action, paymentReference, planId);
+  return api<BusinessSubscriptionRecord>(`/platform/subscriptions/${encodeURIComponent(businessId)}`, { method: 'PATCH', body: JSON.stringify({ action, paymentReference, planId }) });
 }
 
 export async function getPlatformStats() {

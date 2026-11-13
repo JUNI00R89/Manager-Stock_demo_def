@@ -10,7 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from backend.main import SCHEMA_PATH, connection, hash_password, startup  # noqa: E402
+from backend.main import connection, hash_password, prepare_database  # noqa: E402
 
 
 def main() -> int:
@@ -32,7 +32,7 @@ def main() -> int:
         print(f"ERROR: {exc}")
         return 1
 
-    startup()  # Initialize schema and migrations before inserting the platform account.
+    prepare_database()  # Crea el esquema y las migraciones antes de insertar la cuenta de plataforma.
     user_id = "SA-" + __import__("secrets").token_hex(8).upper()
     try:
         with connection() as conn:

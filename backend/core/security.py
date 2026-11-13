@@ -109,3 +109,13 @@ def issue_session(conn: sqlite3.Connection, user_id: str) -> str:
     expires = (datetime.now(timezone.utc) + timedelta(hours=12)).isoformat(timespec="seconds")
     conn.execute("INSERT INTO auth_sessions (token_hash,user_id,expires_at) VALUES (?,?,?)", (token_hash, user_id, expires))
     return token
+
+
+def purge_expired_sessions() -> int:
+    """Borra las sesiones vencidas; el middleware ya las rechaza, pero sin esto la tabla crece sin límite.
+
+    Usa el mismo formato ISO-UTC que issue_session y la comparación del middleware.
+    """
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with connection() as conn:
+        return conn.execute("DELETE FROM auth_sessions WHERE expires_at<=?", (now,)).rowcount

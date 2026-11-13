@@ -34,6 +34,20 @@ SUBSCRIPTION_PLANS = {
 }
 
 
+# --- Links de pago de las suscripciones (Mercado Pago) ----------------------
+# PENDIENTE: pega aquí el link de suscripción de cada plan cuando lo tengas,
+# entre las comillas. Mientras un link esté vacío, la app no muestra el botón de
+# pago de ese plan y el propietario solo registra la solicitud.
+# Solo se aceptan links https://; cualquier otro valor se ignora.
+# También se pueden definir sin tocar el código con las variables de entorno
+# MANAGER_STOCK_PAYMENT_LINK_ENTREPRENEUR / _BUSINESS / _ENTERPRISE.
+SUBSCRIPTION_PAYMENT_LINKS = {
+    "entrepreneur": os.getenv("MANAGER_STOCK_PAYMENT_LINK_ENTREPRENEUR", ""),  # Manager Stock · Emprendedor ($39.900)
+    "business": os.getenv("MANAGER_STOCK_PAYMENT_LINK_BUSINESS", ""),          # Manager Stock · Negocio ($79.900)
+    "enterprise": os.getenv("MANAGER_STOCK_PAYMENT_LINK_ENTERPRISE", ""),      # Manager Stock · Empresarial ($149.900)
+}
+
+
 DEFAULT_CATEGORY_PRESETS: dict[str, list[str]] = {
     "retail": ["Bebidas", "Alimentos", "Aseo", "Accesorios", "Tecnología", "Ropa", "Otros"],
     "food": ["Comidas rápidas", "Hamburguesas", "Salchipapas", "Empanadas", "Almuerzos", "Bebidas", "Postres", "Adicionales", "Otros"],
