@@ -12,7 +12,7 @@ import { useAuth } from '../context/AuthContext';
 import {
   createPlatformUser, getPlatformAudit, getPlatformBusinesses, getPlatformStats, getPlatformSubscriptions,
   getPlatformSupportCases, getPlatformUsers, setPlatformBusinessStatus, setPlatformUserStatus,
-  updatePlatformSubscription, type PlatformAuditRecord, type PlatformSubscriptionRecord, type PlatformUserRecord,
+  updatePlatformSubscription, type PlatformAuditRecord, type PlatformSubscriptionAction, type PlatformSubscriptionRecord, type PlatformUserRecord,
   type SupportCaseRecord,
 } from '../services/dataService';
 import { Button } from '../components/ui/button';
@@ -23,6 +23,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { ConfirmActionDialog } from '../components/ConfirmActionDialog';
 import { Card } from '../components/ui/card';
 import { SupportCenter } from '../components/SupportCenter';
+import { formatMoney as money } from '../utils/restaurantFormat';
 
 interface PlatformStats {
   businesses: number; activeBusinesses: number; users: number; activeUsers: number; completedSales: number; salesVolumeCOP: number;
@@ -91,6 +92,7 @@ const AUDIT_ACTION_LABELS: Record<string, string> = {
   create_user: 'Usuario creado',
   subscription_payment_pending: 'Solicitud de plan registrada',
   subscription_payment_manually_verified: 'Pago verificado y plan activado',
+  subscription_renewed: 'Pago del mes registrado',
   subscription_request_cancelled: 'Solicitud de suscripción cancelada',
   support_reply: 'Respuesta de soporte',
   support_case_status: 'Estado de caso actualizado',
@@ -111,8 +113,6 @@ const DETAIL_LABELS: Record<string, string> = {
   verificationMode: 'Verificación',
 };
 
-const copFormatter = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
-const money = (value: number) => copFormatter.format(value || 0);
 const plural = (count: number, singular: string, pluralForm: string) => `${count} ${count === 1 ? singular : pluralForm}`;
 
 function isTabId(value: string | null): value is TabId {
@@ -127,6 +127,10 @@ function parseDateValue(value?: string | null): Date | null {
   if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(normalized)) normalized += 'Z';
   const date = new Date(normalized);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function planName(planId?: string | null) {
+  return (planId && PLAN_NAMES[planId]) || 'Plan anterior';
 }
 
 function formatDate(value?: string | null) {
@@ -477,7 +481,8 @@ export function PlatformAdmin() {
   useEffect(() => { setAuditPage(1); }, [auditSearch, auditAction]);
 
   const pendingSubscriptions = useMemo(() => subscriptions.filter(item => item.status === 'pending_payment'), [subscriptions]);
-  const activePaidSubscriptions = useMemo(() => subscriptions.filter(item => item.status === 'active' && item.plan.priceCOP > 0), [subscriptions]);
+  // Una renovación pendiente conserva su plan pagado vigente, así que también cuenta como ingreso recurrente.
+  const activePaidSubscriptions = useMemo(() => subscriptions.filter(item => (item.status === 'active' || item.status === 'pending_payment') && item.plan.priceCOP > 0), [subscriptions]);
   const openSupportCases = useMemo(() => supportCases.filter(item => !['resolved', 'closed'].includes(item.status)), [supportCases]);
   const suspendedBusinesses = useMemo(() => businesses.filter(item => !item.active).length, [businesses]);
   const mrr = useMemo(() => activePaidSubscriptions.reduce((total, item) => total + item.plan.priceCOP, 0), [activePaidSubscriptions]);
@@ -578,16 +583,19 @@ export function PlatformAdmin() {
     }
   };
 
-  const handleSubscriptionAction = async (subscription: PlatformSubscriptionRecord, action: 'confirm_payment' | 'cancel_request') => {
+  const handleSubscriptionAction = async (subscription: PlatformSubscriptionRecord, action: PlatformSubscriptionAction) => {
     const reference = (paymentRefs[subscription.businessId] || '').trim();
-    if (action === 'confirm_payment' && reference.length < 4) {
+    if (action !== 'cancel_request' && reference.length < 4) {
       toast.error('Introduce la referencia del pago verificado (mínimo 4 caracteres).');
       return;
     }
     setSubscriptionBusyId(subscription.businessId);
     try {
-      await updatePlatformSubscription(subscription.businessId, action, reference);
-      toast.success(action === 'confirm_payment' ? 'Plan activado tras registrar la verificación manual del pago.' : 'Solicitud de suscripción cancelada.');
+      const updated = await updatePlatformSubscription(subscription.businessId, action, reference);
+      const until = updated.expiresAt ? ` Vigente hasta ${formatDate(updated.expiresAt)}.` : '';
+      toast.success(action === 'cancel_request'
+        ? 'Solicitud de suscripción cancelada. El plan vigente no cambia.'
+        : `${action === 'renew' ? 'Pago del mes registrado.' : 'Pago verificado y plan activado.'}${until}`);
       setPaymentRefs(current => {
         const next = { ...current };
         delete next[subscription.businessId];
@@ -1055,7 +1063,7 @@ export function PlatformAdmin() {
                           </div>
                           <div className="rounded-xl bg-slate-50 p-3">
                             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Vigencia</p>
-                            <p className="mt-1 font-semibold text-slate-800">{subscription.expiresAt ? `Vence ${formatDate(subscription.expiresAt)}` : subscription.plan.priceCOP === 0 ? 'Sin vencimiento' : 'Sin fecha de vencimiento'}</p>
+                            <p className="mt-1 font-semibold text-slate-800">{subscription.expiresAt ? `${Date.parse(subscription.expiresAt) < Date.now() ? 'Venció' : 'Vence'} ${formatDate(subscription.expiresAt)}` : subscription.plan.priceCOP === 0 ? 'Sin vencimiento' : 'Sin fecha de vencimiento'}</p>
                             <p className="mt-1 text-xs text-slate-500">{subscription.startedAt ? `Inicio ${formatDate(subscription.startedAt)}` : 'Sin fecha de inicio'}</p>
                           </div>
                         </div>
@@ -1076,9 +1084,37 @@ export function PlatformAdmin() {
                               <Button size="sm" variant="outline" disabled={isBusy} onClick={() => void handleSubscriptionAction(subscription, 'cancel_request')} className="rounded-lg">Cancelar solicitud</Button>
                             </div>
                           </div>
+                        ) : subscription.plan.priceCOP > 0 || subscription.lastPayment ? (
+                          // Cobro mensual: el proveedor cobra solo; aquí se registra cada cobro verificado.
+                          <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/60 p-4">
+                            <p className="text-sm font-semibold text-indigo-950">
+                              Registrar pago del mes · {subscription.plan.priceCOP > 0 ? subscription.plan.name : `${planName(subscription.lastPayment?.planId)} (vencido)`}
+                            </p>
+                            <p className="mt-1 text-xs leading-5 text-indigo-900/80">
+                              {subscription.plan.priceCOP > 0 && subscription.expiresAt
+                                ? `Suma 30 días a partir del vencimiento (${formatDate(subscription.expiresAt)}).`
+                                : 'El plan venció: se reactiva por 30 días a partir de hoy.'}
+                            </p>
+                            {subscription.lastPayment && (
+                              <p className="mt-1 text-xs text-indigo-900/70">
+                                Último pago: {subscription.lastPayment.paymentReference} · {money(subscription.lastPayment.amountCOP)} · cubre hasta {formatDate(subscription.lastPayment.periodEnd)}
+                              </p>
+                            )}
+                            <label className="mt-3 block space-y-1.5 text-xs font-medium text-indigo-950">
+                              <span>Referencia del cobro verificado</span>
+                              <Input value={paymentRefs[subscription.businessId] || ''} onChange={event => setPaymentRefs(current => ({ ...current, [subscription.businessId]: event.target.value }))} placeholder="N.º de operación de Mercado Pago u otro comprobante" maxLength={120} className="h-10 rounded-xl border-indigo-100 bg-white" />
+                            </label>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <Button size="sm" disabled={isBusy} onClick={() => void handleSubscriptionAction(subscription, 'renew')} className="rounded-lg bg-indigo-700 text-white hover:bg-indigo-800">
+                                {isBusy ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                                Registrar pago del mes
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => setBusinessDetailId(subscription.businessId)} className="rounded-lg text-indigo-700">Ver ficha</Button>
+                            </div>
+                          </div>
                         ) : (
                           <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5">
-                            <p className="text-xs text-slate-500">{subscription.plan.priceCOP === 0 ? 'Plan gratuito sin cobro recurrente.' : 'Sin solicitudes pendientes.'}</p>
+                            <p className="text-xs text-slate-500">Plan gratuito sin cobro recurrente.</p>
                             <Button size="sm" variant="ghost" onClick={() => setBusinessDetailId(subscription.businessId)} className="shrink-0 rounded-lg text-indigo-700">Ver ficha</Button>
                           </div>
                         )}

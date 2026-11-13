@@ -26,6 +26,7 @@ def run():
         assert c.patch(f'/api/orders/{oid}/status?status=preparing&expectedStatus=received&actorId=second', headers=food).status_code == 409
         assert 'Cocinero' in c.get(f'/api/orders/{oid}', headers=food).json()['restaurant_metadata']
         assert c.patch(f'/api/orders/{oid}/status?status=ready&expectedStatus=preparing', headers=food).status_code == 200
+        assert c.post('/api/cash/sessions', headers=food, json={'openingAmount': 0}).status_code == 201  # cash needs an open shift
         sale = c.post('/api/sales', headers=food, json={'idempotencyKey': 'restaurant-order-' + oid, 'orderIds': [oid]}).json()
         assert sale['totalPrice'] == 2000
         assert c.get('/api/products', headers=food).json()[0]['stock'] == 8

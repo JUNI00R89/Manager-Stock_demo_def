@@ -7,9 +7,10 @@ import { Label } from '../../components/ui/label';
 import { ConfirmActionDialog } from '../../components/ConfirmActionDialog';
 import { useAuth } from '../../context/AuthContext';
 import { addHotelCharge, cancelHotelCharge, getHotelAccount, getHotelProducts, type HotelAccount, type HotelChargeInput, type HotelChargeRecord, type HotelReservationRecord } from '../../services/dataService';
-import type { Product } from '../../utils/mockData';
+import type { Product } from '../../utils/types';
 
 import { HotelPaymentsPanel } from './HotelPaymentsPanel';
+import { uniqueRestaurantId } from '../../utils/restaurantStorage';
 
 const money = (value: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 2 }).format(value);
 
@@ -49,7 +50,7 @@ export function HotelAccountDialog({ reservations, initialId, onClose, onSaved }
 
   const add = async () => {
     if (submitting.current) return;
-    const input = pending || { productId, quantity: Number(quantity), note: note.trim(), idempotencyKey: crypto.randomUUID() };
+    const input = pending || { productId, quantity: Number(quantity), note: note.trim(), idempotencyKey:uniqueRestaurantId('hotel') };
     if (!input.productId || !Number.isFinite(input.quantity) || input.quantity <= 0) { setError('Selecciona un producto y una cantidad mayor que cero.'); return; }
     submitting.current = true; setBusy(true); setError('');
     try {

@@ -7,6 +7,8 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { Separator } from '../components/ui/separator';
+import { Switch } from '../components/ui/switch';
+import { imagesEnabled } from '../utils/productImage';
 import {
   Settings as SettingsIcon,
   Store,
@@ -40,6 +42,8 @@ export function Settings() {
     currency: config?.currency || 'COP'
   });
   const [themeDraft, setThemeDraft] = useState<BusinessTheme>(config?.theme ?? DEFAULT_BUSINESS_THEMES.retail);
+  const [showPhotos, setShowPhotos] = useState(imagesEnabled(config));
+  useEffect(() => { setShowPhotos(imagesEnabled(config)); }, [config?.features.productImages]);
 
   useEffect(() => {
     if (!config) return;
@@ -90,6 +94,7 @@ export function Settings() {
       taxRate: taxRate,
       currency: 'COP',
       theme: themeDraft,
+      features: { ...config.features, productImages: showPhotos },
     };
 
     setSaving(true);
@@ -338,6 +343,14 @@ export function Settings() {
                   placeholder="Nombre de tu negocio"
                 />
               </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-border p-4">
+              <div>
+                <Label htmlFor="show-product-photos" className="text-foreground">Mostrar fotos en el punto de venta</Label>
+                <p className="mt-1 text-xs text-muted-foreground">Las fotos de los productos aparecen en las tarjetas de POS, Mesero y Mesas. Los productos sin foto se ven igual.</p>
+              </div>
+              <Switch id="show-product-photos" checked={showPhotos} onCheckedChange={setShowPhotos} />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

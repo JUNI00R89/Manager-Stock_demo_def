@@ -14,10 +14,11 @@ import {
   CalendarDays, Clock, User,
   Scissors, Check, X
 } from 'lucide-react';
-import type { Cita, Profesional, Servicio } from '../../utils/mockData';
-import { deleteServiceAppointment, editServiceAppointment, getServiceAppointments, getServiceProfessionals, getServicesCatalog, updateServiceAppointmentStatus, type ServiceAppointmentRecord, type ServiceCatalogRecord, type ServiceProfessionalRecord } from '../../services/dataService';
+import type { Cita, Profesional, Servicio } from '../../utils/types';
+import { dataService, deleteServiceAppointment, editServiceAppointment, getServiceAppointments, getServiceProfessionals, getServicesCatalog, updateServiceAppointmentStatus, type ServiceAppointmentRecord, type ServiceCatalogRecord, type ServiceProfessionalRecord } from '../../services/dataService';
 import { toast } from 'sonner';
 import { toastError } from '../../utils/notifications';
+import { uniqueRestaurantId } from '../../utils/restaurantStorage';
 
 type ViewMode = 'semana' | 'dia';
 
@@ -60,7 +61,7 @@ export function Appointments() {
       const mappedServices: Servicio[] = serviceRows.map((v: ServiceCatalogRecord) => ({ id:v.id, nombre:v.nombre, duracion:v.duracion, precio:v.precio, categoria:v.categoria, color:v.color }));
       const mappedProfessionals: Profesional[] = professionalRows.map((v: ServiceProfessionalRecord) => ({ id:v.id, nombre:v.nombre, especialidad:v.especialidad, color:v.color, horario:v.horario.map(h => ({ dia:h.dia ?? 1, inicio:h.inicio ?? '09:00', fin:h.fin ?? '18:00' })) }));
       const statusMap: Record<ServiceAppointmentRecord['estado'], Cita['estado']> = { reserved:'reservada', confirmed:'confirmada', attended:'atendida', cancelled:'cancelada', no_show:'no_asistio' };
-      const mappedAppointments: Cita[] = appointmentRows.map((v: ServiceAppointmentRecord) => ({ id:v.id, clienteId:v.clienteId || '', clienteNombre:v.clienteNombre, clienteTelefono:v.clienteTelefono, clienteEmail:v.clienteEmail, servicioId:v.servicioId, servicioNombre:v.servicioNombre, profesionalId:v.profesionalId, profesionalNombre:v.profesionalNombre, fecha:v.fecha, horaInicio:v.horaInicio, horaFin:v.horaFin, estado:statusMap[v.estado], notas:v.notes }));
+      const mappedAppointments: Cita[] = appointmentRows.map((v: ServiceAppointmentRecord) => ({ id:v.id, clienteId:v.clienteId || '', clienteNombre:v.clienteNombre, clienteTelefono:v.clienteTelefono, clienteEmail:v.clienteEmail, servicioId:v.servicioId, servicioNombre:v.servicioNombre, profesionalId:v.profesionalId, profesionalNombre:v.profesionalNombre, fecha:v.fecha, horaInicio:v.horaInicio, horaFin:v.horaFin, estado:statusMap[v.estado], notas:v.notes, saleId:v.saleId }));
       setProfessionalRows(professionalRows); setAppointmentRows(appointmentRows); setServices(mappedServices); setProfessionals(mappedProfessionals); setCitas(mappedAppointments);
     } catch (error) { toastError(error, 'No se pudo cargar la agenda del negocio.'); }
     finally { setLoading(false); }
@@ -69,6 +70,18 @@ export function Appointments() {
   const setAppointmentStatus = async (appointment: Cita, status: ServiceAppointmentRecord['estado']) => {
     try { await updateServiceAppointmentStatus(appointment.id, status); toast.success(status === 'attended' ? 'Cita marcada como atendida.' : 'Estado de la cita actualizado.'); await load(); setSelectedCita(null); }
     catch (error) { toastError(error, 'No se pudo actualizar la cita.'); }
+  };
+  const [charging, setCharging] = useState(false);
+  const chargeAppointment = async (appointment: Cita, paymentMethod: 'cash' | 'card' | 'digital') => {
+    setCharging(true);
+    try {
+      // The server charges the booked price and rejects a second charge, so a fresh key per click is safe.
+      const session = await dataService.getCurrentCashSession();
+      const sale = await dataService.createSale({ items: [], appointmentIds: [appointment.id], customer: appointment.clienteNombre, paymentMethod, cashSessionId: session?.id, idempotencyKey: uniqueRestaurantId('cobro-cita') });
+      toast.success('Cita cobrada.', { description: `Venta ${sale.id}` });
+      await load(); setSelectedCita(null);
+    } catch (error) { toastError(error, 'No se pudo cobrar la cita.'); }
+    finally { setCharging(false); }
   };
 
   const beginEdit = (appointment: Cita) => {
@@ -292,9 +305,22 @@ export function Appointments() {
                     <X size={14} className="mr-1" /> Cancelar
                   </Button>
                 )}
+                {selectedCita.estado === 'atendida' && selectedCita.saleId && (
+                  <Badge className="flex-1 justify-center bg-green-100 text-green-800">Cobrada</Badge>
+                )}
                 <Button size="sm" variant="outline" className="flex-1" onClick={() => beginEdit(selectedCita)}>Editar</Button>
                 <Button size="sm" variant="outline" disabled={deletingCita} className="border-red-200 text-red-600" onClick={() => setConfirmDeleteCita(true)}>{deletingCita ? 'Eliminando…' : 'Eliminar'}</Button>
               </div>
+              {canManage && selectedCita.estado === 'atendida' && !selectedCita.saleId && (
+                <div className="mt-3 space-y-1">
+                  <p className="text-xs text-muted-foreground">{charging ? 'Cobrando…' : 'Cobrar cita con:'}</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {([['cash', 'Efectivo'], ['card', 'Tarjeta'], ['digital', 'Digital']] as const).map(([method, label]) => (
+                      <Button key={method} size="sm" disabled={charging} className="bg-green-600 text-white hover:bg-green-700" onClick={() => void chargeAppointment(selectedCita, method)}>{label}</Button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {confirmDeleteCita && <div role="alertdialog" aria-modal="true" aria-labelledby="confirm-delete-title" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 dark:bg-red-950/20"><h4 id="confirm-delete-title" className="font-semibold text-red-800 dark:text-red-200">¿Eliminar esta cita?</h4><p className="mt-1 text-sm text-red-700 dark:text-red-300">La cita se eliminará de forma permanente. Esta acción no se puede deshacer.</p><div className="mt-3 flex gap-2"><Button size="sm" variant="destructive" disabled={deletingCita} onClick={() => void removeAppointment()}>{deletingCita ? 'Eliminando…' : 'Sí, eliminar'}</Button><Button size="sm" variant="outline" disabled={deletingCita} onClick={() => setConfirmDeleteCita(false)}>Conservar cita</Button></div></div>}
               </>}
             </Card>

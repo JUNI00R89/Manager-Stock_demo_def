@@ -53,8 +53,10 @@ def returns_for_sale(conn, sale_id):
 
 
 def allocation(conn, sale):
-    rows = conn.execute('SELECT * FROM sale_items WHERE sale_id=? ORDER BY id', (sale['id'],)).fetchall()
+    rows = conn.execute('SELECT * FROM sale_items WHERE sale_id=? AND product_id IS NOT NULL ORDER BY id', (sale['id'],)).fetchall()
     service = conn.execute('SELECT line_total FROM service_sale_lines WHERE sale_id=?', (sale['id'],)).fetchone()
+    legacy = conn.execute('SELECT COALESCE(SUM(line_total),0) FROM sale_items WHERE sale_id=? AND product_id IS NULL', (sale['id'],)).fetchone()[0]
+    if legacy: service = {'line_total': (service['line_total'] if service else 0) + legacy}
     line_base = sum(Decimal(str(r['line_total'])) for r in rows) + (Decimal(str(service['line_total'])) if service else Decimal(0))
     remaining = cents(sale['total'])
     budgets = {}

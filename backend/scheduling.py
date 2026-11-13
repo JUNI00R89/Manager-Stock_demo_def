@@ -83,7 +83,7 @@ def check_slot(conn, professional, start: datetime, end: datetime, exclude_id=''
     if periods:
         weekday = (start.weekday() + 1) % 7  # Sunday=0, matching JS and existing stored schedules.
         if not any(p.get('dia') == weekday and p.get('inicio', '') <= start.strftime('%H:%M') and p.get('fin', '') >= occupied_end.strftime('%H:%M') for p in periods):
-            raise HTTPException(409, 'La cita queda fuera de la jornada o invade un descanso del profesional.')
+            raise HTTPException(422, 'La cita queda fuera de la jornada o invade un descanso del profesional.')
     appointments = conn.execute("SELECT * FROM service_appointments WHERE professional_id=? AND business_id=? AND appointment_date=? AND status IN ('reserved','confirmed','attended') AND id<>?", (professional['id'], core.current_business_id(), day, exclude_id)).fetchall()
     for appointment in appointments:
         existing_start = datetime.fromisoformat(day + 'T' + appointment['start_time'])

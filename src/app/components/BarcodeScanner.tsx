@@ -7,8 +7,9 @@ import {
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { motion, AnimatePresence } from 'motion/react';
-import { findProductByBarcode, mockCodigosBarras, type Product } from '../utils/mockData';
+import type { Product } from '../utils/types';
 import { toast } from 'sonner';
+import { formatMoney as money } from '../utils/restaurantFormat';
 
 type ScannerState = 'scanning' | 'detected' | 'not_found' | 'typing';
 type ScannerContext = 'pos' | 'receive' | 'count' | 'products';
@@ -254,9 +255,6 @@ export function BarcodeScanner({
   const camRef = useRef(cam);
   camRef.current = cam;
 
-  // Códigos de prueba para el modo de escritura
-  const DEMO_CODES = mockCodigosBarras.slice(0, 3).map(c => c.codigo);
-
   const processCode = useCallback((code: string) => {
     const trimmed = code.trim();
     if (!trimmed) return;
@@ -267,9 +265,8 @@ export function BarcodeScanner({
     lastScanRef.current = now;
 
     setScannedCode(trimmed);
-    // Primero busca en los productos reales del negocio (SKU o códigos de barras);
-    // si no aparece, recurre al catálogo demo local.
-    const product = products.find(p => p.sku?.toLowerCase() === trimmed.toLowerCase() || p.codigosBarras?.includes(trimmed)) || findProductByBarcode(trimmed);
+    // Solo productos reales del negocio: nunca el catálogo demo, que vendería productos inexistentes.
+    const product = products.find(p => p.barcode === trimmed || p.sku?.toLowerCase() === trimmed.toLowerCase() || p.codigosBarras?.includes(trimmed));
     beep();
     try { navigator.vibrate?.(60); } catch { /* sin vibración */ }
 
@@ -279,7 +276,7 @@ export function BarcodeScanner({
 
       if (mode === 'continuous' && context === 'pos') {
         onSell?.(product);
-        toast.success(`${product.name} añadido`, { description: `$${product.price.toFixed(2)}`, duration: 1500 });
+        toast.success(`${product.name} añadido`, { description: money(product.price), duration: 1500 });
         setTimeout(() => {
           setScannerState('scanning');
           setDetectedProduct(null);
@@ -662,18 +659,6 @@ export function BarcodeScanner({
                   <Search size={18} className="mr-2" />
                   Buscar producto
                 </Button>
-                <div className="flex flex-wrap gap-1 justify-center mt-2">
-                  {DEMO_CODES.slice(0, 3).map(code => (
-                    <button
-                      key={code}
-                      onClick={() => setTypingCode(code)}
-                      className="text-[11px] px-2 py-1.5 rounded bg-gray-700 text-gray-300 font-mono hover:bg-gray-600"
-                    >
-                      {code}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-center text-xs text-gray-500">Códigos de prueba</p>
                 {!live && cam !== 'checking' && cam !== 'starting' && (
                   <button
                     onClick={() => { setScannerState('scanning'); if (cam === 'ask') openCamera(facingMode); }}
@@ -794,7 +779,7 @@ export function BarcodeScanner({
                   <h3 className="text-white font-bold text-base leading-tight">{detectedProduct.name}</h3>
                   <p className="text-gray-400 text-sm">SKU: {detectedProduct.sku}</p>
                   <div className="flex items-center gap-3 mt-2">
-                    <span className="text-2xl font-bold text-orange-400">${detectedProduct.price.toFixed(2)}</span>
+                    <span className="text-2xl font-bold text-orange-400">{money(detectedProduct.price)}</span>
                     <span className={`text-sm font-semibold ${stockColor(detectedProduct)}`}>
                       Stock: {detectedProduct.stock}
                     </span>

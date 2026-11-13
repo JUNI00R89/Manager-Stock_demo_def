@@ -10,7 +10,7 @@ import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
 import { Badge } from '../../components/ui/badge';
 import { dataService, type InventoryMovementRecord, type PurchaseOrderRecord, type SupplierPriceHistoryRecord } from '../../services/dataService';
-import type { Product } from '../../utils/mockData';
+import type { Product } from '../../utils/types';
 import { dateOnly, dateTime, fmtQty, money, PageTitle, ProductSelect, useWarehousePermissions, useWarehouseRefs } from './shared';
 
 type ReplenishmentItem = Product & { suggestedQuantity: number; lastCost: number; estimatedCost: number };

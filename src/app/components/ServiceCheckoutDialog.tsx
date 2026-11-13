@@ -1,8 +1,9 @@
+import { uniqueRestaurantId } from '../utils/restaurantStorage';
 import { SaleReturnsPanel } from './SaleReturnsPanel';
 import { useEffect, useState } from 'react';
 import { api, dataService, type CashSessionRecord, type ServiceAppointmentRecord, type SaleRecord } from '../services/dataService';
 import { isDesktopMode } from '../services/desktop';
-import type { Product } from '../utils/mockData';
+import type { Product } from '../utils/types';
 import { useAuth } from '../context/AuthContext';
 import { useBusiness } from '../context/BusinessContext';
 import { canPerformAction } from '../security/permissions';
@@ -49,7 +50,7 @@ export function ServiceCheckoutDialog({ appointment, onClose, onSaved }: { appoi
         if (Math.abs(parts.reduce((s, p) => s + p.amount, 0) - total) > .01) throw new Error('Distribuye el total entre los medios de pago.');
         if (!parts.length && total === 0) parts.push({ method: 'cash', amount: 0 });
         if (Object.values(quantities).some(v => !Number.isFinite(Number(v)) || Number(v) < 0)) throw new Error('Revisa las cantidades de productos.');
-        body = JSON.stringify({ idempotencyKey: crypto.randomUUID(), cashSessionId: session?.id, customerId: customer?.id,
+        body = JSON.stringify({ idempotencyKey: uniqueRestaurantId('op'), cashSessionId: session?.id, customerId: customer?.id,
           items: Object.entries(quantities).filter(([, q]) => Number(q) > 0).map(([productId, q]) => ({ productId, quantity: Number(q) })), payments: parts, globalDiscountPercent: Number(discount) });
         sessionStorage.setItem(key, body); setPending(body);
       }

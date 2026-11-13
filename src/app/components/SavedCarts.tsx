@@ -1,8 +1,9 @@
+import { uniqueRestaurantId } from '../utils/restaurantStorage';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Button } from './ui/button';
 import type { Customer } from '../services/commerce';
-import type { Product } from '../utils/mockData';
+import type { Product } from '../utils/types';
 import { toast } from 'sonner';
 import { toastError } from '../utils/notifications';
 
@@ -15,7 +16,7 @@ export function SavedCarts({ current, products, disabled, onClear, onRestore }: 
   const read = (): StoredCart[] => { try { const saved = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(saved) ? saved : []; } catch { return []; } };
   const [saved, setSaved] = useState<StoredCart[]>(read);
   useEffect(() => { setSaved(read()); const sync = (event: StorageEvent) => { if (event.key === key) setSaved(read()); }; window.addEventListener('storage', sync); return () => window.removeEventListener('storage', sync); }, [key]);
-  const snapshot = (): StoredCart => ({ ...current, id: crypto.randomUUID(), savedAt: new Date().toISOString(), savedBy: user?.name || '' });
+  const snapshot = (): StoredCart => ({ ...current, id: uniqueRestaurantId('op'), savedAt: new Date().toISOString(), savedBy: user?.name || '' });
   const mutate = async (work: (rows: StoredCart[]) => StoredCart[]) => {
     const operation = () => { const next = work(read()); if (next.length > 30) throw new Error('Puedes conservar hasta 30 carritos en este navegador.'); localStorage.setItem(key, JSON.stringify(next)); setSaved(next); };
     if (navigator.locks) await navigator.locks.request(key, operation); else operation();

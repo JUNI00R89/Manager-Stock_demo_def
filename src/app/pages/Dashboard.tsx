@@ -12,13 +12,13 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { useBusiness, type BusinessConfig } from '../context/BusinessContext';
 import { useAuth } from '../context/AuthContext';
 import { colombiaDateKey, dataService, getBusinessTypeTransitions, getHotelRooms, restoreBusinessTypeTransition, type BusinessTypeTransitionRecord, type HotelRoomRecord, type SaleRecord } from '../services/dataService';
-import type { Product } from '../utils/mockData';
+import type { Product } from '../utils/types';
 import { SupportCenter } from '../components/SupportCenter';
 import { RevenueForecastCard } from '../components/dashboard/RevenueForecastCard';
 import { ProductRiskCard } from '../components/dashboard/ProductRiskCard';
 import { AnimatedCounter } from '../components/motion/AnimatedCounter';
+import { formatMoney as money } from '../utils/restaurantFormat';
 
-const money = (v: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(v);
 const days = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
 
 export function Dashboard() {

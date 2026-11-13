@@ -1,3 +1,4 @@
+import { uniqueRestaurantId } from '../utils/restaurantStorage';
 import { SavedCarts } from '../components/SavedCarts';
 import { CustomerPicker } from '../components/CustomerPicker';
 import type { Customer } from '../services/commerce';
@@ -13,19 +14,19 @@ import {
   Smartphone, Receipt, X, Check, Barcode, ScanLine, Users, Percent,
   Lock, Unlock, DollarSign, Split, Printer, MessageCircle, Mail, Star
 } from 'lucide-react';
-import { findProductByBarcode, type Product } from '../utils/mockData';
+import type { Product } from '../utils/types';
 import { dataService, type CashSessionRecord, type PaymentPartRecord, type CreateSaleInput } from '../services/dataService';
 import { isDesktopMode } from '../services/desktop';
 import { useAuth } from '../context/AuthContext';
 import { useBusiness } from '../context/BusinessContext';
 import { toast } from 'sonner';
+import { imagesEnabled, productImageUrl } from '../utils/productImage';
 import { toastError } from '../utils/notifications';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
 } from '../components/ui/dialog';
 import { BarcodeScanner } from '../components/BarcodeScanner';
-
-const money = (value: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(value);
+import { formatMoney as money } from '../utils/restaurantFormat';
 
 interface CartItem {
   productId: string;
@@ -134,6 +135,7 @@ export function POS() {
     const matchCat = activeCategory === 'Todos' || (activeCategory === 'Favoritos' ? favorites.includes(product.id) : product.category === activeCategory);
     return matchSearch && matchCat;
   });
+  const showPhotos = imagesEnabled(config);
 
   const addToCart = (product: Product, quantity = 1) => {
     const existing = cart.find(item => item.productId === product.id);
@@ -202,7 +204,7 @@ export function POS() {
         customer: customerName || 'Cliente general',
         customerId: customer?.id,
         paymentMethod: paymentMethod!,
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey: uniqueRestaurantId('op'),
         globalDiscountPercent: globalDiscount,
         taxRate: TAX_RATE,
         cashSessionId: cashSession?.id,
@@ -249,7 +251,7 @@ export function POS() {
   const handleManualBarcode = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       const code = searchTerm.trim();
-      const product = products.find(p => p.sku.toLowerCase() === code.toLowerCase() || p.codigosBarras?.includes(code)) || findProductByBarcode(code);
+      const product = products.find(p => p.barcode === code || p.sku.toLowerCase() === code.toLowerCase() || p.codigosBarras?.includes(code));
       if (product) {
         addToCart(product);
         setSearchTerm('');
@@ -382,7 +384,8 @@ export function POS() {
           </div>
 
           {/* Product grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[520px] overflow-y-auto pr-1">
+          {/* items-start: a card without photo keeps its own height instead of stretching to a photo card's. */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 items-start gap-3 max-h-[520px] overflow-y-auto pr-1">
             {filteredProducts.length === 0 ? (
               <div className="col-span-2 py-12 text-center text-muted-foreground sm:col-span-3">
                 <Package size={40} className="mx-auto mb-2 opacity-40" />
@@ -392,6 +395,7 @@ export function POS() {
               filteredProducts.map(product => {
                 const inCart = cart.find(item => item.productId === product.id);
                 const outOfStock = product.stock < 1;
+                const photoUrl = productImageUrl(product.image, showPhotos);
                 return (
                   <Card
                     key={product.id}
@@ -403,6 +407,11 @@ export function POS() {
                     onClick={() => !outOfStock && addToCart(product)}
                   >
                     <div className="space-y-2">
+                      {photoUrl && (
+                        <div className="flex h-24 items-center justify-center">
+                          <img src={photoUrl} alt={product.name} loading="lazy" className="max-h-full max-w-full rounded-lg object-contain" />
+                        </div>
+                      )}
                       <div className="flex justify-between items-start">
                         <button type="button" aria-label={`${favorites.includes(product.id) ? 'Quitar de' : 'Agregar a'} favoritos: ${product.name}`} aria-pressed={favorites.includes(product.id)} className="min-w-11 min-h-11 flex items-center justify-center rounded-lg hover:bg-accent" onClick={e => { e.stopPropagation(); setFavorites(current => { const next = current.includes(product.id) ? current.filter(id => id !== product.id) : [...current, product.id]; localStorage.setItem(favoriteKey, JSON.stringify(next)); return next; }); }}><Star size={18} fill={favorites.includes(product.id) ? 'currentColor' : 'none'} /></button>
                         <h3 className="text-sm font-semibold text-foreground line-clamp-2 leading-tight">{product.name}</h3>
@@ -674,7 +683,7 @@ export function POS() {
                   <div className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-orange-100 text-orange-600">
                     <Check size={18} />
                   </div>
-                  <p className="font-bold text-base text-gray-900">{config?.name || 'Manager Stock Pro'}</p>
+                  <p className="font-bold text-base text-gray-900">{config?.name || 'Manager Stock'}</p>
                   <p className="text-[11px] text-gray-500">{new Date(receiptData.date).toLocaleString('es-CO')}</p>
                   <p className="text-xs text-gray-500">Comprobante interno: {receiptData.invoiceNumber}</p><p className="text-[11px] text-gray-500">No es una factura electrónica.</p>
                   {receiptData.customer !== 'Cliente general' && (

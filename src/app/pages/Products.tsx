@@ -13,9 +13,8 @@ import { dataService } from '../services/dataService';
 import { useBusiness } from '../context/BusinessContext';
 import { useAuth } from '../context/AuthContext';
 import { canAccessPath } from '../security/permissions';
-import type { Product } from '../utils/mockData';
-
-const money = (value: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(value);
+import type { Product } from '../utils/types';
+import { formatMoney as money } from '../utils/restaurantFormat';
 
 export function Products() {
   const navigate = useNavigate();

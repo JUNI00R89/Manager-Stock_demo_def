@@ -21,7 +21,9 @@ def migrate(conn: sqlite3.Connection) -> None:
                 for line in script.splitlines(keepends=True):
                     statement += line
                     if sqlite3.complete_statement(statement):
-                        conn.execute(statement)
+                        already_present = (path.name == '003_service_checkout.sql' and statement.strip().startswith('ALTER TABLE service_appointments ADD COLUMN sale_id') and any(r[1] == 'sale_id' for r in conn.execute('PRAGMA table_info(service_appointments)')))
+                        if not already_present:
+                            conn.execute(statement)
                         statement = ""
                 if statement.strip():
                     raise RuntimeError(f"SQL incompleto en {path.name}")

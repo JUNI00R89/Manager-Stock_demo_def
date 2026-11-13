@@ -8,8 +8,9 @@ import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { dataService, type SaleRecord } from '../services/dataService';
-import type { Product } from '../utils/mockData';
+import type { Product } from '../utils/types';
 import { useAuth } from '../context/AuthContext';
+import { formatMoney as money } from '../utils/restaurantFormat';
 
 type NotificationType = 'low_stock' | 'sale';
 interface NotificationRecord {
@@ -24,7 +25,6 @@ interface NotificationRecord {
 }
 interface LocalNotificationState { readIds: string[]; dismissedIds: string[]; }
 
-const money = (value: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(value || 0);
 const storageKey = (userId: string) => `manager_stock_notifications_v1:${userId}`;
 
 function readLocalState(userId: string): LocalNotificationState {

@@ -1,3 +1,4 @@
+import { uniqueRestaurantId } from '../utils/restaurantStorage';
 import { useState } from 'react';
 import { api, dataService, type SaleRecord, type PaymentPartRecord } from '../services/dataService';
 import { useAuth } from '../context/AuthContext';
@@ -40,7 +41,7 @@ export function SaleReturnsPanel({ sale, onSaved, appointmentId }: { sale: SaleR
         if (!quote) return;
         const session = await dataService.getCurrentCashSession();
         if (!session) throw new Error('Abre tu turno de caja antes de devolver dinero.');
-        input = { items: lines, serviceAmount: Number(serviceAmount || 0), expectedTotal: quote.total, reason: reason.trim(), payments: Object.entries(amounts).filter(([, amount]) => Number(amount) > 0).map(([method, amount]) => ({ method: method as PaymentPartRecord['method'], amount: Number(amount) })), idempotencyKey: crypto.randomUUID(), cashSessionId: session.id };
+        input = { items: lines, serviceAmount: Number(serviceAmount || 0), expectedTotal: quote.total, reason: reason.trim(), payments: Object.entries(amounts).filter(([, amount]) => Number(amount) > 0).map(([method, amount]) => ({ method: method as PaymentPartRecord['method'], amount: Number(amount) })), idempotencyKey: uniqueRestaurantId('op'), cashSessionId: session.id };
         sessionStorage.setItem(key, JSON.stringify(input)); setPending(input);
       }
       await api(base, { method: 'POST', body: JSON.stringify(input) });

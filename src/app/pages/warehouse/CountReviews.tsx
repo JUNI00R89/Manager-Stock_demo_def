@@ -1,3 +1,4 @@
+import { uniqueRestaurantId } from '../../utils/restaurantStorage';
 import { useEffect, useState } from 'react';
 import { Layout } from '../../components/Layout';
 import { Button } from '../../components/ui/button';
@@ -56,7 +57,7 @@ export function CountReviews() {
       let body = pending;
       if (!body) {
         if (!lines.length || lines.some(l => l.quantity === '' || !Number.isFinite(Number(l.quantity)) || Number(l.quantity) < 0)) throw new Error('Completa las cantidades contadas.');
-        body = JSON.stringify({ idempotencyKey: crypto.randomUUID(), notes, items: lines.map(l => ({ productId: l.product.id, countedQuantity: Number(l.quantity), expectedMovementId: l.product.movementId })) });
+        body = JSON.stringify({ idempotencyKey: uniqueRestaurantId('op'), notes, items: lines.map(l => ({ productId: l.product.id, countedQuantity: Number(l.quantity), expectedMovementId: l.product.movementId })) });
         sessionStorage.setItem(pendingKey, body); setPending(body);
       }
       await api('/inventory/count-reviews', { method: 'POST', body });

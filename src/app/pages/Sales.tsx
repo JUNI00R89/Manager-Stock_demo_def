@@ -11,8 +11,8 @@ import { Badge } from '../components/ui/badge';
 import { colombiaDateKey, dataService, type SaleRecord, type SaleStatus } from '../services/dataService';
 import { saleNetTotal, csvCell } from '../utils/saleMetrics';
 import { useAuth } from '../context/AuthContext';
+import { formatMoney as money } from '../utils/restaurantFormat';
 
-const money = (v: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(v);
 const statusLabel: Record<SaleStatus, string> = { completed: 'Completada', pending: 'Pendiente', cancelled: 'Anulada' };
 
 export function Sales() {

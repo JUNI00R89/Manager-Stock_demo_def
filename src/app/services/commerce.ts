@@ -1,3 +1,4 @@
+import { uniqueRestaurantId } from '../utils/restaurantStorage';
 import { api, authService, dataService } from './dataService';
 import { isDesktopMode } from './desktop';
 import { canPerformAction } from '../security/permissions';
@@ -39,7 +40,7 @@ export async function saveCustomer(input: Omit<Customer, 'id'> & { id?: string }
     if (list.some(c => c.id !== input.id && normalized.documentNumber && c.documentType === input.documentType && c.documentNumber === normalized.documentNumber)) throw new Error('Ya existe un cliente con ese documento.');
     const old = list.find(c => c.id === input.id);
     if (input.id && (!old || old.revision !== input.revision)) throw new Error('El cliente cambió. Actualiza antes de guardar.');
-    const customer: Customer = { ...normalized, id: input.id || `CLI-${crypto.randomUUID()}`, revision: (old?.revision ?? 1) + 1 };
+    const customer: Customer = { ...normalized, id: input.id || `CLI-${uniqueRestaurantId('op')}`, revision: (old?.revision ?? 1) + 1 };
     localStorage.setItem(key, JSON.stringify([customer, ...list.filter(c => c.id !== customer.id)]));
     return customer;
   };

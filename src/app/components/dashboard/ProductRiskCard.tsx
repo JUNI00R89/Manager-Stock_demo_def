@@ -2,11 +2,11 @@ import { useMemo, useState } from 'react';
 import { AlertTriangle, ChevronDown, GitCompareArrows, PackageX, PauseCircle, ShieldCheck, Sigma, TrendingUp, Wallet } from 'lucide-react';
 import { Card } from '../ui/card';
 import type { SaleRecord } from '../../services/dataService';
-import type { Product } from '../../utils/mockData';
+import type { Product } from '../../utils/types';
 import { analyzeProductRisk, type ProductRiskLevel, type ProductRiskRow } from '../../utils/productRisk';
 import { analyzeInventoryScience, anchorOptions, buildComboPlan } from '../../utils/commercialScience';
+import { formatMoney as money } from '../../utils/restaurantFormat';
 
-const money = (value: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(value);
 const coverText = (days: number) => (Number.isFinite(days) ? `${Math.round(days)} d` : '∞');
 
 const RISK_ORDER: ProductRiskLevel[] = ['quiebre', 'critico', 'sobre_stock', 'sin_rotacion', 'ok'];

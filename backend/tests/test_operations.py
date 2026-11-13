@@ -26,7 +26,7 @@ def run():
         assert c.put('/api/services/professionals/' + pro['id'] + '/schedule', headers=h, json=schedule).status_code == 409
         apt_input = {'serviceId': svc['id'], 'professionalId': pro['id'], 'clientName': 'Laura', 'appointmentDate': '2026-11-09', 'startTime': '10:00'}
         for values in [{'startTime': '12:30'}, {'appointmentDate': '2026-11-10'}, {'appointmentDate': '2026-11-16'}, {'startTime': '17:30'}]:
-            assert c.post('/api/services/appointments', headers=h, json={**apt_input, **values}).status_code == 409
+            assert c.post('/api/services/appointments', headers=h, json={**apt_input, **values}).status_code == (409 if values.get('appointmentDate') == '2026-11-16' else 422)
         appointment = post('services/appointments', apt_input)
         assert c.post('/api/services/appointments', headers=h, json={**apt_input, 'startTime': '10:30'}).status_code == 409
         second = post('services/appointments', {**apt_input, 'startTime': '11:00'})

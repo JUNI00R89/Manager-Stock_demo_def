@@ -18,19 +18,22 @@ import type {
   CustomRoleRecord,
   HotelReservationRecord,
   HotelRoomRecord,
+  PaidPlanId,
   PlatformAuditRecord,
+  PlatformSubscriptionAction,
   PlatformSubscriptionRecord,
   PlatformUserRecord,
   ProductCategoryRecord,
   ServiceAppointmentRecord,
   ServiceCatalogRecord,
   ServiceProfessionalRecord,
+  SubscriptionPaymentRecord,
   SubscriptionPlanRecord,
   SupportCaseRecord,
   SupportMessageRecord,
   SuspensionStatusRecord,
 } from './dataService';
-import type { Product, Supplier } from '../utils/mockData';
+import type { Product, Supplier } from '../utils/types';
 
 export interface DesktopUser {
   id: string;
@@ -114,6 +117,8 @@ const PLATFORM_STATUS_PREFIX = 'manager_stock_desktop_business_status_v1';
 const PLATFORM_BUSINESS_META_PREFIX = 'manager_stock_desktop_business_meta_v1';
 const PLATFORM_AUDIT_KEY = 'manager_stock_desktop_platform_audit_v1';
 const SUBSCRIPTION_PREFIX = 'manager_stock_desktop_subscription_v1';
+const SUBSCRIPTION_PAYMENTS_KEY = 'manager_stock_desktop_subscription_payments_v1';
+const BILLING_PERIOD_MS = 30 * 24 * 60 * 60 * 1000;
 const SUPPORT_KEY = 'manager_stock_desktop_support_v1';
 const SUPPORT_CASES_KEY = 'manager_stock_desktop_support_cases_v1';
 const SUPPORT_MESSAGES_KEY = 'manager_stock_desktop_support_messages_v1';
@@ -424,11 +429,10 @@ async function ensureSeedLoaded(): Promise<DesktopSeed | null> {
   try { return await loadDesktopSeed(); } catch { return null; }
 }
 
+/** Plan vigente con las mismas reglas de vencimiento que backend/services/subscriptions.py. */
 function subscriptionFor(businessId: string): BusinessSubscriptionRecord {
-  const saved = readJson<BusinessSubscriptionRecord | null>(subscriptionKey(businessId), null);
-  if (saved) return saved;
-  const fromSeed = seedCache?.businesses?.[businessId]?.subscription;
-  if (fromSeed) return fromSeed;
+  const saved = readJson<BusinessSubscriptionRecord | null>(subscriptionKey(businessId), null) ?? seedCache?.businesses?.[businessId]?.subscription ?? null;
+  if (saved) return applySubscriptionExpiry(businessId, saved);
   return {
     businessId,
     plan: PLANS[0],
@@ -438,6 +442,61 @@ function subscriptionFor(businessId: string): BusinessSubscriptionRecord {
     expiresAt: null,
     updatedAt: null,
   };
+}
+
+function applySubscriptionExpiry(businessId: string, record: BusinessSubscriptionRecord): BusinessSubscriptionRecord {
+  const inForce = record.status === 'active' || record.status === 'pending_payment';
+  if (!inForce || !record.expiresAt) return record;
+  const expires = Date.parse(record.expiresAt);
+  if (Number.isFinite(expires) && expires > Date.now()) return record;
+  const now = new Date().toISOString();
+  // Con una renovación pendiente baja a Gratis, pero la solicitud se conserva.
+  const updated: BusinessSubscriptionRecord = record.status === 'pending_payment'
+    ? { ...record, plan: PLANS[0], expiresAt: null, updatedAt: now }
+    : { ...record, plan: PLANS[0], status: 'expired', pendingPlan: null, updatedAt: now };
+  writeJson(subscriptionKey(businessId), updated);
+  return updated;
+}
+
+type StoredSubscriptionPayment = SubscriptionPaymentRecord & { businessId: string };
+
+function readSubscriptionPayments(): StoredSubscriptionPayment[] {
+  return readJson<StoredSubscriptionPayment[]>(SUBSCRIPTION_PAYMENTS_KEY, []);
+}
+
+function lastSubscriptionPayment(businessId: string): SubscriptionPaymentRecord | null {
+  const payment = readSubscriptionPayments().find(item => item.businessId === businessId);
+  if (!payment) return null;
+  const { businessId: _owner, ...rest } = payment;
+  return rest;
+}
+
+/** Igual que apply_verified_payment del backend: el mismo plan vigente se extiende desde su vencimiento. */
+function applyVerifiedSubscriptionPayment(businessId: string, current: BusinessSubscriptionRecord, planId: PaidPlanId, paymentReference: string): BusinessSubscriptionRecord {
+  const plan = PLANS.find(item => item.id === planId);
+  if (!plan || plan.priceCOP <= 0) throw new Error('Solo se pueden registrar pagos de planes de pago.');
+  const reference = paymentReference.trim();
+  if (reference.length < 4) throw new Error('Registra una referencia de pago verificada antes de activar el plan.');
+  const payments = readSubscriptionPayments();
+  if (payments.some(item => item.paymentReference === reference)) throw new Error('Esa referencia de pago ya se registró. Cada cobro solo puede sumar un periodo.');
+  const now = Date.now();
+  const currentExpiry = current.expiresAt ? Date.parse(current.expiresAt) : NaN;
+  const samePlanInForce = current.plan.id === planId && (current.status === 'active' || current.status === 'pending_payment') && Number.isFinite(currentExpiry) && currentExpiry > now;
+  const periodStart = samePlanInForce ? currentExpiry : now;
+  const periodEnd = periodStart + BILLING_PERIOD_MS;
+  const nowIso = new Date(now).toISOString();
+  const payment: StoredSubscriptionPayment = {
+    businessId, planId, amountCOP: plan.priceCOP, paymentReference: reference,
+    periodStart: new Date(periodStart).toISOString(), periodEnd: new Date(periodEnd).toISOString(), createdAt: nowIso,
+  };
+  writeJson(SUBSCRIPTION_PAYMENTS_KEY, [payment, ...payments].slice(0, 2000));
+  const updated: BusinessSubscriptionRecord = {
+    ...current, plan, status: 'active', pendingPlan: null,
+    startedAt: samePlanInForce ? current.startedAt : nowIso,
+    expiresAt: new Date(periodEnd).toISOString(), updatedAt: nowIso,
+  };
+  writeJson(subscriptionKey(businessId), updated);
+  return updated;
 }
 
 export const desktop = {
@@ -1028,38 +1087,30 @@ export const desktop = {
       return businesses.map(business => ({
         ...subscriptionFor(business.id),
         businessName: business.name,
+        lastPayment: lastSubscriptionPayment(business.id),
       }));
     },
-    async updateSubscription(businessId: string, action: 'confirm_payment' | 'cancel_request', paymentReference = ''): Promise<BusinessSubscriptionRecord> {
+    async updateSubscription(businessId: string, action: PlatformSubscriptionAction, paymentReference = '', planId?: PaidPlanId): Promise<BusinessSubscriptionRecord> {
       const current = subscriptionFor(businessId);
-      if (current.status !== 'pending_payment' || !current.pendingPlan) {
-        throw new Error('No existe una solicitud de pago pendiente para este negocio.');
-      }
-      const now = new Date().toISOString();
       if (action === 'confirm_payment') {
-        const reference = paymentReference.trim();
-        if (reference.length < 4) throw new Error('Registra una referencia de pago verificada antes de activar el plan.');
-        const plan = current.pendingPlan;
-        const updated: BusinessSubscriptionRecord = {
-          ...current,
-          plan,
-          status: 'active',
-          pendingPlan: null,
-          startedAt: now,
-          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          updatedAt: now,
-        };
-        writeJson(subscriptionKey(businessId), updated);
-        appendPlatformAudit('subscription_payment_manually_verified', businessId, { planId: plan.id, paymentReference: reference, verificationMode: 'manual_by_superadmin' });
+        if (current.status !== 'pending_payment' || !current.pendingPlan) throw new Error('No existe una solicitud de pago pendiente para este negocio.');
+        const updated = applyVerifiedSubscriptionPayment(businessId, current, current.pendingPlan.id as PaidPlanId, paymentReference);
+        appendPlatformAudit('subscription_payment_manually_verified', businessId, { planId: updated.plan.id, paymentReference: paymentReference.trim(), verificationMode: 'manual_by_superadmin' });
         return updated;
       }
-      const cancelledPlanId = current.pendingPlan.id;
-      const updated: BusinessSubscriptionRecord = {
-        ...current,
-        status: 'active',
-        pendingPlan: null,
-        updatedAt: now,
-      };
+      if (action === 'renew') {
+        const inForce = current.status === 'active' || current.status === 'pending_payment';
+        const target = planId
+          ?? (inForce && current.plan.priceCOP > 0 ? current.plan.id as PaidPlanId : undefined)
+          ?? (lastSubscriptionPayment(businessId)?.planId as PaidPlanId | undefined);
+        if (!target) throw new Error('Indica el plan pagado: el negocio no tiene un plan de pago vigente ni pagos anteriores.');
+        const updated = applyVerifiedSubscriptionPayment(businessId, current, target, paymentReference);
+        appendPlatformAudit('subscription_renewed', businessId, { planId: target, paymentReference: paymentReference.trim(), verificationMode: 'manual_by_superadmin' });
+        return updated;
+      }
+      if (current.status !== 'pending_payment') throw new Error('No existe una solicitud de pago pendiente para este negocio.');
+      const cancelledPlanId = current.pendingPlan?.id ?? null;
+      const updated: BusinessSubscriptionRecord = { ...current, status: 'active', pendingPlan: null, updatedAt: new Date().toISOString() };
       writeJson(subscriptionKey(businessId), updated);
       appendPlatformAudit('subscription_request_cancelled', businessId, { cancelledPlanId });
       return updated;

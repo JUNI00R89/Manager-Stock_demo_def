@@ -256,6 +256,7 @@ CREATE TABLE IF NOT EXISTS service_appointments (
   end_time TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'reserved' CHECK(status IN ('reserved','confirmed','attended','cancelled','no_show')),
   notes TEXT NOT NULL DEFAULT '',
+  sale_id TEXT REFERENCES sales(id),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -347,7 +348,7 @@ CREATE TABLE IF NOT EXISTS sales (
 CREATE TABLE IF NOT EXISTS sale_items (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   sale_id TEXT NOT NULL REFERENCES sales(id),
-  product_id TEXT NOT NULL REFERENCES products(id),
+  product_id TEXT REFERENCES products(id), -- NULL en líneas de servicio (citas cobradas)
   product_name TEXT NOT NULL,
   sku_snapshot TEXT NOT NULL DEFAULT '',
   quantity REAL NOT NULL CHECK(quantity > 0),

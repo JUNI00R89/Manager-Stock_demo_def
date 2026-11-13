@@ -26,7 +26,7 @@ Aplicación web para administrar productos, ventas, existencias, proveedores, ca
 - Roles personalizados por negocio con permisos delegables; el backend restringe endpoints y la interfaz adapta menús, accesos rápidos y estadísticas. Los permisos incluyen acceso de consulta y gestión para servicios/citas.
 - Suspensión administrativa con motivo obligatorio, pantalla especial para el propietario y chat persistente de soporte entre propietario y SUPERADMIN.
 - Servicios: el catálogo, los profesionales y la creación de citas están en `/services`; `/services/appointments` se utiliza para agenda, edición, estados y eliminación de citas existentes.
-- Suscripciones: planes Gratis, Emprendedor, Negocio y Empresarial con límites de productos/usuarios validados en el backend. La selección de un plan pago queda pendiente hasta que un administrador registre una verificación manual de pago. No hay cobro automático ni proveedor integrado.
+- Suscripciones: planes Gratis, Emprendedor, Negocio y Empresarial con límites de productos/usuarios validados en el backend. La selección de un plan pago queda pendiente hasta que un administrador registre una verificación manual de pago. Cada pago verificado suma 30 días: si es el mismo plan vigente, se suman al vencimiento actual (renovar antes no hace perder días ni baja el plan mientras se verifica). El SUPERADMIN registra el cobro de cada mes con «Registrar pago del mes» y la referencia del proveedor (p. ej. Mercado Pago); una referencia solo puede usarse una vez. El cobro lo hace el proveedor; la app no recibe sus avisos automáticamente. Los links de suscripción de cada plan se configuran en `SUBSCRIPTION_PAYMENT_LINKS` (`backend/core/config.py`) o con `MANAGER_STOCK_PAYMENT_LINK_ENTREPRENEUR` / `_BUSINESS` / `_ENTERPRISE`; con un link configurado, el propietario ve «Pagar con Mercado Pago» al solicitar ese plan.
 - ErrorBoundary de React para ofrecer una recuperación controlada ante errores de interfaz; corregida la referencia del icono `Package` en el punto de venta.
 - Centro de alertas calculado desde productos y ventas guardados, sin listas de alertas de demostración.
 - Inicio automatizado para Windows mediante `INICIAR_MANAGER_STOCK.bat`, creación controlada de SUPERADMIN mediante `CREAR_SUPERADMIN.bat` y carga opcional de datos ficticios desde `CREAR_DATOS_DE_PRUEBA.bat`.
@@ -129,6 +129,31 @@ npm run build
 La prueba de API utiliza una base SQLite temporal; no modifica la base de datos del negocio. Abarca autenticación, roles predefinidos y personalizados, aislamiento entre negocios, categorías dinámicas, validación de unidades enteras, transición y limpieza a 15 días, hotel y citas persistidas por negocio, configuración/temas, suspensión y chat, reactivación, menú sin recetas, impuestos calculados en servidor, ventas con varios productos, costos históricos, idempotencia, paginación, reversos, caja y auditoría. En esta entrega se validó además la sintaxis de 97 archivos TypeScript/TSX mediante el parser de TypeScript.
 
 **Limitación de validación:** no se pudo completar `npm install` ni `npm run build` en el entorno de generación porque la solicitud al registro de paquetes agotó el tiempo de espera. Debes ejecutar `npm install` y `npm run build` en tu PC antes de desplegar. La comprobación sintáctica no sustituye un build completo ni una prueba visual en navegador.
+
+## Seguridad de acceso: intentos de login y CORS
+
+**Límite de intentos.** El backend bloquea temporalmente (HTTP 429 con encabezado `Retry-After`) cuando hay demasiados intentos fallidos:
+
+| Qué se limita | Límite por defecto | Variable de entorno |
+| --- | --- | --- |
+| Logins fallidos por correo | 5 en 15 min | `MANAGER_STOCK_LOGIN_MAX_PER_EMAIL` |
+| Logins fallidos por IP | 20 en 15 min | `MANAGER_STOCK_LOGIN_MAX_PER_IP` |
+| Ventana de los logins (segundos) | 900 | `MANAGER_STOCK_LOGIN_WINDOW_SECONDS` |
+| Registros de cuentas por IP | 10 por hora | `MANAGER_STOCK_REGISTER_MAX_PER_IP` |
+
+Un login correcto borra los fallos de ese correo. Los contadores viven en memoria: se reinician al reiniciar el backend y solo sirven para un proceso de uvicorn.
+
+**CORS.** Por defecto la API solo acepta peticiones del navegador desde `127.0.0.1`, `localhost` o `[::1]` (cualquier puerto: Vite y la app de escritorio). No se usan cookies (`allow_credentials` desactivado), porque la sesión va en el encabezado `Authorization`.
+
+- Para probar desde el celular en la misma red Wi-Fi, inicia el backend con `MANAGER_STOCK_ALLOW_LAN=1` y `--host 0.0.0.0`; se aceptan solo IPs privadas (192.168.x.x, 10.x.x.x, 172.16–31.x.x).
+- Para un dominio propio, agrega `MANAGER_STOCK_CORS_ORIGINS=https://app.midominio.com` (varios separados por coma).
+
+```powershell
+$env:MANAGER_STOCK_ALLOW_LAN = "1"
+.\.venv\Scripts\python.exe -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
+```
+
+Prueba: `.\.venv\Scripts\python.exe backend	ests	est_auth_security.py`
 
 ## Personalización, roles y soporte administrativo
 
@@ -296,16 +321,19 @@ python backend/tests/test_hotel_schedule_refunds.py
 node scripts/test_permissions.cjs
 ```
 
-Las pruebas opcionales de navegador requieren Python con Playwright, Chromium en
-`/usr/bin/chromium`, Vite en `127.0.0.1:5173` y la API en `127.0.0.1:8000`. Ejecuta
-la API con una base **temporal de pruebas** (`MANAGER_STOCK_DB=/tmp/hotel-ui-test.db`):
+Las pruebas opcionales de navegador requieren Playwright con Chromium
+(`python -m playwright install chromium`; otra ruta con `CHROMIUM_PATH`), Vite en
+`127.0.0.1:5173` y la API en `127.0.0.1:8000`. Ejecuta la API con una base
+**temporal de pruebas** (por ejemplo `MANAGER_STOCK_DB=/tmp/hotel-ui-test.db`):
 las pruebas crean negocios y reservas de demostración.
 
 ```sh
-python backend/tests/test_hotel_browser.py
-python backend/tests/test_hotel_local_browser.py
+MANAGER_STOCK_E2E=1 python -m pytest backend/tests/test_hotel_browser.py backend/tests/test_hotel_local_browser.py
 ```
 
 ## Clientes, operación y preparación fiscal
 
 Clientes compartidos por negocio, carritos guardados/favoritos, devoluciones parciales, cobros de mesas con varios medios, cobro de citas con productos, jornadas y agenda arrastrable, resumen diario del hotel y conteos con aprobación. La preparación fiscal conserva borradores internos; no emite ni simula facturas DIAN. Consulta alcance, limitaciones del modo local, investigación de proveedores y pendientes en [facturación Colombia](docs/facturacion-colombia.md).
+
+Todas las pruebas del backend se ejecutan con `python -m pytest` (instala antes
+`backend/requirements-dev.txt`); el detalle está en [`docs/TESTING.md`](docs/TESTING.md).

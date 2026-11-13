@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 import { toastError } from '../utils/notifications';
 import { ConfirmActionDialog } from '../components/ConfirmActionDialog';
 import { useAuth } from '../context/AuthContext';
-import { createBusinessUser, createCustomRole, getBusinessUsers, getCustomRoles, updateBusinessUser, type BusinessUserRecord, type CustomRoleRecord } from '../services/dataService';
+import { createBusinessUser, createCustomRole, deleteCustomRole, getBusinessUsers, getCustomRoles, updateBusinessUser, updateCustomRole, type BusinessUserRecord, type CustomRoleRecord } from '../services/dataService';
 
 const PERMISSIONS = [
   { key: 'customers.view', label: 'Consultar clientes', group: 'Clientes y facturación' },
@@ -105,14 +105,32 @@ export function UsersRoles() {
     if (rolePermissions.length === 0) { toast.error('Selecciona al menos un permiso.'); return; }
     setSavingRole(true);
     try {
+      if (editingRoleId) {
+        const role = await updateCustomRole(editingRoleId, { name: roleNameInput.trim(), permissions: rolePermissions });
+        toast.success(`Rol “${role.name}” actualizado.`, { description: 'Los usuarios con este rol ya operan con los nuevos permisos.' });
+        setRoleNameInput(''); setRolePermissions(['dashboard.view']); setShowRoleForm(false); setEditingRoleId(null);
+        await refresh();
+        return;
+      }
       const role = await createCustomRole({ name: roleNameInput.trim(), permissions: rolePermissions });
       toast.success(`Rol “${role.name}” creado.`);
       setRoleNameInput(''); setRolePermissions(['dashboard.view']); setShowRoleForm(false);
       await refresh();
       setRoleSelection(`custom:${role.id}`);
       setShowForm(true);
-    } catch (error) { toastError(error, 'No se pudo crear el rol.'); }
+    } catch (error) { toastError(error, editingRoleId ? 'No se pudo actualizar el rol.' : 'No se pudo crear el rol.'); }
     finally { setSavingRole(false); }
+  };
+  const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
+  const [roleToDelete, setRoleToDelete] = useState<CustomRoleRecord | null>(null);
+  const beginEditRole = (role: CustomRoleRecord) => {
+    setEditingRoleId(role.id); setRoleNameInput(role.name); setRolePermissions(role.permissions); setShowRoleForm(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  const confirmDeleteRole = async () => {
+    if (!roleToDelete) return;
+    try { await deleteCustomRole(roleToDelete.id); toast.success(`Rol “${roleToDelete.name}” eliminado.`); await refresh(); }
+    catch (error) { toastError(error, 'No se pudo eliminar el rol.'); throw error; }
   };
 
   const changeStatus = (target: BusinessUserRecord) => setStatusTarget(target);
@@ -190,7 +208,7 @@ export function UsersRoles() {
 
     <div className="grid gap-4 sm:grid-cols-3"><Card className="rounded-2xl p-5"><div className="flex items-center gap-3"><div className="rounded-xl bg-[var(--brand-soft)] p-3 text-[var(--brand-primary)]"><Users size={21}/></div><div><p className="text-sm text-muted-foreground">Usuarios</p><p className="mt-1 text-2xl font-bold">{users.length}</p></div></div></Card><Card className="rounded-2xl p-5"><div className="flex items-center gap-3"><div className="rounded-xl bg-emerald-50 p-3 text-emerald-700"><CircleCheck size={21}/></div><div><p className="text-sm text-muted-foreground">Accesos activos</p><p className="mt-1 text-2xl font-bold">{users.filter(u => u.active).length}</p></div></div></Card><Card className="rounded-2xl p-5"><div className="flex items-center gap-3"><div className="rounded-xl bg-slate-100 p-3 text-slate-700"><ShieldCheck size={21}/></div><div><p className="text-sm text-muted-foreground">Roles personalizados</p><p className="mt-1 text-2xl font-bold">{customRoles.length}</p></div></div></Card></div>
 
-    {showRoleForm && canCreateAdmin && <Card className="rounded-2xl border-border/70 p-5 sm:p-6"><div className="mb-5 flex items-center gap-3"><div className="rounded-xl bg-[var(--brand-soft)] p-3 text-[var(--brand-primary)]"><Shield size={20}/></div><div><h2 className="font-semibold">Crear rol personalizado</h2><p className="text-sm text-muted-foreground">Solo se ofrecen permisos operativos delegables. Este rol nunca puede administrar la plataforma.</p></div></div><form onSubmit={submitCustomRole} className="space-y-5"><div className="max-w-lg space-y-2"><Label htmlFor="custom-role-name">Nombre del rol</Label><Input id="custom-role-name" value={roleNameInput} onChange={event => setRoleNameInput(event.target.value)} required minLength={2} maxLength={60} placeholder="Ej. Encargado de inventario"/></div><div className="space-y-3"><h3 className="text-sm font-semibold">Permisos que tendrá el rol</h3><p className="text-xs text-muted-foreground">Algunas acciones agregan automáticamente sus permisos previos necesarios; por ejemplo, registrar ventas requiere leer el catálogo y operar el turno de caja.</p><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{groups.map(group => <div key={group} className="rounded-xl border border-border p-4"><h4 className="mb-3 text-sm font-semibold">{group}</h4><div className="space-y-3">{PERMISSIONS.filter(permission => permission.group === group).map(permission => <label key={permission.key} className="flex cursor-pointer items-start gap-2 text-sm"><input type="checkbox" checked={rolePermissions.includes(permission.key)} onChange={event => setRolePermissions(current => { const next = new Set(current); if (event.target.checked) {
+    {showRoleForm && canCreateAdmin && <Card className="rounded-2xl border-border/70 p-5 sm:p-6"><div className="mb-5 flex items-center gap-3"><div className="rounded-xl bg-[var(--brand-soft)] p-3 text-[var(--brand-primary)]"><Shield size={20}/></div><div><h2 className="font-semibold">{editingRoleId ? 'Editar rol personalizado' : 'Crear rol personalizado'}</h2><p className="text-sm text-muted-foreground">Solo se ofrecen permisos operativos delegables. Este rol nunca puede administrar la plataforma.</p></div></div><form onSubmit={submitCustomRole} className="space-y-5"><div className="max-w-lg space-y-2"><Label htmlFor="custom-role-name">Nombre del rol</Label><Input id="custom-role-name" value={roleNameInput} onChange={event => setRoleNameInput(event.target.value)} required minLength={2} maxLength={60} placeholder="Ej. Encargado de inventario"/></div><div className="space-y-3"><h3 className="text-sm font-semibold">Permisos que tendrá el rol</h3><p className="text-xs text-muted-foreground">Algunas acciones agregan automáticamente sus permisos previos necesarios; por ejemplo, registrar ventas requiere leer el catálogo y operar el turno de caja.</p><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{groups.map(group => <div key={group} className="rounded-xl border border-border p-4"><h4 className="mb-3 text-sm font-semibold">{group}</h4><div className="space-y-3">{PERMISSIONS.filter(permission => permission.group === group).map(permission => <label key={permission.key} className="flex cursor-pointer items-start gap-2 text-sm"><input type="checkbox" checked={rolePermissions.includes(permission.key)} onChange={event => setRolePermissions(current => { const next = new Set(current); if (event.target.checked) {
                     next.add(permission.key);
                     const dependencies: Record<string, string[]> = {
                       'catalog.create': ['catalog.view'], 'catalog.edit': ['catalog.view'],
@@ -224,9 +242,9 @@ export function UsersRoles() {
                       }
                     }
                   }
-                  return [...next]; })} className="mt-0.5 h-4 w-4 rounded accent-[var(--brand-primary)]"/><span>{permission.label}{permission.key === 'reports.view' && <span className="mt-0.5 block text-xs text-muted-foreground">Incluye lectura de ventas y catálogo necesaria para calcular los reportes.</span>}</span></label>)}</div></div>)}</div></div><div className="flex flex-wrap justify-end gap-2"><Button type="button" variant="outline" onClick={() => setShowRoleForm(false)}>Cancelar</Button><Button type="submit" disabled={savingRole || roleNameInput.trim().length < 2 || rolePermissions.length === 0} className="bg-[var(--brand-primary)] text-white hover:opacity-90">{savingRole ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}Guardar rol</Button></div></form></Card>}
+                  return [...next]; })} className="mt-0.5 h-4 w-4 rounded accent-[var(--brand-primary)]"/><span>{permission.label}{permission.key === 'reports.view' && <span className="mt-0.5 block text-xs text-muted-foreground">Incluye lectura de ventas y catálogo necesaria para calcular los reportes.</span>}</span></label>)}</div></div>)}</div></div><div className="flex flex-wrap justify-end gap-2"><Button type="button" variant="outline" onClick={() => { setShowRoleForm(false); setEditingRoleId(null); setRoleNameInput(''); setRolePermissions(['dashboard.view']); }}>Cancelar</Button><Button type="submit" disabled={savingRole || roleNameInput.trim().length < 2 || rolePermissions.length === 0} className="bg-[var(--brand-primary)] text-white hover:opacity-90">{savingRole ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}Guardar rol</Button></div></form></Card>}
 
-    {customRoles.length > 0 && <Card className="rounded-2xl border-border/70 p-5"><div className="mb-3 flex items-center gap-2"><Shield size={18} className="text-[var(--brand-primary)]"/><h2 className="font-semibold">Roles disponibles</h2></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{customRoles.map(role => <div key={role.id} className="rounded-xl border border-border p-4"><div className="flex items-center justify-between gap-2"><p className="font-semibold">{role.name}</p><Badge variant="outline" className="border-teal-200 bg-teal-50 text-teal-800">Personalizado</Badge></div><p className="mt-2 text-xs text-muted-foreground">{role.permissions.length} permisos delegados</p><p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{role.permissions.map(key => PERMISSIONS.find(item => item.key === key)?.label ?? key).join(' · ') || 'Sin permisos'}</p></div>)}</div></Card>}
+    {customRoles.length > 0 && <Card className="rounded-2xl border-border/70 p-5"><div className="mb-3 flex items-center gap-2"><Shield size={18} className="text-[var(--brand-primary)]"/><h2 className="font-semibold">Roles disponibles</h2></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{customRoles.map(role => <div key={role.id} className="rounded-xl border border-border p-4"><div className="flex items-center justify-between gap-2"><p className="font-semibold">{role.name}</p><Badge variant="outline" className="border-teal-200 bg-teal-50 text-teal-800">Personalizado</Badge></div><p className="mt-2 text-xs text-muted-foreground">{role.permissions.length} permisos delegados</p><p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{role.permissions.map(key => PERMISSIONS.find(item => item.key === key)?.label ?? key).join(' · ') || 'Sin permisos'}</p>{canCreateAdmin && <div className="mt-3 flex gap-2"><Button size="sm" variant="outline" className="flex-1" onClick={() => beginEditRole(role)}>Editar</Button><Button size="sm" variant="outline" className="border-red-200 text-red-600" onClick={() => setRoleToDelete(role)}>Eliminar</Button></div>}</div>)}</div></Card>}
 
     {showForm && <Card className="rounded-2xl border-border/70 p-5 shadow-sm sm:p-6"><div className="mb-5 flex items-center gap-3"><div className="rounded-xl bg-[var(--brand-soft)] p-3 text-[var(--brand-primary)]"><UserPlus size={20}/></div><div><h2 className="font-semibold">Crear usuario del negocio</h2><p className="text-sm text-muted-foreground">La cuenta se guardará en la base de datos. Usa una contraseña temporal segura.</p></div></div><form onSubmit={submitUser} className="grid gap-4 md:grid-cols-2"><div className="space-y-2"><Label htmlFor="staff-name">Nombre completo</Label><Input id="staff-name" value={name} onChange={event => setName(event.target.value)} required minLength={2} placeholder="Nombre del empleado"/></div><div className="space-y-2"><Label htmlFor="staff-email">Correo electrónico</Label><Input id="staff-email" type="email" autoComplete="off" value={email} onChange={event => setEmail(event.target.value)} required placeholder="empleado@negocio.com"/></div><div className="space-y-2"><Label htmlFor="staff-password">Contraseña inicial</Label><div className="relative"><KeyRound className="absolute left-3 top-3 h-4 w-4 text-muted-foreground"/><Input id="staff-password" type="password" value={password} onChange={event => setPassword(event.target.value)} required minLength={8} className="pl-9" placeholder="Mínimo 8 caracteres"/></div></div><div className="space-y-2"><Label>Rol</Label><Select value={roleSelection} onValueChange={setRoleSelection}><SelectTrigger><SelectValue placeholder="Selecciona el rol"/></SelectTrigger><SelectContent>{canCreateAdmin && <SelectItem value="business_admin">Administrador de negocio</SelectItem>}<SelectItem value="cashier">Cajero</SelectItem>{canCreateAdmin && customRoles.map(role => <SelectItem key={role.id} value={`custom:${role.id}`}>{role.name}</SelectItem>)}</SelectContent></Select><p className="text-xs text-muted-foreground">{selectedRole ? `${selectedRole.permissions.length} permisos delegados por el propietario.` : 'SUPERADMIN y propietario no se pueden asignar desde aquí.'}</p></div><div className="flex justify-end gap-2 md:col-span-2"><Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button><Button type="submit" disabled={saving} className="bg-[var(--brand-primary)] text-white hover:opacity-90">{saving ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin"/> : <UserPlus className="mr-2 h-4 w-4"/>}Crear usuario</Button></div></form></Card>}
 
@@ -240,6 +258,15 @@ export function UsersRoles() {
       confirmLabel={statusTarget?.active ? 'Suspender acceso' : 'Reactivar acceso'}
       destructive={Boolean(statusTarget?.active)}
       onConfirm={confirmChangeStatus}
+    />
+    <ConfirmActionDialog
+      open={Boolean(roleToDelete)}
+      onOpenChange={open => { if (!open) setRoleToDelete(null); }}
+      title="Eliminar rol personalizado"
+      description={roleToDelete ? `¿Eliminar el rol “${roleToDelete.name}”? Solo se puede si ningún usuario lo tiene asignado.` : ''}
+      confirmLabel="Eliminar rol"
+      destructive
+      onConfirm={confirmDeleteRole}
     />
   </div></Layout>;
 }

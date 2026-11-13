@@ -1,4 +1,4 @@
-import type { Product, Supplier } from '../utils/mockData';
+import type { Product, Supplier } from '../utils/types';
 import { desktop, isDesktopMode } from './desktop';
 
 export type SaleStatus = 'completed' | 'pending' | 'cancelled';
@@ -57,6 +57,8 @@ export interface SaleRecord {
 export interface CreateSaleInput {
   /** Order lines are resolved by the server; items contains only extras. */
   orderIds?: string[];
+  /** Attended appointments, charged by the server at their booked price. */
+  appointmentIds?: string[];
   items: SaleItemInput[];
   customer?: string;
   customerId?: string;
@@ -368,6 +370,8 @@ const API_BASE = (
       : 'http://127.0.0.1:8000/api'
   )
 ).replace(/\/$/, '');
+/** Server origin without `/api`, for files served outside the API (product photos). */
+export const API_ORIGIN = API_BASE.replace(/\/api$/, '');
 const STORAGE_KEY = 'manager_stock_database_v1';
 const CURRENCY = 'COP';
 const DEFAULT_TAX_RATE = 0.19;
@@ -837,7 +841,8 @@ export async function updateServiceAppointmentStatus(id: string, status: Service
   return api<ServiceAppointmentRecord>(`/services/appointments/${encodeURIComponent(id)}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
 }
 
-export interface SubscriptionPlanRecord { id: 'free' | 'entrepreneur' | 'business' | 'enterprise'; name: string; priceCOP: number; maxUsers: number; maxProducts: number; }
+/** paymentUrl: link de suscripción del proveedor (Mercado Pago); null mientras no esté configurado. */
+export interface SubscriptionPlanRecord { id: 'free' | 'entrepreneur' | 'business' | 'enterprise'; name: string; priceCOP: number; maxUsers: number; maxProducts: number; paymentUrl?: string | null; }
 export interface BusinessSubscriptionRecord { businessId: string; plan: SubscriptionPlanRecord; status: 'active' | 'pending_payment' | 'expired' | 'cancelled'; pendingPlan: SubscriptionPlanRecord | null; startedAt: string | null; expiresAt: string | null; updatedAt: string | null; }
 export async function getSubscriptionPlans() {
   if (isDesktopMode()) return desktop.subscription.plans();
@@ -852,14 +857,18 @@ export async function selectSubscriptionPlan(planId: SubscriptionPlanRecord['id'
   return api<BusinessSubscriptionRecord>('/subscription', { method: 'PUT', body: JSON.stringify({ planId }) });
 }
 
-export interface PlatformSubscriptionRecord extends BusinessSubscriptionRecord { businessName: string; }
+export interface SubscriptionPaymentRecord { planId: SubscriptionPlanRecord['id']; amountCOP: number; paymentReference: string; periodStart: string; periodEnd: string; createdAt: string | null; }
+export interface PlatformSubscriptionRecord extends BusinessSubscriptionRecord { businessName: string; lastPayment?: SubscriptionPaymentRecord | null; }
+/** confirm_payment: activa la solicitud pendiente. renew: registra el cobro de un periodo sin solicitud. */
+export type PlatformSubscriptionAction = 'confirm_payment' | 'renew' | 'cancel_request';
+export type PaidPlanId = Exclude<SubscriptionPlanRecord['id'], 'free'>;
 export async function getPlatformSubscriptions() {
   if (isDesktopMode()) return desktop.platform.subscriptions();
   return api<PlatformSubscriptionRecord[]>('/platform/subscriptions');
 }
-export async function updatePlatformSubscription(businessId: string, action: 'confirm_payment' | 'cancel_request', paymentReference?: string) {
-  if (isDesktopMode()) return desktop.platform.updateSubscription(businessId, action, paymentReference);
-  return api<BusinessSubscriptionRecord>(`/platform/subscriptions/${encodeURIComponent(businessId)}`, { method: 'PATCH', body: JSON.stringify({ action, paymentReference }) });
+export async function updatePlatformSubscription(businessId: string, action: PlatformSubscriptionAction, paymentReference?: string, planId?: PaidPlanId) {
+  if (isDesktopMode()) return desktop.platform.updateSubscription(businessId, action, paymentReference, planId);
+  return api<BusinessSubscriptionRecord>(`/platform/subscriptions/${encodeURIComponent(businessId)}`, { method: 'PATCH', body: JSON.stringify({ action, paymentReference, planId }) });
 }
 
 export async function getPlatformStats() {
@@ -918,6 +927,12 @@ export async function getCustomRoles() {
 export async function createCustomRole(payload: { name: string; permissions: string[] }) {
   if (isDesktopMode()) return desktop.users.createRole(payload);
   return api<CustomRoleRecord>('/custom-roles', { method: 'POST', body: JSON.stringify(payload) });
+}
+export async function updateCustomRole(id: string, payload: { name: string; permissions: string[] }) {
+  return api<CustomRoleRecord>(`/custom-roles/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(payload) });
+}
+export async function deleteCustomRole(id: string) {
+  await api<void>(`/custom-roles/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 export async function createBusinessUser(payload: { name: string; email: string; password: string; role: 'business_admin' | 'cashier'; customRoleId?: string | null }) {
   if (isDesktopMode()) return desktop.users.create(payload);
@@ -1049,6 +1064,12 @@ export const dataService = {
       writeLocal(db); return created;
     }
   },
+  uploadProductImage(id: string, dataUrl: string): Promise<Product> {
+    return api<Product>(`/products/${encodeURIComponent(id)}/image`, { method: 'PUT', body: JSON.stringify({ dataUrl }) });
+  },
+  removeProductImage(id: string): Promise<Product> {
+    return api<Product>(`/products/${encodeURIComponent(id)}/image`, { method: 'DELETE' });
+  },
   async updateProduct(id: string, input: Omit<Product, 'id'> & { cost?: number; productType?: 'sale_item' | 'ingredient' | 'supplies'; unit?: string }): Promise<Product> {
     const payload = { ...input, productType: input.productType || 'sale_item', unit: input.unit || 'unidad', cost: input.cost || 0 };
     try {
@@ -1100,7 +1121,11 @@ export const dataService = {
           localStorage.setItem(backupKey, JSON.stringify({ savedAt: new Date().toISOString(), sales: [...allSales.values()], note: 'Registros que existían en modo local y no están en la base SQLite del servidor. No fueron importados automáticamente para evitar duplicar ventas e inventario.' }));
         } catch { /* Preserve the current server data even if the browser cannot create a backup. */ }
       }
-      local.sales = data; writeLocal(local); return data;
+      // Con sesión el servidor es la fuente de verdad y la copia local nunca se lee
+      // (canFallbackToLocal). Guardar todo el historial llenaba el límite de ~5 MB de
+      // localStorage y rompía Ventas/Reportes/Dashboard en negocios con muchas ventas.
+      if (isDesktopMode() || !hasAuthenticatedSession()) { local.sales = data; writeLocal(local); }
+      return data;
     } catch (error) {
       if (!canFallbackToLocal(error)) throw error;
       return readLocal().sales.sort((a, b) => b.date.localeCompare(a.date));

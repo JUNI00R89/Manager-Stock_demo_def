@@ -12,8 +12,8 @@ import { Badge } from '../components/ui/badge';
 import { Separator } from '../components/ui/separator';
 import { dataService, type SaleRecord } from '../services/dataService';
 import { useAuth } from '../context/AuthContext';
+import { formatMoney as money } from '../utils/restaurantFormat';
 
-const money = (v: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(v);
 const labels = { completed: 'Completada', pending: 'Pendiente', cancelled: 'Anulada' } as const;
 
 export function SaleDetail() {

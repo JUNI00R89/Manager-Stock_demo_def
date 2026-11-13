@@ -7,14 +7,13 @@ import { Card } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
 import { dataService, type InventoryLocationRecord, type InventoryLotRecord, type InventorySettingsRecord } from '../../services/dataService';
-import type { Product, Supplier } from '../../utils/mockData';
+import type { Product, Supplier } from '../../utils/types';
 import { useAuth } from '../../context/AuthContext';
 
-export const money = (value: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(Number.isFinite(value) ? value : 0);
+export { formatMoney as money } from '../../utils/restaurantFormat';
 export const fmtQty = (value: number) => new Intl.NumberFormat('es-CO', { maximumFractionDigits: 3 }).format(Number.isFinite(value) ? value : 0);
 export const dateOnly = (value: string | null | undefined) => value ? new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium' }).format(new Date(`${value.length === 10 ? `${value}T12:00:00` : value}`)) : '—';
 export const dateTime = (value: string | null | undefined) => value ? new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
-export const todayInput = () => new Date().toISOString().slice(0, 10);
 
 export function useWarehouseRefs() {
   const [products, setProducts] = useState<Product[]>([]);

@@ -9,7 +9,7 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
 import { dataService, type InventoryMovementRecord } from '../../services/dataService';
-import type { Product } from '../../utils/mockData';
+import type { Product } from '../../utils/types';
 import { BarcodeScan, dateTime, fmtQty, money, PageTitle, ProductSelect, useWarehouseRefs } from './shared';
 
 type EntryLine = {

@@ -623,7 +623,7 @@ function LayoutShell({ children }: LayoutProps) {
           {/* Breadcrumb / page title area */}
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-foreground truncate hidden sm:block">
-              {config?.name || 'Manager Stock Pro'}
+              {config?.name || 'Manager Stock'}
             </p>
           </div>
 

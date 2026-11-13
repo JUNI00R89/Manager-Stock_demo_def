@@ -18,8 +18,3 @@ export function useRestaurantBusinessId(): string {
   const { user } = useAuth();
   return config?.id || user?.businessId || config?.name || 'default';
 }
-
-export function useRestaurantCurrency(): string {
-  const { config } = useBusiness();
-  return config?.currency || 'COP';
-}
