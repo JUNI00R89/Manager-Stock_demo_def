@@ -3,6 +3,13 @@
 **Fecha:** 22 de octubre de 2026  
 **Objetivo:** convertir Manager Stock en una app de escritorio instalable, **sin FastAPI**, con credenciales demo embebidas y datos locales.
 
+> **Actualización 12-11-2026:** la carpeta `desktop/` (Electron 37) se eliminó por duplicar a `electron/`,
+> que es la que usa el `package.json` raíz (`npm run desktop`, `npm run desktop:build`). `electron/main.cjs`
+> sirve `dist/` en el puerto fijo **41731** y, si está ocupado, muestra un aviso en lugar de cambiar de
+> puerto (cambiar de origen dejaría `localStorage` vacío). El modo local se activa con el puente
+> `managerStockDesktop` del preload, así que no hace falta `.env.desktop`. No se migró el modo smoke test.
+> Las rutas `desktop/...` y los comandos `--prefix desktop` de este documento son históricos.
+
 ---
 
 ## 1. Decisión de arquitectura
@@ -135,7 +142,7 @@ Los empleados demo usan la contraseña `EmpleadoDemo2026!`.
 
 ## 7. Notas técnicas y riesgos conocidos
 
-- **Puerto fijo 41731:** si está ocupado, Electron intenta 41731–41735. Si cambia de puerto, el origen de `localStorage` cambia y la app parecerá tener datos nuevos. Para la demo se asume que 41731 está libre.
+- **Puerto fijo 41731:** si está ocupado, Electron avisa y no arranca (antes probaba 41731–41735). Si cambiara de puerto, el origen de `localStorage` cambiaría y la app parecería tener datos nuevos.
 - **El seed se genera desde la API:** si la base SQLite cambia, hay que regenerar `public/desktop-seed.json` y volver a compilar.
 - **Datos por negocio:** entrar con otra cuenta no borra la base anterior; se conserva bajo su propia clave.
 - **El warehouse (Logística Norte) no tiene ventas en el seed:** la API bloquea `/sales` porque su POS está desactivado. Es el comportamiento actual del negocio, no un fallo del modo escritorio.

@@ -1,0 +1,5 @@
+# Dependencias solo para pruebas (no se necesitan para ejecutar la app).
+-r requirements.txt
+pytest>=8,<10
+# Solo para las pruebas de navegador (MANAGER_STOCK_E2E=1); luego: python -m playwright install chromium
+playwright>=1.45,<2

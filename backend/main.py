@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,7 +23,7 @@ from backend.core.config import CORS_EXTRA_ORIGINS, CORS_ORIGIN_REGEX, SCHEMA_PA
 from backend.core.db import connection, timestamp_iso
 from backend.core.middleware import authenticate_and_authorize
 from backend.core.schema import init_database
-from backend.core.security import hash_password
+from backend.core.security import hash_password, purge_expired_sessions
 from backend.routers import (
     auth,
     business,
@@ -45,12 +46,51 @@ from backend.routers import (
     system,
     tables,
 )
-from backend.services.business_types import process_due_type_transitions, transition_cleanup_worker
+from backend.services.business_types import process_due_type_transitions
 
 # Re-exportados para scripts y pruebas que importan desde backend.main.
-__all__ = ["app", "connection", "hash_password", "startup", "timestamp_iso", "SCHEMA_PATH"]
+__all__ = ["app", "connection", "hash_password", "prepare_database", "timestamp_iso", "SCHEMA_PATH"]
 
-app = FastAPI(title="Manager Stock API", version="1.0.0", description="API local para inventario, ventas, proveedores y pedidos.")
+logger = logging.getLogger("manager_stock")
+MAINTENANCE_INTERVAL_SECONDS = 60
+
+
+def run_maintenance() -> None:
+    """Tareas periódicas; un fallo en una no impide la otra ni detiene la API (se reintenta en el siguiente ciclo)."""
+    for name, task in (("cambios de tipo de negocio", process_due_type_transitions), ("sesiones vencidas", purge_expired_sessions)):
+        try:
+            task()
+        except Exception:
+            logger.exception("Falló la limpieza de %s", name)
+
+
+def prepare_database() -> None:
+    """Crea/migra el esquema y ejecuta una limpieza inicial. Síncrono: lo usan también los scripts."""
+    init_database()
+    run_maintenance()
+
+
+async def maintenance_worker() -> None:
+    while True:
+        await asyncio.sleep(MAINTENANCE_INTERVAL_SECONDS)
+        run_maintenance()
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    prepare_database()
+    task = asyncio.create_task(maintenance_worker())
+    try:
+        yield
+    finally:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+
+app = FastAPI(title="Manager Stock API", version="1.0.0", description="API local para inventario, ventas, proveedores y pedidos.", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -74,24 +114,3 @@ for module in (
     cash, hotel, services, orders, tables, recipes,
 ):
     app.include_router(module.router)
-
-
-@app.on_event("startup")
-async def startup():
-    init_database()
-    try:
-        process_due_type_transitions()
-    except Exception:  # a pending cleanup must never keep every business offline; the worker retries
-        logging.getLogger("manager_stock").exception("Fallo la limpieza de cambios de tipo al arrancar")
-    app.state.transition_cleanup_task = asyncio.create_task(transition_cleanup_worker())
-
-
-@app.on_event("shutdown")
-async def shutdown():
-    task = getattr(app.state, "transition_cleanup_task", None)
-    if task is not None:
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass

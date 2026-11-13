@@ -1,5 +1,5 @@
 """Optional UI regression: start Vite and API against a disposable database first."""
-import httpx,uuid
+import httpx,os,uuid
 from datetime import datetime,timedelta
 from zoneinfo import ZoneInfo
 from pathlib import Path
@@ -15,7 +15,7 @@ def reserve(name,offset):
  r=api.post('/api/hotel/reservations',headers=h,json={'roomId':rooms[0]['id'],'guestName':name,'checkIn':str(today+timedelta(days=offset)),'checkOut':str(today+timedelta(days=offset+2))});r.raise_for_status();return r.json()
 reservation=reserve('Mouse Guest',1)
 with sync_playwright() as p:
- b=p.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox'])
+ b=p.chromium.launch(executable_path=os.getenv('CHROMIUM_PATH') or None,headless=True,args=['--no-sandbox'])
  context=b.new_context(viewport={'width':1366,'height':1000},timezone_id='America/Bogota')
  page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
  def login(page):
@@ -75,12 +75,12 @@ with sync_playwright() as p:
  account=api.get(base+'/account',headers=h).json();assert len(account['refunds'])==1 and account['refundedTotal']==50 and account['balance']==0,account
  assert api.get('/api/cash/sessions/current',headers=h).json()['expectedAmount']==150
  with touchpage.expect_download() as info:touchpage.get_by_role('button',name='Comprobante de devolución',exact=True).click()
- assert 'Descuento acordado' in Path(info.value.path()).read_text()
+ assert 'Descuento acordado' in Path(info.value.path()).read_text(encoding='utf-8')
  touchpage.goto('http://127.0.0.1:5173/hotel/income',wait_until='networkidle')
  touchpage.get_by_text('Ingreso neto',exact=True).wait_for()
  assert touchpage.evaluate("new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP'}).format(150)") in touchpage.locator('body').inner_text(), touchpage.locator('body').inner_text()
  with touchpage.expect_download() as info:touchpage.get_by_role('button',name='Exportar CSV',exact=True).click()
- csv=Path(info.value.path()).read_text();assert 'Devolución' in csv and '-50.00' in csv,csv
+ csv=Path(info.value.path()).read_text(encoding='utf-8');assert 'Devolución' in csv and '-50.00' in csv,csv
  assert touchpage.evaluate('document.documentElement.scrollWidth <= innerWidth'), 'Report overflow on mobile'
  touchpage.set_viewport_size({'width':320,'height':740})
  assert touchpage.evaluate('document.documentElement.scrollWidth <= innerWidth'), 'Report overflow at 320px'
