@@ -164,11 +164,13 @@ def expand_role_permissions(requested: list[str]) -> list[str]:
     permission_set = set(requested)
     permission_set.add("dashboard.view")
     dependencies = {
+        "customers.manage": {"customers.view"},
+        "billing.manage": {"billing.view", "customers.view"},
         "catalog.create": {"catalog.view"},
         "catalog.edit": {"catalog.view"},
         "inventory.edit": {"inventory.view"},
         "inventory.entry": {"inventory.view", "catalog.view"},
-        "inventory.adjust": {"inventory.view", "catalog.view"},
+        "inventory.adjust": {"inventory.view", "catalog.view", "inventory.count"},
         "inventory.delete": {"inventory.view"},
         "inventory.negative": {"inventory.view"},
         "purchases.approve": {"inventory.view", "suppliers.view", "catalog.view"},
@@ -259,23 +261,26 @@ def create_business_user(payload: CreateStaffPayload):
         # A custom role uses the lowest-privilege base role; its effective permissions are separate.
         payload.role = "cashier"
     email = payload.email.strip().lower()
-    with connection() as conn:
-        subscription = subscription_for_business(conn, business_id)
-        plan_limits = subscription["plan"]
-        user_count = conn.execute("SELECT count(*) FROM auth_users WHERE business_id=?", (business_id,)).fetchone()[0]
-        if user_count >= plan_limits["maxUsers"]:
-            raise HTTPException(409, f"El plan {plan_limits['name']} permite hasta {plan_limits['maxUsers']} usuarios en total. Cambia de plan para añadir más.")
     try:
-        password_hash = hash_password(payload.password)
+        password_hash = hash_password(payload.password)  # slow on purpose: done before taking the write lock
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     user_id = f"USR-{uuid.uuid4().hex[:12].upper()}"
     with connection() as conn:
+        # Count and insert under one write lock, so two simultaneous sign-ups cannot exceed the plan.
+        conn.execute("BEGIN IMMEDIATE")
+        plan_limits = subscription_for_business(conn, business_id)["plan"]
+        user_count = conn.execute("SELECT count(*) FROM auth_users WHERE business_id=?", (business_id,)).fetchone()[0]
+        if user_count >= plan_limits["maxUsers"]:
+            conn.rollback()
+            raise HTTPException(409, f"El plan {plan_limits['name']} permite hasta {plan_limits['maxUsers']} usuarios en total. Cambia de plan para añadir más.")
         try:
             conn.execute("INSERT INTO auth_users (id,business_id,full_name,email,password_hash,role,custom_role_id) VALUES (?,?,?,?,?,?,?)", (user_id, business_id, payload.name.strip(), email, password_hash, payload.role, payload.customRoleId))
         except sqlite3.IntegrityError as exc:
+            conn.rollback()
             raise HTTPException(409, "Ya existe una cuenta con ese correo.") from exc
         audit(conn, "create", "user", user_id, {"role": payload.role, "email": email})
+        conn.commit()
         row = conn.execute("""SELECT u.id,u.business_id,u.full_name,u.email,u.role,u.custom_role_id,u.active,u.created_at,cr.name custom_role_name
             FROM auth_users u LEFT JOIN custom_roles cr ON cr.id=u.custom_role_id WHERE u.id=?""", (user_id,)).fetchone()
         return {"id": row["id"], "businessId": row["business_id"], "name": row["full_name"], "email": row["email"], "role": row["role"], "customRoleId": row["custom_role_id"], "customRoleName": row["custom_role_name"], "active": bool(row["active"]), "createdAt": row["created_at"]}

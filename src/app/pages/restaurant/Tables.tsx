@@ -1,3 +1,4 @@
+import { PaymentFields, paymentParts } from '../../components/PaymentFields';
 import { canPerformAction } from '../../security/permissions';
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { Layout } from '../../components/Layout';
@@ -101,6 +102,10 @@ export function Tables() {
   const [activeCategory, setActiveCategory] = useState('Todos');
   const [customerName, setCustomerName] = useState('');
   const [savingOrder, setSavingOrder] = useState(false);
+  const [checkoutView, setCheckoutView] = useState<TableView | null>(null);
+  const [checkoutPayments, setCheckoutPayments] = useState<Record<string, string>>({});
+  const checkoutSubtotal = checkoutView ? [...checkoutView.orders.flatMap(o => o.items.map(i => ({ productId: i.productId, quantity: i.quantity, price: i.unitPrice })))].reduce((sum, i) => sum + Math.round((products.find(p => p.id === i.productId)?.price ?? i.price) * i.quantity * 100) / 100, 0) : 0;
+  const checkoutTotal = Math.round((checkoutSubtotal + Math.round(checkoutSubtotal * (config?.taxRate ?? .19) * 100) / 100) * 100) / 100;
   const [closingId, setClosingId] = useState<string | null>(null);
 
   const [formOpen, setFormOpen] = useState(false);
@@ -381,7 +386,7 @@ export function Tables() {
     }
   };
 
-  const closeTable = async (view: TableView, paymentMethod: keyof typeof PAYMENT_LABELS) => {
+  const closeTable = async (view: TableView) => {
     if (!view.occupied) return;
     setClosingId(view.table.id);
     try {
@@ -394,21 +399,33 @@ export function Tables() {
         localStorage.setItem(keyName, key);
       }
       const session = await dataService.getCurrentCashSession();
-      const sale = await dataService.createSale({
+      if (!session) throw new Error('Abre tu turno en Punto de Venta antes de cobrar la mesa.');
+      const parts = paymentParts(checkoutPayments);
+      if (!parts.length && checkoutTotal === 0) parts.push({ method: 'cash', amount: 0 });
+      const pendingKey = `table_checkout_payload:${user?.businessId}:${user?.id}:${view.table.id}`;
+      const saved = localStorage.getItem(pendingKey);
+      if (!saved && Math.abs(parts.reduce((sum, p) => sum + p.amount, 0) - checkoutTotal) > .01) throw new Error('Distribuye el total entre los medios de pago.');
+      const payload = saved ? JSON.parse(saved) : {
         orderIds: view.orders.map(order => order.id),
         items: [],
         customer: `Mesa ${view.table.number}`,
-        paymentMethod,
+        paymentMethod: parts.length > 1 ? 'split' : parts[0]?.method || 'cash',
+        payments: parts,
         taxRate: config?.taxRate,
         cashSessionId: session?.id,
         idempotencyKey: key,
-      });
-      localStorage.removeItem(`table_bill_only_${view.table.id}`); // limpia restos de versiones anteriores
+      };
+      localStorage.setItem(pendingKey, JSON.stringify(payload));
+      const sale = await dataService.createSale(payload);
+      localStorage.removeItem(pendingKey);
+      setCheckoutView(null);
+
       localStorage.removeItem(keyName);
       setOrders(prev => prev.filter(order => !view.orders.some(closed => closed.id === order.id)));
-      toast.success(`Mesa ${view.table.number} cerrada`, { description: `Total cobrado (${PAYMENT_LABELS[paymentMethod]}): ${money(sale.totalPrice)}` });
+      toast.success(`Mesa ${view.table.number} cerrada`, { description: `Total cobrado: ${money(sale.totalPrice)}` });
       void dataService.getOrders().then(setOrders).catch(() => undefined);
     } catch (error) {
+      if (error && typeof error === 'object' && 'status' in error && [400, 403, 404, 409, 422].includes(Number(error.status))) localStorage.removeItem(`table_checkout_payload:${user?.businessId}:${user?.id}:${view.table.id}`);
       toastError(error, 'No se pudo cerrar la mesa');
     } finally {
       setClosingId(null);
@@ -566,28 +583,19 @@ export function Tables() {
                         </div>
                       )}
 
-                      <div className="space-y-1" style={{ display: canCollect ? undefined : 'none' }}>
-                        <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Receipt size={12} />
-                          {closingId === view.table.id ? 'Cobrando...' : 'Cobrar con:'}
-                        </p>
-                        <div className="grid grid-cols-3 gap-1">
-                          {(Object.keys(PAYMENT_LABELS) as (keyof typeof PAYMENT_LABELS)[]).map((method) => (
-                            <Button
-                              key={method}
-                              size="sm"
-                              className="bg-rose-600 px-1 hover:bg-rose-700"
-                              disabled={closingId === view.table.id}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                void closeTable(view, method);
-                              }}
-                            >
-                              {PAYMENT_LABELS[method]}
-                            </Button>
-                          ))}
-                        </div>
-                      </div>
+                      <Button
+                        size="sm"
+                        className="w-full bg-rose-600 hover:bg-rose-700"
+                        style={{ display: canCollect ? undefined : 'none' }}
+                        disabled={closingId === view.table.id}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setCheckoutPayments({}); setCheckoutView(view);
+                        }}
+                      >
+                        <Receipt size={14} className="mr-1" />
+                        {closingId === view.table.id ? 'Cobrando...' : 'Cobrar mesa'}
+                      </Button>
                     </div>
                   )}
 
@@ -851,6 +859,7 @@ export function Tables() {
           )}
         </DialogContent>
       </Dialog>
+      <Dialog open={!!checkoutView} onOpenChange={open => { if (!open && !closingId) setCheckoutView(null); }}><DialogContent className="max-h-[90dvh] overflow-y-auto"><DialogHeader><DialogTitle>Cobrar mesa {checkoutView?.table.number}</DialogTitle><DialogDescription>Registra el pago completo de la mesa con uno o varios medios.</DialogDescription></DialogHeader><p className="font-semibold">Total con impuestos: {money(checkoutTotal)}</p><PaymentFields total={checkoutTotal} values={checkoutPayments} onChange={setCheckoutPayments} disabled={!!closingId} />{checkoutView && localStorage.getItem(`table_checkout_payload:${user?.businessId}:${user?.id}:${checkoutView.table.id}`) && <p className="text-sm">Hay un cobro por confirmar. Se reintentará con los importes guardados.</p>}<Button className="min-h-11" disabled={!!closingId || !checkoutView} onClick={() => checkoutView && void closeTable(checkoutView)}>{closingId ? 'Confirmando…' : 'Confirmar cobro'}</Button></DialogContent></Dialog>
     </Layout>
   );
 }

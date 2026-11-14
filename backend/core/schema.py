@@ -56,6 +56,7 @@ def migrate_inventory_schema(conn: sqlite3.Connection) -> None:
     if products_sql_row and "CHECK(stock >= 0)" in (products_sql_row["sql"] or ""):
         # Negative stock is a tenant-configurable policy; remove the old hard check.
         conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute("PRAGMA legacy_alter_table = ON")
         conn.execute("""CREATE TABLE products_new (
             id TEXT PRIMARY KEY, business_id TEXT NOT NULL REFERENCES businesses(id), name TEXT NOT NULL,
             sku TEXT NOT NULL, category TEXT NOT NULL, price REAL NOT NULL CHECK(price >= 0),
@@ -77,12 +78,14 @@ def migrate_inventory_schema(conn: sqlite3.Connection) -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(business_id,barcode)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_products_supplier ON products(business_id,supplier_id)")
         conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA legacy_alter_table = OFF")
     movement_sql = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='inventory_movements'").fetchone()
     needs_rebuild = bool(movement_sql) and ("operation_id" not in (movement_sql["sql"] or "") or "customer_return" not in (movement_sql["sql"] or ""))
     if needs_rebuild:
         # SQLite cannot alter a CHECK constraint, so rebuild the movement journal while
         # preserving every historical row. No table references inventory_movements.
         conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute("PRAGMA legacy_alter_table = ON")
         conn.execute("DROP INDEX IF EXISTS idx_inventory_movements_product_date")
         conn.execute("ALTER TABLE inventory_movements RENAME TO inventory_movements_legacy")
         conn.executescript(INVENTORY_MOVEMENTS_V2)
@@ -92,6 +95,7 @@ def migrate_inventory_schema(conn: sqlite3.Connection) -> None:
             FROM inventory_movements_legacy""")
         conn.execute("DROP TABLE inventory_movements_legacy")
         conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA legacy_alter_table = OFF")
 
 
 def init_database() -> None:
@@ -186,6 +190,20 @@ def init_database() -> None:
                 expires_at TEXT,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
+            -- Un registro por cobro verificado. La referencia es única para que el mismo
+            -- pago (p. ej. un cobro mensual de Mercado Pago) no pueda sumar días dos veces.
+            CREATE TABLE IF NOT EXISTS subscription_payments (
+                id TEXT PRIMARY KEY,
+                business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+                plan_id TEXT NOT NULL,
+                amount_cop INTEGER NOT NULL,
+                payment_reference TEXT NOT NULL UNIQUE,
+                period_start TEXT NOT NULL,
+                period_end TEXT NOT NULL,
+                recorded_by TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_subscription_payments_business ON subscription_payments(business_id,created_at DESC);
         """)
         user_columns = {row["name"] for row in conn.execute("PRAGMA table_info(auth_users)").fetchall()}
         if "custom_role_id" not in user_columns:
@@ -205,6 +223,7 @@ def init_database() -> None:
             # Service lines (charged appointments) have no product. SQLite cannot drop NOT NULL,
             # so rebuild keeping every row; no table references sale_items.
             conn.execute("PRAGMA foreign_keys = OFF")
+            conn.execute("PRAGMA legacy_alter_table = ON")
             conn.execute("BEGIN IMMEDIATE")  # all-or-nothing: a crash mid-rebuild must not lose sale lines
             conn.execute("ALTER TABLE sale_items RENAME TO sale_items_legacy")
             conn.execute("""CREATE TABLE sale_items (
@@ -219,6 +238,7 @@ def init_database() -> None:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON sale_items(sale_id)")
             conn.execute("COMMIT")
             conn.execute("PRAGMA foreign_keys = ON")
+            conn.execute("PRAGMA legacy_alter_table = OFF")
         if not table_has_column(conn, "service_appointments", "sale_id"):
             conn.execute("ALTER TABLE service_appointments ADD COLUMN sale_id TEXT REFERENCES sales(id)")
         # Mesas del salón: columnas añadidas por versiones anteriores de Manager Stock.

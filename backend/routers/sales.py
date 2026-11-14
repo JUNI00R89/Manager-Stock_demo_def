@@ -8,7 +8,8 @@ from fastapi import APIRouter, HTTPException, Query
 
 from backend.core.config import CURRENCY, DEFAULT_TAX_RATE
 from backend.core.context import current_business_id, current_identity
-from backend.core.db import audit, connection
+from backend.core.security import has_permission
+from backend.core.db import audit, connection, colombia_now_iso
 from backend.schemas import PaymentPartPayload, SaleItemPayload, SalePayload
 from backend.services.inventory import allows_negative_stock, consume_product_stock, recipe_ingredient_usage, recipe_unit_cost, reverse_movements, validate_product_quantity
 from backend.services.sales import get_sale, get_sales
@@ -69,8 +70,26 @@ def create_sale(payload: SalePayload):
         conn.execute("BEGIN IMMEDIATE")
         existing = conn.execute("SELECT id FROM sales WHERE business_id=? AND idempotency_key=?", (current_business_id(), payload.idempotencyKey)).fetchone()
         if existing:
+            linked = conn.execute("SELECT appointment_id FROM service_sale_lines WHERE sale_id=?", (existing["id"],)).fetchone()
+            if (linked["appointment_id"] if linked else None) != payload.appointmentId:
+                raise HTTPException(409, "La clave de cobro pertenece a otra operación.")
             conn.commit()
             return get_sale(conn, existing["id"])
+        if payload.appointmentId and payload.appointmentIds:
+            raise HTTPException(422, "Usa un solo flujo de cobro de citas por operación.")
+        appointment = None
+        if payload.appointmentId:
+            if not has_permission("services.manage") or not has_permission("cash.manage"):
+                raise HTTPException(403, "Necesitas permisos de servicios y caja para cobrar una cita.")
+            appointment = conn.execute("SELECT * FROM service_appointments WHERE id=? AND business_id=?", (payload.appointmentId, current_business_id())).fetchone()
+            if not appointment:
+                raise HTTPException(404, "Cita no encontrada.")
+            if appointment["sale_id"] or appointment["status"] in {"cancelled", "no_show"} or payload.status != "completed" or payload.orderIds:
+                raise HTTPException(409, "La cita ya fue cobrada o no admite un cobro.")
+            session = conn.execute("SELECT id FROM cash_sessions WHERE id=? AND business_id=? AND opened_by_user_id=? AND status='open'", (payload.cashSessionId, current_business_id(), current_identity()["id"])).fetchone()
+            if not session:
+                raise HTTPException(409, "Abre tu turno de caja antes de cobrar la cita.")
+            payload = payload.model_copy(update={"customer": appointment["client_name"]})
         if current_identity()["role"] == "cashier" and not payload.cashSessionId:
             conn.rollback()
             raise HTTPException(409, "Abre tu turno de caja antes de registrar una venta.")
@@ -90,6 +109,11 @@ def create_sale(payload: SalePayload):
                 conn.rollback()
                 raise HTTPException(409, "Abre tu turno de caja para recibir pagos en efectivo.")
             payload = payload.model_copy(update={"cashSessionId": own_session["id"]})
+        customer = None
+        if payload.customerId:
+            from backend.commerce import resolve_customer
+            customer = resolve_customer(conn, payload.customerId)
+            payload = payload.model_copy(update={"customer": customer["name"]})
         business_settings = conn.execute("SELECT currency,tax_rate FROM businesses WHERE id=?", (current_business_id(),)).fetchone()
         if not business_settings:
             conn.rollback()
@@ -115,17 +139,17 @@ def create_sale(payload: SalePayload):
                 movements = conn.execute("SELECT * FROM inventory_movements WHERE order_id=? AND movement_type IN ('consumption','recipe_consumption') ORDER BY id", (order_id,)).fetchall()
                 reverse_movements(conn, movements, f"Traslado a venta del pedido {order_id}", "adjustment")
         # Attended appointments become service lines (no product, no stock) at their booked price.
-        appointments = []
-        for appointment_id in dict.fromkeys(payload.appointmentIds):
-            appointment = conn.execute("SELECT * FROM service_appointments WHERE id=? AND business_id=?", (appointment_id, current_business_id())).fetchone()
-            if not appointment:
+        legacy_appointments = []
+        for booked_id in dict.fromkeys(payload.appointmentIds):
+            booked = conn.execute("SELECT * FROM service_appointments WHERE id=? AND business_id=?", (booked_id, current_business_id())).fetchone()
+            if not booked:
                 raise HTTPException(404, "Cita no encontrada.")
-            if appointment["status"] != "attended":
+            if booked["status"] != "attended":
                 raise HTTPException(409, "Marca la cita como atendida antes de cobrarla.")
-            if appointment["sale_id"]:  # cancel_sale clears it, so set means a live charge
+            if booked["sale_id"]:  # cancel_sale clears it, so set means a live charge
                 raise HTTPException(409, "La cita ya fue cobrada.")
-            appointments.append(appointment)
-        if not items and not appointments:
+            legacy_appointments.append(booked)
+        if not items and not legacy_appointments and not appointment:
             raise HTTPException(422, "Agrega al menos un producto, pedido o cita a la venta.")
         payload = payload.model_copy(update={"items": items})
 
@@ -174,7 +198,7 @@ def create_sale(payload: SalePayload):
                     conn.rollback()
                     raise HTTPException(409, f"Stock insuficiente para {product['name']}. Disponible: {available:g}; solicitado: {required_quantity:g}.")
 
-        subtotal = 0.0
+        subtotal = float(appointment["price_snapshot"]) if appointment else 0.0
         line_discount = 0.0
         resolved_items = []
         for item in payload.items:
@@ -186,7 +210,7 @@ def create_sale(payload: SalePayload):
             subtotal += gross
             line_discount += disc
             resolved_items.append((item, product, gross, disc, line_total))
-        subtotal += sum(float(appointment["price_snapshot"]) for appointment in appointments)
+        subtotal += sum(float(booked["price_snapshot"]) for booked in legacy_appointments)
         subtotal = round(subtotal, 2)
         line_discount = round(line_discount, 2)
         after_line_discount = max(0, round(subtotal - line_discount, 2))
@@ -203,7 +227,7 @@ def create_sale(payload: SalePayload):
             raise HTTPException(422, "La suma de los métodos de pago debe coincidir con el total de la venta.")
         if not payment_parts and payload.paymentMethod != "split":
             payment_parts = [PaymentPartPayload(method=payload.paymentMethod if payload.paymentMethod != "split" else "cash", amount=total)]
-        now = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+        now = colombia_now_iso()
         sale_id = f"VTA-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
         conn.execute(
             """INSERT INTO sales (id,business_id,idempotency_key,customer,payment_method,currency,subtotal,line_discount,global_discount,tax_rate,tax,total,status,created_by,cash_session_id,created_at)
@@ -211,6 +235,12 @@ def create_sale(payload: SalePayload):
             (sale_id, current_business_id(), payload.idempotencyKey, payload.customer.strip() or "Cliente general", payload.paymentMethod,
              sale_currency, subtotal, line_discount, global_discount, sale_tax_rate, tax, total, payload.status, current_identity()["id"], payload.cashSessionId, now),
         )
+        if appointment:
+            conn.execute("INSERT INTO service_sale_lines VALUES (?,?,?,?,?,?)", (sale_id, appointment["id"], appointment["service_id"], appointment["service_name_snapshot"], appointment["price_snapshot"], appointment["price_snapshot"]))
+            conn.execute("UPDATE service_appointments SET sale_id=?,status='attended',updated_at=CURRENT_TIMESTAMP WHERE id=?", (sale_id, appointment["id"]))
+        if customer:
+            from backend.commerce import link_customer
+            link_customer(conn, "sale", sale_id, customer["id"])
         for part in payment_parts:
             conn.execute("INSERT INTO sale_payments (sale_id,method,amount) VALUES (?,?,?)", (sale_id, part.method, part.amount))
         recipe_costs = {product_id: recipe_unit_cost(conn, product_id) for product_id in quantities_by_product}
@@ -243,15 +273,15 @@ def create_sale(payload: SalePayload):
 
         for order in linked_orders:
             conn.execute("UPDATE orders SET sale_id=?,status='delivered',stock_consumed=0,updated_at=CURRENT_TIMESTAMP WHERE id=?", (sale_id, order["id"]))
-        for appointment in appointments:
-            price = float(appointment["price_snapshot"])
+        for booked in legacy_appointments:
+            price = float(booked["price_snapshot"])
             conn.execute(
                 """INSERT INTO sale_items (sale_id,product_id,product_name,sku_snapshot,quantity,unit_price,unit_cost_snapshot,discount_percent,line_total)
                    VALUES (?,NULL,?,'SERVICIO',1,?,0,0,?)""",
-                (sale_id, appointment["service_name_snapshot"], price, price),
+                (sale_id, booked["service_name_snapshot"], price, price),
             )
-            conn.execute("UPDATE service_appointments SET sale_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", (sale_id, appointment["id"]))
-        audit(conn, "create", "sale", sale_id, {"total": total, "items": len(resolved_items) + len(appointments), "taxRate": sale_tax_rate, "paymentMethod": payload.paymentMethod})
+            conn.execute("UPDATE service_appointments SET sale_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", (sale_id, booked["id"]))
+        audit(conn, "create", "sale", sale_id, {"total": total, "items": len(resolved_items) + len(legacy_appointments), "taxRate": sale_tax_rate, "paymentMethod": payload.paymentMethod})
         conn.commit()
         return get_sale(conn, sale_id)
 
@@ -267,6 +297,12 @@ def cancel_sale(sale_id: str):
         if sale["status"] == "cancelled":
             conn.commit()
             return get_sale(conn, sale_id)
+        if conn.execute("SELECT 1 FROM service_sale_lines WHERE sale_id=?", (sale_id,)).fetchone():
+            raise HTTPException(409, "La cita tiene un cobro vinculado. Registra una devolución desde su comprobante.")
+        if conn.execute("SELECT 1 FROM sale_returns WHERE sale_id=?", (sale_id,)).fetchone():
+            raise HTTPException(409, "La venta tiene devoluciones parciales. Devuelve las líneas restantes para conservar la trazabilidad.")
+        if conn.execute("SELECT 1 FROM billing_drafts WHERE business_id=? AND source_type='sale' AND source_id=?", (current_business_id(), sale_id)).fetchone():
+            raise HTTPException(409, "La venta tiene preparación fiscal. Registra una devolución vinculada en lugar de anularla.")
         movements = conn.execute(
             "SELECT * FROM inventory_movements WHERE sale_id=? AND movement_type IN ('sale','recipe_consumption') ORDER BY id",
             (sale_id,),

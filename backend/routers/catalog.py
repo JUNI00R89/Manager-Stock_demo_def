@@ -13,8 +13,9 @@ from fastapi.responses import FileResponse
 from backend.core.config import UPLOADS_DIR
 from backend.core.context import current_business_id, current_identity
 from backend.core.db import audit, connection, timestamp_iso
-from backend.schemas import ProductCategoryPayload, ProductImagePayload, ProductPayload
-from backend.services.catalog import ensure_product_category, normalize_category_name, product_category_options, product_out
+from backend.schemas import ProductCategoryPayload, ProductImagePayload, ProductImportPayload, ProductPayload
+from backend.services.catalog import ensure_product_category, insert_product, next_sku, normalize_category_name, product_category_options, product_out
+from backend.services.product_import import ImportFileError, build_template, decode_data_url, read_rows, row_to_payload
 from backend.services.inventory import add_product_stock, allows_negative_stock, consume_product_stock, get_or_create_lot, insert_movement
 from backend.services.subscriptions import subscription_for_business
 
@@ -96,31 +97,121 @@ def create_product(payload: ProductPayload):
                 raise HTTPException(422, "La ubicación seleccionada no pertenece a este negocio.")
         try:
             conn.execute("BEGIN IMMEDIATE")
-            conn.execute(
-                """INSERT INTO products (id,business_id,name,sku,category,price,cost,stock,min_stock,description,image,product_type,unit,
-                   supplier_id,barcode,track_lots,default_location_id)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (product_id, current_business_id(), payload.name.strip(), payload.sku, payload.category.strip(), payload.price,
-                 payload.cost, payload.stock, payload.minStock, payload.description.strip(), client_image_key(payload.image),
-                 payload.productType, payload.unit, payload.supplierId, payload.barcode.strip(), 1 if payload.trackLots else 0,
-                 payload.defaultLocationId),
-            )
-            if payload.stock > 0:
-                lot_id = None
-                if payload.trackLots:
-                    lot_id = get_or_create_lot(conn, conn.execute("SELECT * FROM products WHERE id=?", (product_id,)).fetchone(), f"INICIAL-{product_id[-6:]}", None, payload.cost, payload.defaultLocationId)
-                    conn.execute("UPDATE product_lots SET quantity=? WHERE id=?", (payload.stock, lot_id))
-                insert_movement(
-                    conn, product_id=product_id, movement_type="opening", quantity_delta=payload.stock,
-                    stock_before=0, stock_after=payload.stock, note="Existencias iniciales del producto",
-                    unit_cost=payload.cost, lot_id=lot_id, location_id=payload.defaultLocationId,
-                )
-            audit(conn, "create", "product", product_id, {"sku": payload.sku})
+            if not payload.sku:
+                payload = payload.model_copy(update={"sku": next_sku(conn, current_business_id(), payload.category)})
+            insert_product(conn, payload, product_id, client_image_key(payload.image))
             conn.commit()
         except sqlite3.IntegrityError as exc:
             conn.rollback()
             raise HTTPException(409, "Ya existe un producto con ese SKU.") from exc
         return product_out(conn.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone())
+
+
+@router.get("/api/products/import/template")
+def product_import_template():
+    data = base64.b64encode(build_template()).decode()
+    return {"fileName": "plantilla-productos.xlsx", "dataUrl": f"data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{data}"}
+
+
+def parse_import_file(payload: ProductImportPayload) -> list[tuple[int, dict[str, str]]]:
+    try:
+        return read_rows(payload.fileName, decode_data_url(payload.dataUrl))
+    except ImportFileError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+def build_import_report(conn: sqlite3.Connection, rows: list[tuple[int, dict[str, str]]]) -> tuple[dict, list[ProductPayload]]:
+    """Decides, row by row, what would be created; saves nothing."""
+    business_id = current_business_id()
+    existing = conn.execute("SELECT sku, name, active FROM products WHERE business_id=?", (business_id,)).fetchall()
+    # Codes compare case-insensitively: legacy rows may hold "ag1" while the file says "AG1".
+    codes = {str(row["sku"]).upper(): bool(row["active"]) for row in existing}
+    # Rows without a code have nothing else to match on, so the same name counts as "already exists".
+    # Archived products keep their code (unique index) but not their name: the user cannot see them.
+    names = {normalize_category_name(row["name"]) for row in existing if row["active"]}
+    _, options = product_category_options(conn, business_id)
+    known = {normalize_category_name(option["name"]): option["name"] for option in options}
+    # Deactivated categories still hold their name in the unique index, so they are reused, not duplicated.
+    inactive = {normalize_category_name(row["name"]): row["name"] for row in conn.execute("SELECT name FROM product_categories WHERE business_id=? AND active=0", (business_id,))}
+    plan = subscription_for_business(conn, business_id)["plan"]
+    active = conn.execute("SELECT count(*) FROM products WHERE business_id=? AND active=1", (business_id,)).fetchone()[0]
+    slots = max(0, plan["maxProducts"] - active)
+    report: dict = {"toCreate": [], "skipped": [], "errors": [], "newCategories": [], "created": 0}
+    payloads: list[ProductPayload] = []
+    seen_codes: set[str] = set()
+    seen_names: set[str] = set()
+    for number, fields in rows:
+        try:
+            product = row_to_payload(fields)
+        except ValueError as exc:
+            report["errors"].append({"row": number, "message": str(exc)})
+            continue
+        name_key = normalize_category_name(product.name)
+        repeated = product.sku in seen_codes if product.sku else name_key in seen_names
+        seen_names.add(name_key)
+        if product.sku:
+            seen_codes.add(product.sku)
+        if repeated:
+            what = "Código" if product.sku else "Producto sin código con el mismo nombre"
+            report["errors"].append({"row": number, "message": f"{what} repetido en el archivo."})
+            continue
+        if product.sku in codes or (not product.sku and name_key in names):
+            skipped = {"row": number, "sku": product.sku, "name": product.name}
+            if product.sku and not codes[product.sku]:
+                skipped["archived"] = True  # exists but archived: the user cannot see it in the catalog
+            report["skipped"].append(skipped)
+            continue
+        if len(payloads) >= slots:
+            report["errors"].append({"row": number, "message": f"El plan {plan['name']} permite hasta {plan['maxProducts']} productos activos. Cambia de plan para añadir más."})
+            continue
+        names.add(name_key)
+        key = normalize_category_name(product.category)
+        if key not in known:
+            known[key] = inactive.get(key) or " ".join(product.category.split())
+            report["newCategories"].append(known[key])
+        # Products from the file use the spelling the business already has for the category.
+        product = product.model_copy(update={"category": known[key]})
+        payloads.append(product)
+        report["toCreate"].append({"row": number, "sku": product.sku, "name": product.name, "category": product.category})
+    return report, payloads
+
+
+@router.post("/api/products/import/preview")
+def preview_product_import(payload: ProductImportPayload):
+    rows = parse_import_file(payload)
+    with connection() as conn:
+        return build_import_report(conn, rows)[0]
+
+
+@router.post("/api/products/import")
+def import_products(payload: ProductImportPayload):
+    rows = parse_import_file(payload)  # outside the write lock: reading a big file must not block other businesses
+    business_id = current_business_id()
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            # Re-check inside the write lock: anything created since the preview is skipped, not duplicated.
+            report, payloads = build_import_report(conn, rows)
+            for name in report["newCategories"]:
+                if conn.execute("UPDATE product_categories SET active=1 WHERE business_id=? AND name=? AND active=0", (business_id, name)).rowcount:
+                    audit(conn, "reactivate", "product_category", name, {"source": "import"})
+                    continue
+                category_id = f"CAT-{uuid.uuid4().hex[:12].upper()}"
+                conn.execute("INSERT INTO product_categories (id,business_id,name,description,active) VALUES (?,?,?,?,1)", (category_id, business_id, name, ""))
+                audit(conn, "create", "product_category", category_id, {"name": name, "source": "import"})
+            typed = {product.sku for product in payloads if product.sku}
+            for product in payloads:
+                if not product.sku:
+                    product = product.model_copy(update={"sku": next_sku(conn, business_id, product.category, reserved=typed)})
+                    typed.add(product.sku)
+                insert_product(conn, product, f"PRD-{uuid.uuid4().hex[:10].upper()}")
+            audit(conn, "import", "product", "-", {"created": len(payloads), "file": payload.fileName})
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        report["created"] = len(payloads)
+        return report
 
 
 @router.put("/api/products/{product_id}")
@@ -140,6 +231,8 @@ def update_product(product_id: str, payload: ProductPayload):
             old = conn.execute("SELECT * FROM products WHERE id=? AND business_id=? AND active=1", (product_id, current_business_id())).fetchone()
             if not old:
                 raise HTTPException(404, "Producto no encontrado.")
+            if not payload.sku:
+                payload = payload.model_copy(update={"sku": old["sku"]})  # cleared field keeps the current code
             ensure_product_category(conn, current_business_id(), payload.category, allow_existing=(payload.category == old["category"]))
             delta = round(payload.stock - float(old["stock"] or 0), 6)
             conn.execute(

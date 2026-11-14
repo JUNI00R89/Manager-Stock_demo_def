@@ -16,7 +16,7 @@ Aplicación web para administrar productos, ventas, existencias, proveedores, ca
 - Ventas con múltiples líneas, métodos de pago, descuentos, impuesto definido en la configuración del negocio, instantáneas históricas de precio/costo, clave idempotente y paginación.
 - Anulación de venta con trazabilidad y movimientos inversos, sin borrar el registro original.
 - Caja por turno; las ventas de cajero deben pertenecer a su sesión de caja abierta.
-- Negocio de comidas con productos preparados individuales, pedidos y estados de preparación. No requiere recetas ni consume ingredientes automáticamente.
+- Negocio de comidas con platos, pedidos y estados de preparación. Las recetas son opcionales: si un plato tiene receta, cada venta descuenta sus ingredientes; si no, se descuenta el plato.
 - Página pública de presentación en `/` con carrusel interactivo, tipos de negocio y planes cargados desde el backend; el centro `/descargas` muestra la disponibilidad real por plataforma sin enlazar instaladores inexistentes.
 - Categorías de productos sugeridas por tipo de negocio y categorías personalizadas persistidas por empresa. Unidades discretas validan cantidades enteras en frontend y backend.
 - Configuración persistente del tipo de negocio. Los datos específicos de hotel/servicios/bodega se mantienen durante 15 días en una transición persistida, con aviso, opción de restauración y limpieza backend programada; productos, ventas, usuarios y otros datos compartidos se conservan.
@@ -26,7 +26,7 @@ Aplicación web para administrar productos, ventas, existencias, proveedores, ca
 - Roles personalizados por negocio con permisos delegables; el backend restringe endpoints y la interfaz adapta menús, accesos rápidos y estadísticas. Los permisos incluyen acceso de consulta y gestión para servicios/citas.
 - Suspensión administrativa con motivo obligatorio, pantalla especial para el propietario y chat persistente de soporte entre propietario y SUPERADMIN.
 - Servicios: el catálogo, los profesionales y la creación de citas están en `/services`; `/services/appointments` se utiliza para agenda, edición, estados y eliminación de citas existentes.
-- Suscripciones: planes Gratis, Emprendedor, Negocio y Empresarial con límites de productos/usuarios validados en el backend. La selección de un plan pago queda pendiente hasta que un administrador registre una verificación manual de pago. No hay cobro automático ni proveedor integrado.
+- Suscripciones: planes Gratis, Emprendedor, Negocio y Empresarial con límites de productos/usuarios validados en el backend. La selección de un plan pago queda pendiente hasta que un administrador registre una verificación manual de pago. Cada pago verificado suma 30 días: si es el mismo plan vigente, se suman al vencimiento actual (renovar antes no hace perder días ni baja el plan mientras se verifica). El SUPERADMIN registra el cobro de cada mes con «Registrar pago del mes» y la referencia del proveedor (p. ej. Mercado Pago); una referencia solo puede usarse una vez. El cobro lo hace el proveedor; la app no recibe sus avisos automáticamente. Los links de suscripción de cada plan se configuran en `SUBSCRIPTION_PAYMENT_LINKS` (`backend/core/config.py`) o con `MANAGER_STOCK_PAYMENT_LINK_ENTREPRENEUR` / `_BUSINESS` / `_ENTERPRISE`; con un link configurado, el propietario ve «Pagar con Mercado Pago» al solicitar ese plan.
 - ErrorBoundary de React para ofrecer una recuperación controlada ante errores de interfaz; corregida la referencia del icono `Package` en el punto de venta.
 - Centro de alertas calculado desde productos y ventas guardados, sin listas de alertas de demostración.
 - Inicio automatizado para Windows mediante `INICIAR_MANAGER_STOCK.bat`, creación controlada de SUPERADMIN mediante `CREAR_SUPERADMIN.bat` y carga opcional de datos ficticios desde `CREAR_DATOS_DE_PRUEBA.bat`.
@@ -114,7 +114,7 @@ Conserva una copia de `backend/data/manager_stock.db` antes de actualizaciones o
 .\.venv\Scripts\python.exe scripts\backup_database.py
 ```
 
-Las copias se escriben en `backups/`. Mantén una copia fuera del equipo y prueba periódicamente su restauración.
+Las copias se escriben por defecto en `backend/data/backups/` (o junto a la ruta configurada de la base). La API verifica una copia diaria mientras está encendida y guarda otra antes de aplicar migraciones nuevas. Configura `MANAGER_STOCK_BACKUP_DIR` para cambiar el destino. `python scripts/restore_database.py COPIA.db NUEVA_RUTA.db` restaura y verifica sin sobrescribir archivos existentes. Ver [operación y facturación en Colombia](docs/facturacion-colombia.md).
 
 ## Pruebas
 
@@ -170,7 +170,7 @@ Prueba: `.\.venv\Scripts\python.exe backend	ests	est_auth_security.py`
 - El cambio de tipo conserva los registros comunes y agenda la limpieza de datos específicos de hotel, servicios o bodega tras el periodo de transición. Habitaciones, reservas, catálogo de servicios, profesionales y citas tienen endpoints tenant-scoped; aún se deben probar visualmente todos los flujos en el navegador y completar cualquier pantalla especializada que siga usando datos de demostración.
 - Los pedidos se registran como comandas pendientes; no descuentan existencias hasta que se registra la venta cobrada. Si se trabajan muchas comandas simultáneas, la disponibilidad debe revisarse al cobrar.
 - Los reportes de rentabilidad son estimaciones derivadas del costo unitario guardado en cada venta, no contabilidad formal. Los datos históricos previos a la instantánea de costo pueden no tener un costo real reconstruible.
-- Las recetas y sus tablas antiguas se conservan únicamente por compatibilidad de esquema/migraciones. En negocio de comidas, la API devuelve 404 para recetas, el menú no muestra el módulo y las ventas no descuentan ingredientes.
+- Recetas (menú "Recetas y costos", negocio de comidas): un plato con receta descuenta sus ingredientes al venderse y calcula su costo; un plato sin receta se vende como producto normal.
 - Los datos que hayan existido solo en modo local no se mezclan automáticamente con la base SQLite.
 
 ## Estructura principal
@@ -321,12 +321,19 @@ python backend/tests/test_hotel_schedule_refunds.py
 node scripts/test_permissions.cjs
 ```
 
-Las pruebas opcionales de navegador requieren Python con Playwright, Chromium en
-`/usr/bin/chromium`, Vite en `127.0.0.1:5173` y la API en `127.0.0.1:8000`. Ejecuta
-la API con una base **temporal de pruebas** (`MANAGER_STOCK_DB=/tmp/hotel-ui-test.db`):
+Las pruebas opcionales de navegador requieren Playwright con Chromium
+(`python -m playwright install chromium`; otra ruta con `CHROMIUM_PATH`), Vite en
+`127.0.0.1:5173` y la API en `127.0.0.1:8000`. Ejecuta la API con una base
+**temporal de pruebas** (por ejemplo `MANAGER_STOCK_DB=/tmp/hotel-ui-test.db`):
 las pruebas crean negocios y reservas de demostración.
 
 ```sh
-python backend/tests/test_hotel_browser.py
-python backend/tests/test_hotel_local_browser.py
+MANAGER_STOCK_E2E=1 python -m pytest backend/tests/test_hotel_browser.py backend/tests/test_hotel_local_browser.py
 ```
+
+## Clientes, operación y preparación fiscal
+
+Clientes compartidos por negocio, carritos guardados/favoritos, devoluciones parciales, cobros de mesas con varios medios, cobro de citas con productos, jornadas y agenda arrastrable, resumen diario del hotel y conteos con aprobación. La preparación fiscal conserva borradores internos; no emite ni simula facturas DIAN. Consulta alcance, limitaciones del modo local, investigación de proveedores y pendientes en [facturación Colombia](docs/facturacion-colombia.md).
+
+Todas las pruebas del backend se ejecutan con `python -m pytest` (instala antes
+`backend/requirements-dev.txt`); el detalle está en [`docs/TESTING.md`](docs/TESTING.md).

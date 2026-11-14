@@ -20,7 +20,8 @@
     "firebase:emulators": "firebase emulators:start --project demo-manager-stock",
     "firebase:seed": "node scripts/seed_firebase_emulator.mjs",
     "firebase:test-rules": "firebase emulators:exec --project demo-manager-stock --only firestore \"node scripts/test_firestore_rules.mjs\"",
-    "firebase:test-functions": "firebase emulators:exec --project demo-manager-stock --only auth,firestore,functions \"node scripts/seed_firebase_emulator.mjs && node scripts/test_functions_emulator.mjs\""
+    "firebase:test-functions": "firebase emulators:exec --project demo-manager-stock --only auth,firestore,functions \"node scripts/seed_firebase_emulator.mjs && node scripts/test_functions_emulator.mjs\"",
+    "desktop:build:linux": "npm run build && electron-builder --linux AppImage deb"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "1.1.4",
@@ -112,6 +113,18 @@
         "es_ES"
       ],
       "language": "1034"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "build/icon.png",
+      "category": "Office",
+      "artifactName": "Manager-Stock-${version}-${arch}.${ext}"
+    },
+    "deb": {
+      "maintainer": "Manager Stock"
     }
   }
 }

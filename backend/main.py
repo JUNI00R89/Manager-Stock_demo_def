@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,7 +23,7 @@ from backend.core.config import CORS_EXTRA_ORIGINS, CORS_ORIGIN_REGEX, SCHEMA_PA
 from backend.core.db import connection, timestamp_iso
 from backend.core.middleware import authenticate_and_authorize
 from backend.core.schema import init_database
-from backend.core.security import hash_password
+from backend.core.security import hash_password, purge_expired_sessions
 from backend.routers import (
     auth,
     business,
@@ -45,12 +46,71 @@ from backend.routers import (
     system,
     tables,
 )
-from backend.services.business_types import process_due_type_transitions, transition_cleanup_worker
+from backend.services.business_types import process_due_type_transitions
 
 # Re-exportados para scripts y pruebas que importan desde backend.main.
-__all__ = ["app", "connection", "hash_password", "startup", "timestamp_iso", "SCHEMA_PATH"]
+__all__ = ["app", "connection", "hash_password", "prepare_database", "timestamp_iso", "SCHEMA_PATH"]
 
-app = FastAPI(title="Manager Stock API", version="1.0.0", description="API local para inventario, ventas, proveedores y pedidos.")
+logger = logging.getLogger("manager_stock")
+MAINTENANCE_INTERVAL_SECONDS = 60
+
+
+def run_maintenance() -> None:
+    """Tareas periódicas; un fallo en una no impide la otra ni detiene la API (se reintenta en el siguiente ciclo)."""
+    for name, task in (("cambios de tipo de negocio", process_due_type_transitions), ("sesiones vencidas", purge_expired_sessions)):
+        try:
+            task()
+        except Exception:
+            logger.exception("Falló la limpieza de %s", name)
+
+
+def prepare_database() -> None:
+    """Crea/migra el esquema y ejecuta una limpieza inicial. Síncrono: lo usan también los scripts."""
+    from pathlib import Path
+    import os
+    from backend.core.config import DB_PATH
+    from backend.backups import create_backup
+    from backend.core.db import table_exists
+    with connection() as conn:
+        if table_exists(conn, 'businesses'):
+            applied = {r[0] for r in conn.execute('SELECT version FROM schema_migrations')} if table_exists(conn, 'schema_migrations') else set()
+            if any(p.name not in applied for p in (SCHEMA_PATH.parent / 'migrations').glob('*.sql')):
+                create_backup(DB_PATH, Path(os.getenv('MANAGER_STOCK_BACKUP_DIR', str(DB_PATH.parent / 'backups'))))
+    init_database()
+    from backend.migrations import migrate
+    with connection() as conn:
+        migrate(conn)
+    run_maintenance()
+
+
+async def maintenance_worker() -> None:
+    while True:
+        await asyncio.sleep(MAINTENANCE_INTERVAL_SECONDS)
+        await asyncio.to_thread(run_maintenance)  # SQLite may wait up to 10 s for the lock; never block every request
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    prepare_database()
+    import os
+    from backend.backups import backup_worker
+    backup_task = asyncio.create_task(backup_worker(DB_PATH)) if os.getenv('MANAGER_STOCK_AUTO_BACKUP', '1') != '0' else None
+    task = asyncio.create_task(maintenance_worker())
+    try:
+        yield
+    finally:
+        if backup_task:
+            backup_task.cancel()
+            try: await backup_task
+            except asyncio.CancelledError: pass
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+
+app = FastAPI(title="Manager Stock API", version="1.0.0", description="API local para inventario, ventas, proveedores y pedidos.", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -75,23 +135,20 @@ for module in (
 ):
     app.include_router(module.router)
 
-
-@app.on_event("startup")
-async def startup():
-    init_database()
-    try:
-        process_due_type_transitions()
-    except Exception:  # a pending cleanup must never keep every business offline; the worker retries
-        logging.getLogger("manager_stock").exception("Fallo la limpieza de cambios de tipo al arrancar")
-    app.state.transition_cleanup_task = asyncio.create_task(transition_cleanup_worker())
-
-
-@app.on_event("shutdown")
-async def shutdown():
-    task = getattr(app.state, "transition_cleanup_task", None)
-    if task is not None:
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+from backend.core.config import DB_PATH
+from backend.core.context import current_business_id, current_identity
+from backend.core.db import audit
+from backend.services.inventory import current_operator
+from backend.core.security import has_permission
+from backend.schemas import SalePayload, SaleItemPayload, PaymentPartPayload
+from backend.services.inventory import add_product_stock, consume_product_stock, fetch_inventory_product, new_inventory_operation, validate_product_quantity
+from backend.services.sales import get_sale
+from backend.services.cash import cash_session_out
+from backend.services.business_types import delete_business_type_data
+from backend.routers.sales import create_sale
+from backend.routers.services import appointment_out, professional_out
+from backend.routers.inventory_counts import physical_count_out
+from backend import commerce, returns, scheduling, service_checkout, count_reviews
+for domain in (commerce, returns, scheduling, service_checkout, count_reviews):
+    app.include_router(domain.router)
+app.include_router(scheduling.appointment_router)

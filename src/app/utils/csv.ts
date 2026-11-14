@@ -1,7 +1,8 @@
-/** CSV with `;` separators, the format Excel in Spanish opens directly. */
+import { csvCell } from './saleMetrics';
+
+/** CSV with `;` separators, the format Excel in Spanish opens directly; csvCell neutralises formulas (=, +, -, @). */
 export function toCsv(rows: unknown[][]): string {
-  const quote = (value: unknown) => `"${String(value ?? '').replaceAll('"', '""')}"`;
-  return rows.map(row => row.map(quote).join(';')).join('\r\n');
+  return rows.map(row => row.map(csvCell).join(';')).join('\r\n');
 }
 
 /** Downloads rows as a CSV file; the BOM makes Excel read accents correctly. */

@@ -4,6 +4,14 @@ import { desktop, isDesktopMode } from './desktop';
 export type SaleStatus = 'completed' | 'pending' | 'cancelled';
 export type PaymentMethod = 'cash' | 'card' | 'digital' | 'split' | 'transfer';
 export type PaymentPartMethod = 'cash' | 'card' | 'digital' | 'transfer';
+/** Result of reading a product spreadsheet; `row` is the spreadsheet row number (header = 1). */
+export type ImportReport = {
+  toCreate: { row: number; sku: string; name: string; category: string }[];
+  skipped: { row: number; sku: string; name: string; archived?: boolean }[];
+  errors: { row: number; message: string }[];
+  newCategories: string[];
+  created: number;
+};
 export interface PaymentPartRecord { method: PaymentPartMethod; amount: number; }
 export interface CashSessionRecord { openedByUserId?: string; id: string; openedBy: string; openingAmount: number; closingAmount?: number | null; expectedAmount?: number | null; difference?: number | null; status: 'open' | 'closed'; openedAt: string; closedAt?: string | null; }
 
@@ -14,6 +22,7 @@ export interface SaleItemInput {
 }
 
 export interface SaleItemRecord {
+  id?: number;
   productId: string;
   productName: string;
   sku?: string;
@@ -25,6 +34,12 @@ export interface SaleItemRecord {
 }
 
 export interface SaleRecord {
+  returns?: import('../components/SaleReturnsPanel').SaleReturnRecord[];
+  returnedTotal?: number;
+  returnableServiceAmount?: number;
+  netTotal?: number;
+  customerId?: string | null;
+  customerSnapshot?: import('./commerce').Customer | null;
   id: string;
   date: string;
   status: SaleStatus;
@@ -54,6 +69,7 @@ export interface CreateSaleInput {
   appointmentIds?: string[];
   items: SaleItemInput[];
   customer?: string;
+  customerId?: string;
   paymentMethod?: PaymentMethod;
   globalDiscountPercent?: number;
   taxRate?: number;
@@ -424,7 +440,7 @@ function extractApiErrorMessage(body: any, status: number, rawBody = ''): string
   return defaultHttpErrorMessage(status);
 }
 
-async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   // La app de escritorio no levanta FastAPI: todo se resuelve con el paquete
   // local. Lanzar TypeError permite que los métodos con respaldo local lo usen.
   if (isDesktopMode()) throw new TypeError('Modo escritorio local: los datos viven en este equipo.');
@@ -766,12 +782,33 @@ export async function getHotelIncomeReport(start: string, end: string): Promise<
 }
 
 export interface ServiceCatalogRecord { id: string; nombre: string; name: string; duracion: number; durationMinutes: number; precio: number; price: number; categoria: string; category: string; color: string; active: boolean; }
-export interface ServiceProfessionalRecord { id: string; nombre: string; name: string; especialidad: string; specialty: string; color: string; horario: { dia?: number; inicio?: string; fin?: string }[]; availability: { dia?: number; inicio?: string; fin?: string }[]; active: boolean; }
+export interface ServiceProfessionalRecord { bufferMinutes?: number; daysOff?: string[]; scheduleRevision?: number; id: string; nombre: string; name: string; especialidad: string; specialty: string; color: string; horario: { dia?: number; inicio?: string; fin?: string }[]; availability: { dia?: number; inicio?: string; fin?: string }[]; active: boolean; }
 export interface ServiceAppointmentRecord {
+  saleId?: string | null;
   id: string; clienteId?: string | null; clienteNombre: string; clienteTelefono: string; clienteEmail: string;
   servicioId: string; servicioNombre: string; profesionalId: string; profesionalNombre: string;
-  fecha: string; horaInicio: string; horaFin: string; estado: 'reserved' | 'confirmed' | 'attended' | 'cancelled' | 'no_show'; saleId?: string | null;
+  fecha: string; horaInicio: string; horaFin: string; estado: 'reserved' | 'confirmed' | 'attended' | 'cancelled' | 'no_show';
   notes: string; durationMinutes: number; price: number; createdAt: string;
+}
+export interface AppointmentMoveInput { professionalId: string; appointmentDate: string; startTime: string; expectedProfessionalId: string; expectedDate: string; expectedStartTime: string; expectedEndTime: string; }
+export async function moveServiceAppointment(id: string, input: AppointmentMoveInput) {
+  if (isDesktopMode()) {
+    const user = await authService.me();
+    const { canPerformAction } = await import('../security/permissions');
+    if (!canPerformAction(user, 'services.manage')) throw new Error('No tienes permiso para mover citas.');
+    const move = () => desktop.services.moveAppointment(id, input);
+    return navigator.locks ? navigator.locks.request(`service_schedule:${user.businessId}`, move) : move();
+  }
+  return api<ServiceAppointmentRecord>(`/services/appointments/${encodeURIComponent(id)}/schedule`, { method: 'PATCH', body: JSON.stringify(input) });
+}
+export async function saveProfessionalSchedule(id: string, input: import('../utils/serviceSchedule').ProfessionalSchedule) {
+  if (isDesktopMode()) {
+    const user = await authService.me();
+    const { canPerformAction } = await import('../security/permissions');
+    if (!canPerformAction(user, 'services.manage')) throw new Error('No tienes permiso para cambiar horarios.');
+    return desktop.services.saveSchedule(id, input);
+  }
+  return api<ServiceProfessionalRecord>(`/services/professionals/${encodeURIComponent(id)}/schedule`, { method: 'PUT', body: JSON.stringify(input) });
 }
 export async function getServicesCatalog() {
   if (isDesktopMode()) return desktop.services.catalog();
@@ -784,6 +821,16 @@ export async function createServiceCatalogItem(input: { name: string; durationMi
 export async function getServiceProfessionals() {
   if (isDesktopMode()) return desktop.services.professionals();
   return api<ServiceProfessionalRecord[]>('/services/professionals');
+}
+// shortcut: editing needs the server; the postponed desktop/offline mode only supports create. Add desktop.* updates when that mode returns.
+export async function updateHotelRoom(id: string, input: Omit<HotelRoomRecord, 'id' | 'number' | 'roomNumber' | 'createdAt' | 'updatedAt'> & { roomNumber: string }) {
+  return api<HotelRoomRecord>(`/hotel/rooms/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(input) });
+}
+export async function updateServiceCatalogItem(id: string, input: { name: string; durationMinutes: number; price: number; category?: string; color?: string }) {
+  return api<ServiceCatalogRecord>(`/services/catalog/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(input) });
+}
+export async function updateServiceProfessional(id: string, input: { name: string; specialty?: string; color?: string }) {
+  return api<ServiceProfessionalRecord>(`/services/professionals/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(input) });
 }
 export async function createServiceProfessional(input: { name: string; specialty?: string; color?: string; availability?: { dia?: number; inicio?: string; fin?: string }[] }) {
   if (isDesktopMode()) return desktop.services.createProfessional(input);
@@ -812,7 +859,8 @@ export async function updateServiceAppointmentStatus(id: string, status: Service
   return api<ServiceAppointmentRecord>(`/services/appointments/${encodeURIComponent(id)}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
 }
 
-export interface SubscriptionPlanRecord { id: 'free' | 'entrepreneur' | 'business' | 'enterprise'; name: string; priceCOP: number; maxUsers: number; maxProducts: number; }
+/** paymentUrl: link de suscripción del proveedor (Mercado Pago); null mientras no esté configurado. */
+export interface SubscriptionPlanRecord { id: 'free' | 'entrepreneur' | 'business' | 'enterprise'; name: string; priceCOP: number; maxUsers: number; maxProducts: number; paymentUrl?: string | null; }
 export interface BusinessSubscriptionRecord { businessId: string; plan: SubscriptionPlanRecord; status: 'active' | 'pending_payment' | 'expired' | 'cancelled'; pendingPlan: SubscriptionPlanRecord | null; startedAt: string | null; expiresAt: string | null; updatedAt: string | null; }
 export async function getSubscriptionPlans() {
   if (isDesktopMode()) return desktop.subscription.plans();
@@ -827,14 +875,18 @@ export async function selectSubscriptionPlan(planId: SubscriptionPlanRecord['id'
   return api<BusinessSubscriptionRecord>('/subscription', { method: 'PUT', body: JSON.stringify({ planId }) });
 }
 
-export interface PlatformSubscriptionRecord extends BusinessSubscriptionRecord { businessName: string; }
+export interface SubscriptionPaymentRecord { planId: SubscriptionPlanRecord['id']; amountCOP: number; paymentReference: string; periodStart: string; periodEnd: string; createdAt: string | null; }
+export interface PlatformSubscriptionRecord extends BusinessSubscriptionRecord { businessName: string; lastPayment?: SubscriptionPaymentRecord | null; }
+/** confirm_payment: activa la solicitud pendiente. renew: registra el cobro de un periodo sin solicitud. */
+export type PlatformSubscriptionAction = 'confirm_payment' | 'renew' | 'cancel_request';
+export type PaidPlanId = Exclude<SubscriptionPlanRecord['id'], 'free'>;
 export async function getPlatformSubscriptions() {
   if (isDesktopMode()) return desktop.platform.subscriptions();
   return api<PlatformSubscriptionRecord[]>('/platform/subscriptions');
 }
-export async function updatePlatformSubscription(businessId: string, action: 'confirm_payment' | 'cancel_request', paymentReference?: string) {
-  if (isDesktopMode()) return desktop.platform.updateSubscription(businessId, action, paymentReference);
-  return api<BusinessSubscriptionRecord>(`/platform/subscriptions/${encodeURIComponent(businessId)}`, { method: 'PATCH', body: JSON.stringify({ action, paymentReference }) });
+export async function updatePlatformSubscription(businessId: string, action: PlatformSubscriptionAction, paymentReference?: string, planId?: PaidPlanId) {
+  if (isDesktopMode()) return desktop.platform.updateSubscription(businessId, action, paymentReference, planId);
+  return api<BusinessSubscriptionRecord>(`/platform/subscriptions/${encodeURIComponent(businessId)}`, { method: 'PATCH', body: JSON.stringify({ action, paymentReference, planId }) });
 }
 
 export async function getPlatformStats() {
@@ -1023,12 +1075,23 @@ export const dataService = {
     } catch (error) {
       if (!canFallbackToLocal(error)) throw error;
       const db = readLocal();
+      // Offline there is no server to generate the code, so an empty SKU gets a local unique one.
+      if (!payload.sku.trim()) payload.sku = uniqueId('PRD');
       if (db.products.some(p => p.sku.toLowerCase() === payload.sku.trim().toLowerCase())) throw new Error('Ya existe un producto con ese SKU.');
       const created: Product = { ...payload, id: input.id || uniqueId('PRD') };
       db.products.push(created);
       if (created.stock > 0) db.movements.unshift({ id: uniqueId('MOV'), productId: created.id, productName: created.name, movementType: 'opening', quantityDelta: created.stock, stockBefore: 0, stockAfter: created.stock, note: 'Existencias iniciales del producto', createdAt: new Date().toISOString() });
       writeLocal(db); return created;
     }
+  },
+  getProductImportTemplate(): Promise<{ fileName: string; dataUrl: string }> {
+    return api('/products/import/template');
+  },
+  previewProductImport(fileName: string, dataUrl: string): Promise<ImportReport> {
+    return api<ImportReport>('/products/import/preview', { method: 'POST', body: JSON.stringify({ fileName, dataUrl }) });
+  },
+  importProducts(fileName: string, dataUrl: string): Promise<ImportReport> {
+    return api<ImportReport>('/products/import', { method: 'POST', body: JSON.stringify({ fileName, dataUrl }) });
   },
   uploadProductImage(id: string, dataUrl: string): Promise<Product> {
     return api<Product>(`/products/${encodeURIComponent(id)}/image`, { method: 'PUT', body: JSON.stringify({ dataUrl }) });
@@ -1140,6 +1203,18 @@ export const dataService = {
       const previous = db.sales.find(s => s.idempotencyKey === request.idempotencyKey || s.id === request.idempotencyKey);
       if (previous) return previous;
       if (request.orderIds?.length && request.status !== 'completed') throw new Error('El cobro de pedidos debe ser una venta completada.');
+      let customerSnapshot: import('./commerce').Customer | null = null;
+      if (request.customerId) {
+        const { listCustomers } = await import('./commerce');
+        // Paginate to resolve a customer independent of their position in the list.
+        for (let offset = 0; ; offset += 100) {
+          const batch = await listCustomers('', false, offset);
+          customerSnapshot = batch.find(c => c.id === request.customerId) ?? null;
+          if (customerSnapshot || batch.length < 100) break;
+        }
+        if (!customerSnapshot) throw new Error('Cliente no encontrado o inactivo.');
+        request.customer = customerSnapshot.name;
+      }
       const linkedOrders = [...new Set(request.orderIds || [])].map(id => {
         const order = db.orders.find(row => row.id === id);
         if (!order) throw new Error('Pedido no encontrado.');
@@ -1177,6 +1252,7 @@ export const dataService = {
       const tax = money(taxable * request.taxRate); const total = money(taxable + tax);
       const created: SaleRecord = {
         id: `VTA-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+        customerId: customerSnapshot?.id, customerSnapshot,
         date: new Date().toISOString(), status: request.status, customer: request.customer, paymentMethod: request.paymentMethod, currency: CURRENCY, cashSessionId: request.cashSessionId || null, payments: request.payments || (request.paymentMethod !== 'split' ? [{ method: request.paymentMethod as PaymentPartMethod, amount: total }] : []),
         subtotal, lineDiscount, globalDiscount, taxRate: request.taxRate, tax, totalPrice: total,
         productId: saleItems[0]?.productId || '', productName: saleItems.length > 2 ? `${saleItems[0].productName}, ${saleItems[1].productName} y ${saleItems.length - 2} más` : saleItems.map(i => i.productName).join(', '),
@@ -1295,6 +1371,10 @@ export const dataService = {
       if (!canFallbackToLocal(error)) throw error;
       return readLocal().suppliers;
     }
+  },
+  async updateSupplier(id: string, input: Omit<Supplier, 'id'>): Promise<Supplier> {
+    const updated = await api<Supplier>(`/suppliers/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(input) });
+    const db = readLocal(); db.suppliers = db.suppliers.map(s => s.id === id ? updated : s); writeLocal(db); return updated;
   },
   async createSupplier(input: Omit<Supplier, 'id'>): Promise<Supplier> {
     try {

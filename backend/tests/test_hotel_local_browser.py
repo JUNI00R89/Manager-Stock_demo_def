@@ -1,7 +1,8 @@
 """Optional desktop browser regression: requires Vite and Playwright/Chromium."""
+import os
 from playwright.sync_api import sync_playwright
 with sync_playwright() as p:
- b=p.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox'])
+ b=p.chromium.launch(executable_path=os.getenv('CHROMIUM_PATH') or None,headless=True,args=['--no-sandbox'])
  page=b.new_page();page.goto('http://127.0.0.1:5173/login',wait_until='networkidle')
  result=page.evaluate('''async()=>{
  window.managerStockDesktop={isDesktop:true};

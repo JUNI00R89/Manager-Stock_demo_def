@@ -6,4 +6,8 @@ describe('toCsv', () => {
     expect(toCsv([['Nombre', 'Total'], ['Café "especial"', 2500], [null, undefined]]))
       .toBe('"Nombre";"Total"\r\n"Café ""especial""";"2500"\r\n"";""');
   });
+
+  it('neutraliza fórmulas para que Excel no las ejecute', () => {
+    expect(toCsv([['=HYPERLINK("x")', '+57 300', -5]])).toBe(`"'=HYPERLINK(""x"")";"'+57 300";"-5"`);
+  });
 });

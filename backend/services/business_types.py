@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import sqlite3
 from datetime import datetime, timezone
@@ -33,6 +32,8 @@ def delete_business_type_data(conn: sqlite3.Connection, business_id: str, old_ty
     # and it contains an explicit business_id column. No broad table scans or cascades are used.
     if old_type == "hotel" and (conn.execute("SELECT 1 FROM hotel_payments WHERE business_id=? LIMIT 1", (business_id,)).fetchone() or conn.execute("SELECT 1 FROM hotel_account_closures WHERE business_id=? LIMIT 1", (business_id,)).fetchone()):
         return deleted  # Paid stays and cash records must survive a business-type change.
+    if old_type == "services" and conn.execute("SELECT 1 FROM service_appointments WHERE business_id=? AND sale_id IS NOT NULL LIMIT 1", (business_id,)).fetchone():
+        return deleted  # Paid service receipts must survive a business-type change.
     optional_by_type = {
         # Child rows must be deleted before parent rows to preserve foreign-key integrity.
         "hotel": ["reservation_items", "hotel_reservations", "reservations", "housekeeping_tasks", "hotel_rooms"],
@@ -86,15 +87,3 @@ def process_due_type_transitions() -> int:
             conn.commit()
             processed += 1
     return processed
-
-
-async def transition_cleanup_worker():
-    while True:
-        try:
-            process_due_type_transitions()
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            # The next cycle retries. The persisted queue remains intact.
-            pass
-        await asyncio.sleep(60)

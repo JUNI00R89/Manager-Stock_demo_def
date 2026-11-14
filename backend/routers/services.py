@@ -27,6 +27,7 @@ def professional_out(row: sqlite3.Row) -> dict:
     except json.JSONDecodeError:
         availability = []
     return {"id": row["id"], "nombre": row["name"], "name": row["name"], "especialidad": row["specialty"],
+            "bufferMinutes": row["buffer_minutes"], "daysOff": json.loads(row["days_off_json"] or "[]"), "scheduleRevision": row["schedule_revision"],
             "specialty": row["specialty"], "color": row["color"], "horario": availability, "availability": availability,
             "active": bool(row["active"])}
 
@@ -52,8 +53,7 @@ def appointment_out(row: sqlite3.Row) -> dict:
             "profesionalId": row["professional_id"], "profesionalNombre": row["professional_name_snapshot"],
             "fecha": row["appointment_date"], "horaInicio": row["start_time"], "horaFin": row["end_time"],
             "estado": row["status"], "notes": row["notes"], "durationMinutes": row["duration_minutes"],
-            "price": row["price_snapshot"], "saleId": row["sale_id"] if "sale_id" in row.keys() else None,
-            "createdAt": timestamp_iso(row["created_at"])}
+            "saleId": row["sale_id"], "price": row["price_snapshot"], "createdAt": timestamp_iso(row["created_at"])}
 
 
 @router.get("/api/services/catalog")
@@ -79,6 +79,24 @@ def create_service_catalog_item(payload: ServicePayload):
         return service_out(row)
 
 
+@router.put("/api/services/catalog/{service_id}")
+def update_service_catalog_item(service_id: str, payload: ServicePayload):
+    if current_identity()["role"] != "owner":
+        raise HTTPException(403, "Solo el propietario puede administrar los servicios.")
+    business_id = current_business_id()
+    with connection() as conn:
+        try:
+            # Existing appointments keep their own price snapshot; only new ones use the new price.
+            cursor = conn.execute("UPDATE service_catalog SET name=?,duration_minutes=?,price=?,category=?,color=? WHERE id=? AND business_id=? AND active=1",
+                                  (payload.name.strip(), payload.durationMinutes, payload.price, payload.category.strip(), payload.color, service_id, business_id))
+        except sqlite3.IntegrityError as exc:
+            raise HTTPException(409, "Ya existe un servicio con ese nombre.") from exc
+        if cursor.rowcount == 0:
+            raise HTTPException(404, "Servicio no encontrado.")
+        audit(conn, "update", "service", service_id, {"name": payload.name})
+        return service_out(conn.execute("SELECT * FROM service_catalog WHERE id=? AND business_id=?", (service_id, business_id)).fetchone())
+
+
 @router.get("/api/services/professionals")
 def list_service_professionals():
     with connection() as conn:
@@ -100,6 +118,24 @@ def create_service_professional(payload: ProfessionalPayload):
         audit(conn, "create", "service_professional", professional_id, {"name": payload.name})
         row = conn.execute("SELECT * FROM service_professionals WHERE id=? AND business_id=?", (professional_id,business_id)).fetchone()
         return professional_out(row)
+
+
+@router.put("/api/services/professionals/{professional_id}")
+def update_service_professional(professional_id: str, payload: ProfessionalPayload):
+    if current_identity()["role"] != "owner":
+        raise HTTPException(403, "Solo el propietario puede administrar profesionales.")
+    business_id = current_business_id()
+    with connection() as conn:
+        try:
+            # The schedule has its own endpoint (with revision checks), so it is not touched here.
+            cursor = conn.execute("UPDATE service_professionals SET name=?,specialty=?,color=? WHERE id=? AND business_id=? AND active=1",
+                                  (payload.name.strip(), payload.specialty.strip(), payload.color, professional_id, business_id))
+        except sqlite3.IntegrityError as exc:
+            raise HTTPException(409, "Ya existe un profesional con ese nombre.") from exc
+        if cursor.rowcount == 0:
+            raise HTTPException(404, "Profesional no encontrado.")
+        audit(conn, "update", "service_professional", professional_id, {"name": payload.name})
+        return professional_out(conn.execute("SELECT * FROM service_professionals WHERE id=? AND business_id=?", (professional_id, business_id)).fetchone())
 
 
 @router.get("/api/services/appointments")
@@ -150,9 +186,8 @@ def create_service_appointment(payload: AppointmentPayload):
         if end_dt.date().isoformat() != payload.appointmentDate:
             conn.rollback()
             raise HTTPException(422, "La cita no puede terminar después de la medianoche.")
-        if outside_schedule(professional, start_dt, end_time):
-            conn.rollback()
-            raise HTTPException(422, "La cita queda fuera del horario de atención del profesional.")
+        from backend.scheduling import check_slot
+        check_slot(conn, professional, start_dt, end_dt, "")
         conflict = conn.execute("SELECT id FROM service_appointments WHERE business_id=? AND professional_id=? AND appointment_date=? AND status IN ('reserved','confirmed') AND start_time<? AND end_time>? LIMIT 1", (business_id,payload.professionalId,payload.appointmentDate,end_time,payload.startTime)).fetchone()
         if conflict:
             conn.rollback()
@@ -178,11 +213,22 @@ def update_service_appointment_status(appointment_id: str, payload: AppointmentS
             raise HTTPException(403, "Tu rol no puede actualizar citas.")
     business_id = current_business_id()
     with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        current = conn.execute("SELECT * FROM service_appointments WHERE id=? AND business_id=?", (appointment_id, business_id)).fetchone()
+        if current and current["sale_id"] and payload.status != 'attended':
+            raise HTTPException(409, "La cita ya fue cobrada. Conserva el estado y usa su comprobante.")
+        # Only a cancelled/no-show appointment coming back takes a slot again; confirming an active one must not
+        # fail because the break or the schedule changed after it was booked.
+        if current and payload.status in {'reserved', 'confirmed'} and current['status'] in {'cancelled', 'no_show'}:
+            professional = conn.execute("SELECT * FROM service_professionals WHERE id=? AND business_id=?", (current['professional_id'], business_id)).fetchone()
+            from backend.scheduling import check_slot
+            check_slot(conn, professional, datetime.fromisoformat(current['appointment_date'] + 'T' + current['start_time']), datetime.fromisoformat(current['appointment_date'] + 'T' + current['end_time']), appointment_id)
         cursor = conn.execute("UPDATE service_appointments SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND business_id=?", (payload.status,appointment_id,business_id))
         if cursor.rowcount == 0:
             raise HTTPException(404, "Cita no encontrada.")
         audit(conn, payload.status, "service_appointment", appointment_id, {"status": payload.status})
         row = conn.execute("SELECT * FROM service_appointments WHERE id=? AND business_id=?",(appointment_id,business_id)).fetchone()
+        conn.commit()
         return appointment_out(row)
 
 
@@ -200,7 +246,10 @@ def edit_service_appointment(appointment_id: str, payload: AppointmentPayload):
             raise HTTPException(403, "Tu rol no puede editar citas.")
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        existing = conn.execute("SELECT id FROM service_appointments WHERE id=? AND business_id=?", (appointment_id, business_id)).fetchone()
+        paid = conn.execute("SELECT sale_id FROM service_appointments WHERE id=? AND business_id=?", (appointment_id, business_id)).fetchone()
+        if paid and paid['sale_id']:
+            raise HTTPException(409, "No se puede modificar ni eliminar una cita cobrada.")
+        existing = conn.execute("SELECT * FROM service_appointments WHERE id=? AND business_id=?", (appointment_id, business_id)).fetchone()
         service = conn.execute("SELECT * FROM service_catalog WHERE id=? AND business_id=? AND active=1", (payload.serviceId, business_id)).fetchone()
         professional = conn.execute("SELECT * FROM service_professionals WHERE id=? AND business_id=? AND active=1", (payload.professionalId, business_id)).fetchone()
         if not existing:
@@ -208,16 +257,19 @@ def edit_service_appointment(appointment_id: str, payload: AppointmentPayload):
         if not service or not professional:
             conn.rollback(); raise HTTPException(404, "Selecciona un servicio y un profesional activos de este negocio.")
         start_dt = datetime.strptime(f"{payload.appointmentDate} {payload.startTime}", "%Y-%m-%d %H:%M")
-        end_dt = start_dt + timedelta(minutes=service["duration_minutes"])
+        same_service = existing["service_id"] == service["id"]
+        duration = existing["duration_minutes"] if same_service else service["duration_minutes"]
+        price = existing["price_snapshot"] if same_service else service["price"]
+        end_dt = start_dt + timedelta(minutes=duration)
         end_time = end_dt.strftime("%H:%M")
         if end_dt.date().isoformat() != payload.appointmentDate:
             conn.rollback(); raise HTTPException(422, "La cita no puede terminar después de la medianoche.")
-        if outside_schedule(professional, start_dt, end_time):
-            conn.rollback(); raise HTTPException(422, "La cita queda fuera del horario de atención del profesional.")
+        from backend.scheduling import check_slot
+        check_slot(conn, professional, start_dt, end_dt, appointment_id)
         conflict = conn.execute("SELECT id FROM service_appointments WHERE business_id=? AND professional_id=? AND appointment_date=? AND status IN ('reserved','confirmed') AND id<>? AND start_time<? AND end_time>? LIMIT 1", (business_id, payload.professionalId, payload.appointmentDate, appointment_id, end_time, payload.startTime)).fetchone()
         if conflict:
             conn.rollback(); raise HTTPException(409, "El profesional ya tiene una cita en ese horario.")
-        conn.execute("UPDATE service_appointments SET service_id=?,professional_id=?,client_name=?,client_email=?,client_phone=?,service_name_snapshot=?,professional_name_snapshot=?,duration_minutes=?,price_snapshot=?,appointment_date=?,start_time=?,end_time=?,notes=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND business_id=?", (service["id"], professional["id"], payload.clientName, payload.clientEmail.strip(), payload.clientPhone.strip(), service["name"], professional["name"], service["duration_minutes"], service["price"], payload.appointmentDate, payload.startTime, end_time, payload.notes.strip(), appointment_id, business_id))
+        conn.execute("UPDATE service_appointments SET service_id=?,professional_id=?,client_name=?,client_email=?,client_phone=?,service_name_snapshot=?,professional_name_snapshot=?,duration_minutes=?,price_snapshot=?,appointment_date=?,start_time=?,end_time=?,notes=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND business_id=?", (service["id"], professional["id"], payload.clientName, payload.clientEmail.strip(), payload.clientPhone.strip(), service["name"], professional["name"], duration, price, payload.appointmentDate, payload.startTime, end_time, payload.notes.strip(), appointment_id, business_id))
         audit(conn, "edit", "service_appointment", appointment_id, {"serviceId": service["id"], "professionalId": professional["id"], "date": payload.appointmentDate, "startTime": payload.startTime})
         row = conn.execute("SELECT * FROM service_appointments WHERE id=? AND business_id=?", (appointment_id, business_id)).fetchone()
         conn.commit()
@@ -237,9 +289,14 @@ def delete_service_appointment(appointment_id: str):
         if not role or "services.manage" not in set(json.loads(role["permissions_json"] or "[]")):
             raise HTTPException(403, "Tu rol no puede eliminar citas.")
     with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        paid = conn.execute("SELECT sale_id FROM service_appointments WHERE id=? AND business_id=?", (appointment_id, business_id)).fetchone()
+        if paid and paid['sale_id']:
+            raise HTTPException(409, "No se puede modificar ni eliminar una cita cobrada.")
         row = conn.execute("SELECT id FROM service_appointments WHERE id=? AND business_id=?", (appointment_id, business_id)).fetchone()
         if not row:
             raise HTTPException(404, "Cita no encontrada.")
         conn.execute("DELETE FROM service_appointments WHERE id=? AND business_id=?", (appointment_id, business_id))
         audit(conn, "delete", "service_appointment", appointment_id, {})
+        conn.commit()
     return None

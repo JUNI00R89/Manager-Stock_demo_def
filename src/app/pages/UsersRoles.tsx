@@ -14,10 +14,15 @@ import { useAuth } from '../context/AuthContext';
 import { createBusinessUser, createCustomRole, deleteCustomRole, getBusinessUsers, getCustomRoles, updateBusinessUser, updateCustomRole, type BusinessUserRecord, type CustomRoleRecord } from '../services/dataService';
 
 const PERMISSIONS = [
+  { key: 'customers.view', label: 'Consultar clientes', group: 'Clientes y facturación' },
+  { key: 'customers.manage', label: 'Crear y editar clientes', group: 'Clientes y facturación' },
+  { key: 'billing.view', label: 'Consultar preparación fiscal', group: 'Clientes y facturación' },
+  { key: 'billing.manage', label: 'Configurar emisor y preparar borradores', group: 'Clientes y facturación' },
   { key: 'dashboard.view', label: 'Ver dashboard', group: 'General' },
   { key: 'catalog.view', label: 'Consultar productos o menú', group: 'Catálogo' },
   { key: 'catalog.create', label: 'Crear productos', group: 'Catálogo' },
   { key: 'catalog.edit', label: 'Editar o retirar productos', group: 'Catálogo' },
+  { key: 'inventory.count', label: 'Registrar conteos sin ver existencias', group: 'Inventario' },
   { key: 'inventory.view', label: 'Consultar inventario y movimientos', group: 'Inventario' },
   { key: 'inventory.edit', label: 'Configurar ubicaciones y parámetros de inventario', group: 'Inventario' },
   { key: 'inventory.entry', label: 'Registrar entradas, salidas y mermas', group: 'Inventario' },
@@ -208,9 +213,10 @@ export function UsersRoles() {
                     const dependencies: Record<string, string[]> = {
                       'catalog.create': ['catalog.view'], 'catalog.edit': ['catalog.view'],
                       'inventory.view': [], 'inventory.edit': ['inventory.view'], 'inventory.entry': ['inventory.view'],
-                      'inventory.adjust': ['inventory.view'], 'inventory.delete': ['inventory.view'], 'inventory.negative': ['inventory.view'],
+                      'inventory.adjust': ['inventory.view', 'inventory.count'], 'inventory.delete': ['inventory.view'], 'inventory.negative': ['inventory.view'],
                       'purchases.approve': ['inventory.view', 'suppliers.view', 'catalog.view'],
                       'suppliers.manage': ['suppliers.view'], 'cash.manage': ['cash.view'],
+                      'customers.manage': ['customers.view'], 'billing.manage': ['billing.view', 'customers.view'],
                       'sales.create': ['sales.view', 'catalog.view', 'cash.view', 'cash.manage'], 'sales.cancel': ['sales.view'],
                       'orders.manage': ['orders.view'], 'reports.view': ['sales.view', 'catalog.view'],
                     };
@@ -221,9 +227,10 @@ export function UsersRoles() {
                     const dependencies: Record<string, string[]> = {
                       'catalog.create': ['catalog.view'], 'catalog.edit': ['catalog.view'],
                       'inventory.view': [], 'inventory.edit': ['inventory.view'], 'inventory.entry': ['inventory.view'],
-                      'inventory.adjust': ['inventory.view'], 'inventory.delete': ['inventory.view'], 'inventory.negative': ['inventory.view'],
+                      'inventory.adjust': ['inventory.view', 'inventory.count'], 'inventory.delete': ['inventory.view'], 'inventory.negative': ['inventory.view'],
                       'purchases.approve': ['inventory.view', 'suppliers.view', 'catalog.view'],
                       'suppliers.manage': ['suppliers.view'], 'cash.manage': ['cash.view'],
+                      'customers.manage': ['customers.view'], 'billing.manage': ['billing.view', 'customers.view'],
                       'sales.create': ['sales.view', 'catalog.view', 'cash.view', 'cash.manage'], 'sales.cancel': ['sales.view'],
                       'orders.manage': ['orders.view'], 'reports.view': ['sales.view', 'catalog.view'],
                     };

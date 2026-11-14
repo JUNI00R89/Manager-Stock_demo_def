@@ -5,7 +5,13 @@ const path = require('node:path');
 
 const IS_DEV = !app.isPackaged && process.env.NODE_ENV !== 'production';
 const DEV_URL = process.env.ELECTRON_START_URL || '';
-const CANDIDATE_PORTS = [5173, 4173];
+// Puerto fijo a propósito: los datos del modo escritorio viven en localStorage, que
+// pertenece al origen http://127.0.0.1:PUERTO. Cambiar de puerto (p. ej. porque
+// otro programa ocupa este) abriría la app con datos vacíos, así que no se
+// prueba otro puerto: se avisa al usuario. No cambiarlo sin migrar esos datos.
+// 41731 (y no 5173) para no chocar con el servidor de desarrollo de Vite;
+// es el puerto definido en docs/ESCRITORIO_AVANCE.md.
+const APP_PORT = 41731;
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -43,17 +49,18 @@ function iconPath() {
 function serveStatic(rootDir) {
   return new Promise((resolve, reject) => {
     if (!fs.existsSync(path.join(rootDir, 'index.html'))) {
-      reject(new Error('No se encontró la compilación del frontend (dist/index.html).'));
+      reject(Object.assign(new Error('No se encontró la compilación del frontend (dist/index.html).'), { code: 'MISSING_BUILD' }));
       return;
     }
 
     const server = http.createServer((req, res) => {
       try {
         const requestPath = decodeURIComponent(new URL(req.url, 'http://127.0.0.1').pathname);
-        const safeRelative = path.normalize(requestPath).replace(/^([/\\])+/, '');
-        let filePath = path.join(rootDir, safeRelative);
+        const root = path.resolve(rootDir);
+        let filePath = path.resolve(root, requestPath.replace(/^([/\\])+/, ''));
 
-        if (!filePath.startsWith(path.resolve(rootDir))) {
+        // Con separador: un simple startsWith(root) aceptaría carpetas hermanas como "dist-x".
+        if (filePath !== root && !filePath.startsWith(root + path.sep)) {
           res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
           res.end('Acceso denegado');
           return;
@@ -88,29 +95,21 @@ function serveStatic(rootDir) {
       }
     });
 
-    server.on('error', reject);
-
-    const tryPort = (index) => {
-      if (index >= CANDIDATE_PORTS.length) {
-        reject(new Error('Los puertos locales 5173 y 4173 están ocupados. Cierra el servidor de desarrollo e inténtalo de nuevo.'));
-        return;
+    server.once('error', (error) => {
+      if (error && error.code === 'EADDRINUSE') {
+        reject(new Error(
+          `El puerto local ${APP_PORT} está ocupado por otro programa (por ejemplo, el servidor de desarrollo). `
+          + 'Ciérralo y vuelve a abrir Manager Stock: tus datos están ligados a ese puerto.',
+        ));
+      } else {
+        reject(error);
       }
-      const port = CANDIDATE_PORTS[index];
-      const onError = () => {
-        server.removeListener('listening', onListening);
-        tryPort(index + 1);
-      };
-      const onListening = () => {
-        server.removeListener('error', onError);
-        staticServer = server;
-        resolve(`http://127.0.0.1:${port}`);
-      };
-      server.once('error', onError);
-      server.once('listening', onListening);
-      server.listen(port, '127.0.0.1');
-    };
-
-    tryPort(0);
+    });
+    server.once('listening', () => {
+      staticServer = server;
+      resolve(`http://127.0.0.1:${APP_PORT}`);
+    });
+    server.listen(APP_PORT, '127.0.0.1');
   });
 }
 
@@ -234,10 +233,10 @@ if (!app.requestSingleInstanceLock()) {
       appOrigin = DEV_URL || (await serveStatic(path.join(appRoot(), 'dist')));
       createWindow();
     } catch (error) {
-      dialog.showErrorBox(
-        'Manager Stock',
-        `${error.message}\n\nGenera la versión de escritorio con "npm run desktop" o "npm run desktop:build".`,
-      );
+      const hint = error.code === 'MISSING_BUILD'
+        ? '\n\nGenera la versión de escritorio con "npm run desktop" o "npm run desktop:build".'
+        : '';
+      dialog.showErrorBox('Manager Stock', `${error.message}${hint}`);
       app.quit();
     }
 
