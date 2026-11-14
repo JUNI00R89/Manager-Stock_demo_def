@@ -181,7 +181,9 @@ def update_service_appointment_status(appointment_id: str, payload: AppointmentS
         current = conn.execute("SELECT * FROM service_appointments WHERE id=? AND business_id=?", (appointment_id, business_id)).fetchone()
         if current and current["sale_id"] and payload.status != 'attended':
             raise HTTPException(409, "La cita ya fue cobrada. Conserva el estado y usa su comprobante.")
-        if current and payload.status in {'reserved', 'confirmed'}:
+        # Only a cancelled/no-show appointment coming back takes a slot again; confirming an active one must not
+        # fail because the break or the schedule changed after it was booked.
+        if current and payload.status in {'reserved', 'confirmed'} and current['status'] in {'cancelled', 'no_show'}:
             professional = conn.execute("SELECT * FROM service_professionals WHERE id=? AND business_id=?", (current['professional_id'], business_id)).fetchone()
             from backend.scheduling import check_slot
             check_slot(conn, professional, datetime.fromisoformat(current['appointment_date'] + 'T' + current['start_time']), datetime.fromisoformat(current['appointment_date'] + 'T' + current['end_time']), appointment_id)
