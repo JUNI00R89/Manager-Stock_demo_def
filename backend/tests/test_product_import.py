@@ -76,8 +76,9 @@ def run() -> None:
         assert preview.status_code == 200, preview.text
         report = preview.json()
         assert [p["sku"] for p in report["toCreate"]] == ["LE1", "QU1", "JA1"]
-        assert report["skipped"] == [{"row": 5, "sku": "AG1", "name": "Agua otra"}, {"row": 6, "sku": "LE1", "name": "Leche 2"}]
-        assert [e["row"] for e in report["errors"]] == [7] and "precio" in report["errors"][0]["message"].lower()
+        assert report["skipped"] == [{"row": 5, "sku": "AG1", "name": "Agua otra"}]
+        assert [e["row"] for e in report["errors"]] == [6, 7], report["errors"]
+        assert "repetido en el archivo" in report["errors"][0]["message"] and "precio" in report["errors"][1]["message"].lower()
         assert report["newCategories"] == ["Lácteos"] and report["created"] == 0, "Aseo is a retail default category"
         assert len(client.get("/api/products", headers=h).json()) == before, "preview saves nothing"
 
@@ -91,7 +92,7 @@ def run() -> None:
         assert "Lácteos" in names and "Aseo" in names
 
         again = client.post("/api/products/import", headers=h, json=xlsx_body(rows)).json()
-        assert again["created"] == 0 and len(again["skipped"]) == 5
+        assert again["created"] == 0 and len(again["skipped"]) == 4 and 6 in [e["row"] for e in again["errors"]]
 
         # A deactivated category with the same name is reactivated, not a 500 from the unique index.
         assert client.post("/api/product-categories", headers=h, json={"name": "Congelados", "active": False}).status_code == 201
@@ -103,11 +104,20 @@ def run() -> None:
         assert "Congelados" in [c["name"] for c in client.get("/api/product-categories", headers=h).json()]
         assert client.get("/api/products", headers=h).json() and next(p for p in client.get("/api/products", headers=h).json() if p["sku"] == "HE1")["category"] == "Congelados"
 
+        # A legacy lowercase code and an archived product are both "already exists"; the archived one says so.
+        bid_codes = business_id(client, h)
+        sql("INSERT INTO products (id,business_id,name,sku,category,price,cost,stock,min_stock) VALUES (?,?,?,?,?,?,?,?,?)",
+            ("PRD-LEGACY01", bid_codes, "Legado", "leg1", "Bebidas", 1, 0, 0, 0))
+        archived = client.post("/api/products", headers=h, json={"name": "Archivado", "sku": "ARCH1", "category": "Bebidas", "price": 1, "cost": 0, "stock": 0, "minStock": 0}).json()
+        assert client.delete(f"/api/products/{archived['id']}", headers=h).status_code in (200, 204)
+        codes_report = client.post("/api/products/import/preview", headers=h, json=xlsx_body([["Legado", "LEG1", "Bebidas", 1, 0], ["Archivado", "ARCH1", "Bebidas", 1, 0]])).json()
+        assert codes_report["toCreate"] == [] and [s.get("archived", False) for s in codes_report["skipped"]] == [False, True], codes_report
+
         # Rows without a code get a generated SKU; without a code, duplicates are detected by name.
         bread = [["Pan blanco", None, "Panadería", 500, 10], ["Pan integral", "PAN-0009", "Panadería", 700, 5], ["pan BLANCO", None, "Panadería", 500, 1]]
         bread_preview = client.post("/api/products/import/preview", headers=h, json=xlsx_body(bread)).json()
         assert [p["sku"] for p in bread_preview["toCreate"]] == ["", "PAN-0009"], bread_preview
-        assert bread_preview["skipped"] == [{"row": 4, "sku": "", "name": "pan BLANCO"}], bread_preview
+        assert bread_preview["skipped"] == [] and "repetido" in bread_preview["errors"][0]["message"], bread_preview
         assert client.post("/api/products/import", headers=h, json=xlsx_body(bread)).json()["created"] == 2
         skus = {p["name"]: p["sku"] for p in client.get("/api/products", headers=h).json()}
         assert skus["Pan blanco"] == "PAN-0010", "generated code avoids the typed PAN-0009 from the same file"

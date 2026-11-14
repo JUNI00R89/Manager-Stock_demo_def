@@ -107,7 +107,9 @@ def parse_number(text: str) -> float | None:
     if not clean:
         return None
     if "," in clean and "." in clean:
-        clean = clean.replace(".", "").replace(",", ".")  # 1.234,5
+        # The last separator is the decimal one: 1.234,5 (Colombia) or 1,234.56 (US Excel).
+        thousands, decimal = (".", ",") if clean.rfind(",") > clean.rfind(".") else (",", ".")
+        clean = clean.replace(thousands, "").replace(decimal, ".")
     elif "," in clean:
         clean = clean.replace(",", ".")  # 2,5
     elif re.fullmatch(r"-?\d{1,3}(\.\d{3})+", clean):
@@ -144,7 +146,13 @@ def row_to_payload(fields: dict[str, str]) -> ProductPayload:
         label = FIELD_LABELS.get(field, field)
         if error["type"] == "missing":
             raise ValueError(f"Falta {label}.") from exc
-        raise ValueError(f"{label}: valor no válido ({error['msg']}).") from exc
+        if error["type"] in {"greater_than_equal", "greater_than"}:
+            raise ValueError(f"{label}: no puede ser negativo.") from exc
+        if error["type"] in {"string_too_short", "string_too_long"}:
+            raise ValueError(f"{label}: largo no válido.") from exc
+        # Model-level rules (no column) already carry a Spanish message after "Value error, ".
+        message = str(error.get("msg", "")).removeprefix("Value error, ")
+        raise ValueError(f"{label}: {message}" if label else message) from exc
 
 
 def build_template() -> bytes:

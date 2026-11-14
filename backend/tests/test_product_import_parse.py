@@ -38,6 +38,13 @@ def run() -> None:
     assert parse_number("$ 1.500") == 1500 and parse_number("2,5") == 2.5 and parse_number("1.234,5") == 1234.5
     assert parse_number("1500.0") == 1500 and parse_number("") is None and parse_number("0.75") == 0.75
     raises(parse_number, "abc")
+    # US format from an English-locale Excel: the last separator is the decimal one.
+    assert parse_number("1,234.56") == 1234.56 and parse_number("$ 1,234,567.5") == 1234567.5
+    # Validation messages are in Spanish and name the column.
+    msg = raises(row_to_payload, {"name": "Arroz", "sku": "a1", "category": "Granos", "price": "-5"}, contains="precio")
+    assert "Input should" not in msg, msg
+    msg = raises(row_to_payload, {"name": "Arroz", "sku": "a1", "category": "Granos", "price": "1", "stock": "1,5"}, contains="")
+    assert not msg.startswith(":") and "Value error" not in msg, msg
 
     csv = "Nombre;CÓDIGO (SKU);categoria;Precio;Stock minimo\nCafé;cf1;Bebidas;$ 2.500;3\n;;;;\n".encode("cp1252")
     assert read_rows("lista.csv", csv) == [(2, {"name": "Café", "sku": "cf1", "category": "Bebidas", "price": "$ 2.500", "minStock": "3"})]

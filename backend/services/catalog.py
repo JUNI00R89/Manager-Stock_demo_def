@@ -102,7 +102,7 @@ def sku_prefix(category: str) -> str:
 def next_sku(conn: sqlite3.Connection, business_id: str, category: str, reserved: frozenset[str] | set[str] = frozenset()) -> str:
     """Next free code for the category, after the highest existing number (typed or generated)."""
     prefix = sku_prefix(category)
-    pattern = re.compile(rf"^{prefix}-(\d+)$")
+    pattern = re.compile(rf"^{prefix}-(\d{{1,9}})$")  # absurd typed numbers are ignored, so codes stay short
     existing = [row["sku"] for row in conn.execute("SELECT sku FROM products WHERE business_id=? AND sku LIKE ?", (business_id, f"{prefix}-%"))]
     numbers = [int(match.group(1)) for sku in [*existing, *reserved] if (match := pattern.match(sku))]
     return f"{prefix}-{max(numbers, default=0) + 1:04d}"

@@ -124,7 +124,8 @@ def build_import_report(conn: sqlite3.Connection, rows: list[tuple[int, dict[str
     """Decides, row by row, what would be created; saves nothing."""
     business_id = current_business_id()
     existing = conn.execute("SELECT sku, name, active FROM products WHERE business_id=?", (business_id,)).fetchall()
-    taken = {row["sku"] for row in existing}
+    # Codes compare case-insensitively: legacy rows may hold "ag1" while the file says "AG1".
+    codes = {str(row["sku"]).upper(): bool(row["active"]) for row in existing}
     # Rows without a code have nothing else to match on, so the same name counts as "already exists".
     # Archived products keep their code (unique index) but not their name: the user cannot see them.
     names = {normalize_category_name(row["name"]) for row in existing if row["active"]}
@@ -137,6 +138,8 @@ def build_import_report(conn: sqlite3.Connection, rows: list[tuple[int, dict[str
     slots = max(0, plan["maxProducts"] - active)
     report: dict = {"toCreate": [], "skipped": [], "errors": [], "newCategories": [], "created": 0}
     payloads: list[ProductPayload] = []
+    seen_codes: set[str] = set()
+    seen_names: set[str] = set()
     for number, fields in rows:
         try:
             product = row_to_payload(fields)
@@ -144,14 +147,23 @@ def build_import_report(conn: sqlite3.Connection, rows: list[tuple[int, dict[str
             report["errors"].append({"row": number, "message": str(exc)})
             continue
         name_key = normalize_category_name(product.name)
-        if product.sku in taken or (not product.sku and name_key in names):
-            report["skipped"].append({"row": number, "sku": product.sku, "name": product.name})
+        repeated = product.sku in seen_codes if product.sku else name_key in seen_names
+        seen_names.add(name_key)
+        if product.sku:
+            seen_codes.add(product.sku)
+        if repeated:
+            what = "Código" if product.sku else "Producto sin código con el mismo nombre"
+            report["errors"].append({"row": number, "message": f"{what} repetido en el archivo."})
+            continue
+        if product.sku in codes or (not product.sku and name_key in names):
+            skipped = {"row": number, "sku": product.sku, "name": product.name}
+            if product.sku and not codes[product.sku]:
+                skipped["archived"] = True  # exists but archived: the user cannot see it in the catalog
+            report["skipped"].append(skipped)
             continue
         if len(payloads) >= slots:
             report["errors"].append({"row": number, "message": f"El plan {plan['name']} permite hasta {plan['maxProducts']} productos activos. Cambia de plan para añadir más."})
             continue
-        if product.sku:
-            taken.add(product.sku)
         names.add(name_key)
         key = normalize_category_name(product.category)
         if key not in known:

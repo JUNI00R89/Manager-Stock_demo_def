@@ -57,6 +57,9 @@ def run() -> None:
         assert edited.status_code == 200 and edited.json()["sku"] == "BEB-0001", edited.text
 
         assert post(product("Corto", sku="X")).status_code == 422
+        # A typed code with an absurd number must not push generated codes past 60 characters.
+        assert post(product("Raro", sku="BEB-" + "9" * 56)).status_code == 201
+        assert len(post(product("Normal")).json()["sku"]) <= 60
 
     print("OK: empty SKU is generated per category prefix and business; typed codes are kept.")
     TEMP.cleanup()
