@@ -49,10 +49,14 @@ export function NewProduct() {
   const [currentImage, setCurrentImage] = useState('');
   const [newPhoto, setNewPhoto] = useState<string | null | undefined>(undefined);
   const photoPreview = newPhoto === null ? null : newPhoto ?? productImageUrl(currentImage, true);
+  // Larger copy of the picked photo for the cropper, so zooming in still gives a sharp 400 px result.
+  const [cropSource, setCropSource] = useState<string | null>(null);
   const pickPhoto = async (file: File | undefined) => {
     if (!file) return;
     try {
-      setNewPhoto(await resizeImage(file));
+      const [photo, source] = await Promise.all([resizeImage(file), resizeImage(file, 1600)]);
+      setNewPhoto(photo);
+      setCropSource(source);
       setCropOpen(true);
     } catch (error) { toastError(error, 'No se pudo leer la foto.'); }
   };
@@ -194,7 +198,7 @@ export function NewProduct() {
                 <input ref={fileInputRef} id="product-photo" type="file" accept="image/jpeg,image/png,image/webp" onChange={handlePhotoChange} className="hidden" />
                 <Button type="button" variant="outline" className="rounded-xl" onClick={openPhotoPicker}>Cambiar foto</Button>
                 {photoPreview && <Button type="button" variant="outline" className="rounded-xl" onClick={() => setCropOpen(true)}><Crop className="h-4 w-4" />Ajustar recorte</Button>}
-                {photoPreview && <Button type="button" variant="outline" className="rounded-xl" onClick={() => setNewPhoto(null)}>Quitar foto</Button>}
+                {photoPreview && <Button type="button" variant="outline" className="rounded-xl" onClick={() => { setNewPhoto(null); setCropSource(null); }}>Quitar foto</Button>}
               </div>
               <p className="text-xs text-muted-foreground">Toca el cuadro para elegir una foto y ajústala moviendo y acercando la imagen. Se muestra en el punto de venta si está activado en Configuración.</p>
             </div>
@@ -202,7 +206,7 @@ export function NewProduct() {
         </div>
         {cropOpen && photoPreview && (
           <PhotoCropper
-            image={photoPreview}
+            image={cropSource ?? photoPreview}
             onCancel={() => setCropOpen(false)}
             onApply={cropped => { setNewPhoto(cropped); setCropOpen(false); }}
           />

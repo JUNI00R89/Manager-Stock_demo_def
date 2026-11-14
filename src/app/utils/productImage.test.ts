@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { BusinessConfig } from '../context/BusinessContext'
-import { imagesEnabled, productImageUrl } from './productImage'
+import { fitWithin, imagesEnabled, productImageUrl } from './productImage'
 
 describe('productImageUrl', () => {
   it('turns an uploaded photo path into an absolute URL on the API server', () => {
@@ -31,5 +31,16 @@ describe('imagesEnabled', () => {
 
   it('is off only when the owner turned it off', () => {
     expect(imagesEnabled({ ...base, features: { ...base.features, productImages: false } })).toBe(false)
+  })
+})
+
+describe('fitWithin', () => {
+  it('shrinks the longest side to the limit and keeps the proportion', () => {
+    expect(fitWithin(1600, 800, 400)).toEqual({ width: 400, height: 200 })
+    expect(fitWithin(500, 1000, 400)).toEqual({ width: 200, height: 400 })
+  })
+
+  it('never enlarges a small crop', () => {
+    expect(fitWithin(120, 90, 400)).toEqual({ width: 120, height: 90 })
   })
 })

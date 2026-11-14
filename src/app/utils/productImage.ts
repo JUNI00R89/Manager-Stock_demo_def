@@ -35,8 +35,14 @@ export function resizeImage(file: File, maxSide = 400): Promise<string> {
   });
 }
 
-/** Crops an image (data URL, http(s) URL or raw base64) to the given rect (fractions 0..1, clamped). */
-export function cropDataUrl(source: string, rect: { x: number; y: number; w: number; h: number }): Promise<string> {
+/** Size that fits inside maxSide × maxSide keeping the proportion; never enlarges. */
+export function fitWithin(width: number, height: number, maxSide: number): { width: number; height: number } {
+  const scale = Math.min(1, maxSide / Math.max(width, height));
+  return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
+}
+
+/** Crops an image (data URL, http(s) URL or raw base64) to the given rect (fractions 0..1, clamped), then shrinks it to maxSide. */
+export function cropDataUrl(source: string, rect: { x: number; y: number; w: number; h: number }, maxSide = 400): Promise<string> {
   return new Promise((resolve, reject) => {
     const isHttp = /^https?:\/\//i.test(source);
     const src = source.startsWith('data:') || isHttp ? source : `data:image/png;base64,${source}`;
@@ -48,8 +54,9 @@ export function cropDataUrl(source: string, rect: { x: number; y: number; w: num
       const w = Math.max(0, Math.min(rect.w, 1 - x));
       const h = Math.max(0, Math.min(rect.h, 1 - y));
       const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, Math.round(img.width * w));
-      canvas.height = Math.max(1, Math.round(img.height * h));
+      const size = fitWithin(img.width * w, img.height * h, maxSide);
+      canvas.width = size.width;
+      canvas.height = size.height;
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.fillStyle = '#ffffff'; // JPEG has no transparency
