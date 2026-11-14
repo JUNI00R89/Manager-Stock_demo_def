@@ -7,12 +7,14 @@ import os
 import sqlite3
 import tempfile
 import uuid
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 
 
 def verify(path: Path) -> None:
-    with sqlite3.connect(path.resolve().as_uri() + '?mode=ro', uri=True) as conn:
+    # closing(): sqlite3's own context manager only commits; an open handle blocks deleting the file on Windows.
+    with closing(sqlite3.connect(path.resolve().as_uri() + '?mode=ro', uri=True)) as conn:
         if conn.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
             raise ValueError('La copia no superó la verificación de integridad SQLite.')
         if conn.execute('PRAGMA foreign_key_check').fetchone():
@@ -29,7 +31,7 @@ def copy_verified(source: Path, target: Path) -> Path:
     os.close(fd)
     temporary = Path(name)
     try:
-        with sqlite3.connect(source.resolve().as_uri() + '?mode=ro', uri=True) as src, sqlite3.connect(temporary) as dst:
+        with closing(sqlite3.connect(source.resolve().as_uri() + '?mode=ro', uri=True)) as src, closing(sqlite3.connect(temporary)) as dst:
             src.backup(dst)
         verify(temporary)
         # A hard link publishes atomically and refuses to overwrite a concurrent destination.
