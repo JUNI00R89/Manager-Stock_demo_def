@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -74,10 +75,12 @@ def apply_verified_payment(conn: sqlite3.Connection, business_id: str, plan_id: 
     plan = SUBSCRIPTION_PLANS.get(plan_id)
     if not plan or plan["priceCOP"] <= 0:
         raise HTTPException(422, "Solo se pueden registrar pagos de planes de pago.")
+    # Case, spaces and dashes are typing noise: "mp 0202" is the same payment as "MP-0202".
     reference = payment_reference.strip()
-    if len(reference) < 4:
+    reference_key = re.sub(r"[\s-]+", "", reference).upper()
+    if len(reference_key) < 4:
         raise HTTPException(422, "Registra una referencia de pago verificada antes de activar el plan.")
-    if conn.execute("SELECT 1 FROM subscription_payments WHERE payment_reference=?", (reference,)).fetchone():
+    if conn.execute("SELECT 1 FROM subscription_payments WHERE upper(replace(replace(payment_reference,' ',''),'-',''))=?", (reference_key,)).fetchone():
         raise HTTPException(409, "Esa referencia de pago ya se registró. Cada cobro solo puede sumar un periodo.")
 
     subscription_for_business(conn, business_id)  # normaliza vencimientos antes de calcular

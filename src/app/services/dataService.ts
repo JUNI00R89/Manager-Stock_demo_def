@@ -822,6 +822,16 @@ export async function getServiceProfessionals() {
   if (isDesktopMode()) return desktop.services.professionals();
   return api<ServiceProfessionalRecord[]>('/services/professionals');
 }
+// shortcut: editing needs the server; the postponed desktop/offline mode only supports create. Add desktop.* updates when that mode returns.
+export async function updateHotelRoom(id: string, input: Omit<HotelRoomRecord, 'id' | 'number' | 'roomNumber' | 'createdAt' | 'updatedAt'> & { roomNumber: string }) {
+  return api<HotelRoomRecord>(`/hotel/rooms/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(input) });
+}
+export async function updateServiceCatalogItem(id: string, input: { name: string; durationMinutes: number; price: number; category?: string; color?: string }) {
+  return api<ServiceCatalogRecord>(`/services/catalog/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(input) });
+}
+export async function updateServiceProfessional(id: string, input: { name: string; specialty?: string; color?: string }) {
+  return api<ServiceProfessionalRecord>(`/services/professionals/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(input) });
+}
 export async function createServiceProfessional(input: { name: string; specialty?: string; color?: string; availability?: { dia?: number; inicio?: string; fin?: string }[] }) {
   if (isDesktopMode()) return desktop.services.createProfessional(input);
   return api<ServiceProfessionalRecord>('/services/professionals', { method: 'POST', body: JSON.stringify(input) });
@@ -1361,6 +1371,10 @@ export const dataService = {
       if (!canFallbackToLocal(error)) throw error;
       return readLocal().suppliers;
     }
+  },
+  async updateSupplier(id: string, input: Omit<Supplier, 'id'>): Promise<Supplier> {
+    const updated = await api<Supplier>(`/suppliers/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(input) });
+    const db = readLocal(); db.suppliers = db.suppliers.map(s => s.id === id ? updated : s); writeLocal(db); return updated;
   },
   async createSupplier(input: Omit<Supplier, 'id'>): Promise<Supplier> {
     try {

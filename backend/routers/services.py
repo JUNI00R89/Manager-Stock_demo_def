@@ -79,6 +79,24 @@ def create_service_catalog_item(payload: ServicePayload):
         return service_out(row)
 
 
+@router.put("/api/services/catalog/{service_id}")
+def update_service_catalog_item(service_id: str, payload: ServicePayload):
+    if current_identity()["role"] != "owner":
+        raise HTTPException(403, "Solo el propietario puede administrar los servicios.")
+    business_id = current_business_id()
+    with connection() as conn:
+        try:
+            # Existing appointments keep their own price snapshot; only new ones use the new price.
+            cursor = conn.execute("UPDATE service_catalog SET name=?,duration_minutes=?,price=?,category=?,color=? WHERE id=? AND business_id=? AND active=1",
+                                  (payload.name.strip(), payload.durationMinutes, payload.price, payload.category.strip(), payload.color, service_id, business_id))
+        except sqlite3.IntegrityError as exc:
+            raise HTTPException(409, "Ya existe un servicio con ese nombre.") from exc
+        if cursor.rowcount == 0:
+            raise HTTPException(404, "Servicio no encontrado.")
+        audit(conn, "update", "service", service_id, {"name": payload.name})
+        return service_out(conn.execute("SELECT * FROM service_catalog WHERE id=? AND business_id=?", (service_id, business_id)).fetchone())
+
+
 @router.get("/api/services/professionals")
 def list_service_professionals():
     with connection() as conn:
@@ -100,6 +118,24 @@ def create_service_professional(payload: ProfessionalPayload):
         audit(conn, "create", "service_professional", professional_id, {"name": payload.name})
         row = conn.execute("SELECT * FROM service_professionals WHERE id=? AND business_id=?", (professional_id,business_id)).fetchone()
         return professional_out(row)
+
+
+@router.put("/api/services/professionals/{professional_id}")
+def update_service_professional(professional_id: str, payload: ProfessionalPayload):
+    if current_identity()["role"] != "owner":
+        raise HTTPException(403, "Solo el propietario puede administrar profesionales.")
+    business_id = current_business_id()
+    with connection() as conn:
+        try:
+            # The schedule has its own endpoint (with revision checks), so it is not touched here.
+            cursor = conn.execute("UPDATE service_professionals SET name=?,specialty=?,color=? WHERE id=? AND business_id=? AND active=1",
+                                  (payload.name.strip(), payload.specialty.strip(), payload.color, professional_id, business_id))
+        except sqlite3.IntegrityError as exc:
+            raise HTTPException(409, "Ya existe un profesional con ese nombre.") from exc
+        if cursor.rowcount == 0:
+            raise HTTPException(404, "Profesional no encontrado.")
+        audit(conn, "update", "service_professional", professional_id, {"name": payload.name})
+        return professional_out(conn.execute("SELECT * FROM service_professionals WHERE id=? AND business_id=?", (professional_id, business_id)).fetchone())
 
 
 @router.get("/api/services/appointments")
@@ -181,7 +217,9 @@ def update_service_appointment_status(appointment_id: str, payload: AppointmentS
         current = conn.execute("SELECT * FROM service_appointments WHERE id=? AND business_id=?", (appointment_id, business_id)).fetchone()
         if current and current["sale_id"] and payload.status != 'attended':
             raise HTTPException(409, "La cita ya fue cobrada. Conserva el estado y usa su comprobante.")
-        if current and payload.status in {'reserved', 'confirmed'}:
+        # Only a cancelled/no-show appointment coming back takes a slot again; confirming an active one must not
+        # fail because the break or the schedule changed after it was booked.
+        if current and payload.status in {'reserved', 'confirmed'} and current['status'] in {'cancelled', 'no_show'}:
             professional = conn.execute("SELECT * FROM service_professionals WHERE id=? AND business_id=?", (current['professional_id'], business_id)).fetchone()
             from backend.scheduling import check_slot
             check_slot(conn, professional, datetime.fromisoformat(current['appointment_date'] + 'T' + current['start_time']), datetime.fromisoformat(current['appointment_date'] + 'T' + current['end_time']), appointment_id)

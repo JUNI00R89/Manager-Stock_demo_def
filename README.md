@@ -16,7 +16,7 @@ Aplicación web para administrar productos, ventas, existencias, proveedores, ca
 - Ventas con múltiples líneas, métodos de pago, descuentos, impuesto definido en la configuración del negocio, instantáneas históricas de precio/costo, clave idempotente y paginación.
 - Anulación de venta con trazabilidad y movimientos inversos, sin borrar el registro original.
 - Caja por turno; las ventas de cajero deben pertenecer a su sesión de caja abierta.
-- Negocio de comidas con productos preparados individuales, pedidos y estados de preparación. No requiere recetas ni consume ingredientes automáticamente.
+- Negocio de comidas con platos, pedidos y estados de preparación. Las recetas son opcionales: si un plato tiene receta, cada venta descuenta sus ingredientes; si no, se descuenta el plato.
 - Página pública de presentación en `/` con carrusel interactivo, tipos de negocio y planes cargados desde el backend; el centro `/descargas` muestra la disponibilidad real por plataforma sin enlazar instaladores inexistentes.
 - Categorías de productos sugeridas por tipo de negocio y categorías personalizadas persistidas por empresa. Unidades discretas validan cantidades enteras en frontend y backend.
 - Configuración persistente del tipo de negocio. Los datos específicos de hotel/servicios/bodega se mantienen durante 15 días en una transición persistida, con aviso, opción de restauración y limpieza backend programada; productos, ventas, usuarios y otros datos compartidos se conservan.
@@ -170,7 +170,7 @@ Prueba: `.\.venv\Scripts\python.exe backend	ests	est_auth_security.py`
 - El cambio de tipo conserva los registros comunes y agenda la limpieza de datos específicos de hotel, servicios o bodega tras el periodo de transición. Habitaciones, reservas, catálogo de servicios, profesionales y citas tienen endpoints tenant-scoped; aún se deben probar visualmente todos los flujos en el navegador y completar cualquier pantalla especializada que siga usando datos de demostración.
 - Los pedidos se registran como comandas pendientes; no descuentan existencias hasta que se registra la venta cobrada. Si se trabajan muchas comandas simultáneas, la disponibilidad debe revisarse al cobrar.
 - Los reportes de rentabilidad son estimaciones derivadas del costo unitario guardado en cada venta, no contabilidad formal. Los datos históricos previos a la instantánea de costo pueden no tener un costo real reconstruible.
-- Las recetas y sus tablas antiguas se conservan únicamente por compatibilidad de esquema/migraciones. En negocio de comidas, la API devuelve 404 para recetas, el menú no muestra el módulo y las ventas no descuentan ingredientes.
+- Recetas (menú "Recetas y costos", negocio de comidas): un plato con receta descuenta sus ingredientes al venderse y calcula su costo; un plato sin receta se vende como producto normal.
 - Los datos que hayan existido solo en modo local no se mezclan automáticamente con la base SQLite.
 
 ## Estructura principal

@@ -71,6 +71,25 @@ def create_hotel_room(payload: HotelRoomPayload):
         return hotel_room_out(row)
 
 
+@router.put("/api/hotel/rooms/{room_id}")
+def update_hotel_room(room_id: str, payload: HotelRoomPayload):
+    if current_identity()["role"] != "owner":
+        raise HTTPException(403, "Solo el propietario puede editar habitaciones.")
+    business_id = current_business_id()
+    with connection() as conn:
+        try:
+            # Occupancy (status) is driven by reservations and housekeeping, never by editing the room's data.
+            cursor = conn.execute("UPDATE hotel_rooms SET room_number=?,room_type=?,floor=?,capacity=?,price_per_night=?,amenities_json=? WHERE id=? AND business_id=?",
+                                  (payload.roomNumber, payload.roomType, payload.floor, payload.capacity, payload.pricePerNight,
+                                   json.dumps(payload.amenities, ensure_ascii=False), room_id, business_id))
+        except sqlite3.IntegrityError as exc:
+            raise HTTPException(409, "Ya existe una habitación con ese número en este hotel.") from exc
+        if cursor.rowcount == 0:
+            raise HTTPException(404, "Habitación no encontrada.")
+        audit(conn, "update", "hotel_room", room_id, {"roomNumber": payload.roomNumber})
+        return hotel_room_out(conn.execute("SELECT * FROM hotel_rooms WHERE id=? AND business_id=?", (room_id, business_id)).fetchone())
+
+
 class HousekeepingPayload(BaseModel):
     cleaningStatus: Literal["sucia", "en_limpieza", "lista", "inspeccionada"]
     cleaningAssignee: str = Field(default="", max_length=120)

@@ -86,7 +86,7 @@ def prepare_database() -> None:
 async def maintenance_worker() -> None:
     while True:
         await asyncio.sleep(MAINTENANCE_INTERVAL_SECONDS)
-        run_maintenance()
+        await asyncio.to_thread(run_maintenance)  # SQLite may wait up to 10 s for the lock; never block every request
 
 
 @asynccontextmanager

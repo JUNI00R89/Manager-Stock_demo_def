@@ -13,6 +13,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator, model_validator
 from . import main as core
+from backend.services.sales import get_sales
 
 router = APIRouter(prefix="/api")
 
@@ -108,6 +109,10 @@ def save_customer(payload, customer_id=None):
                 old = resolve_customer(conn, customer_id, active=False)
                 if old['revision'] != payload.revision:
                     raise HTTPException(409, 'El cliente cambió en otra pantalla. Actualiza antes de guardar.')
+                identity = core.current_identity()
+                if identity['role'] == 'cashier' and not identity.get('custom_role_id'):
+                    # A base cashier fixes contact data only; the tax document and the active flag feed billing.
+                    payload = payload.model_copy(update={'documentType': old['documentType'], 'documentNumber': old['documentNumber'], 'active': old['active']})
             else:
                 customer_id = 'CLI-' + uuid.uuid4().hex[:16]
                 conn.execute('INSERT INTO customers (id,business_id,name) VALUES (?,?,?)', (customer_id, core.current_business_id(), payload.name))
@@ -129,10 +134,10 @@ def customer_history(customer_id: str):
         # Each domain's own read permission remains necessary.
         sales = []
         if core.has_permission('sales.view') or (core.current_identity()['role'] == 'cashier' and not core.current_identity().get('custom_role_id')):
-            rows = conn.execute('''SELECT s.id FROM sales s JOIN customer_operations c ON c.source_id=s.id AND c.source_type='sale'
+            rows = conn.execute('''SELECT s.* FROM sales s JOIN customer_operations c ON c.source_id=s.id AND c.source_type='sale'
                 AND c.business_id=s.business_id WHERE c.customer_id=? AND s.business_id=? ORDER BY s.created_at DESC LIMIT 100''',
                 (customer_id, core.current_business_id())).fetchall()
-            sales = [core.get_sale(conn, r['id']) for r in rows]
+            sales = get_sales(conn, rows)  # one batch instead of ~7 queries per sale
             if core.current_identity()['role'] == 'cashier':
                 sales = [s for s in sales if s['createdBy'] == core.current_identity()['id']]
         return {'customer': customer, 'sales': sales, 'limit': 100}

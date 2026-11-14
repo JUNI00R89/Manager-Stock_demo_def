@@ -61,6 +61,14 @@ def check_schedule(client: TestClient) -> None:
         "appointmentDate": tuesday, "startTime": "10:00"})
     assert moved.status_code == 422, "editing must apply the same schedule rule"
 
+    # Back-to-back bookings, then a 15-minute break is added: confirming an existing appointment still works.
+    first = book(client, headers, service_id, scheduled_id, monday, "09:00")
+    assert first.status_code == 201 and book(client, headers, service_id, scheduled_id, monday, "09:30").status_code == 201
+    schedule = {"availability": [{"dia": 1, "inicio": "09:00", "fin": "12:00"}], "bufferMinutes": 15, "revision": 1}
+    assert client.put(f"/api/services/professionals/{scheduled_id}/schedule", headers=headers, json=schedule).status_code == 200
+    confirmed = client.patch(f"/api/services/appointments/{first.json()['id']}/status", headers=headers, json={"status": "confirmed"})
+    assert confirmed.status_code == 200, confirmed.text
+
 
 def check_charge(client: TestClient) -> None:
     token = client.post("/api/auth/login", json={"email": "servicios@test.local", "password": "PruebaSegura123!"}).json()["access_token"]

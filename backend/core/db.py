@@ -48,3 +48,10 @@ def table_has_column(conn: sqlite3.Connection, table: str, column: str) -> bool:
     if not table_exists(conn, table):
         return False
     return column in {row["name"] for row in conn.execute(f'PRAGMA table_info("{table}")').fetchall()}
+
+
+def colombia_now_iso() -> str:
+    """Now in Colombia time ("...-05:00"), independent of the server's time zone, so sale dates sort consistently."""
+    from zoneinfo import ZoneInfo
+
+    return datetime.now(ZoneInfo("America/Bogota")).isoformat(timespec="seconds")

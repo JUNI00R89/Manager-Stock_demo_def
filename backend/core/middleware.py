@@ -92,7 +92,8 @@ def required_permission_for_request(path: str, method: str) -> str | None:
         return 'billing.view' if method == 'GET' else 'billing.manage'
     if path.startswith('/api/inventory/count-reviews') or path == '/api/inventory/count-products':
         return 'inventory.adjust' if path.endswith(('/approve', '/cancel')) else 'inventory.count'
-    if path.startswith('/api/sales/') and '/returns' in path:
+    # A refund moves money back: same permission from a sale or from a charged appointment.
+    if path.startswith(('/api/sales/', '/api/services/appointments/')) and '/returns' in path:
         return 'sales.cancel'
     if path.startswith("/api/inventory/"):
         return _inventory_permission(path, method)

@@ -26,6 +26,7 @@ const pathPermission = (path: string): string | null => {
   if (/^\/products\/[^/]+\/edit$/.test(path)) return 'catalog.edit';
   if (path === '/suppliers') return 'suppliers.view';
   if (path === '/suppliers/new') return 'suppliers.manage';
+  if (/^\/suppliers\/[^/]+\/edit$/.test(path)) return 'suppliers.manage';
   if (path.startsWith('/inventory/')) return 'inventory.view';
   if (path === '/warehouse' || path === '/warehouse/movements' || path === '/warehouse/lots' || path === '/warehouse/reports') return 'inventory.view';
   if (path === '/warehouse/entries' || path === '/warehouse/exits' || path === '/warehouse/waste' || path === '/warehouse/transfers') return 'inventory.entry';

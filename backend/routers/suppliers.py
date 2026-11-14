@@ -45,6 +45,25 @@ def create_supplier(payload: SupplierPayload):
         return next(x for x in list_suppliers() if x["id"] == supplier_id)
 
 
+@router.put("/api/suppliers/{supplier_id}")
+def update_supplier(supplier_id: str, payload: SupplierPayload):
+    business_id = current_business_id()
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        cursor = conn.execute("UPDATE suppliers SET name=?,company=?,phone=?,email=?,address=?,notes=? WHERE id=? AND business_id=? AND active=1",
+                              (payload.name.strip(), payload.company.strip(), payload.phone.strip(), payload.email.strip(), payload.address.strip(), payload.notes.strip(), supplier_id, business_id))
+        if cursor.rowcount == 0:
+            conn.rollback()
+            raise HTTPException(404, "Proveedor no encontrado.")
+        conn.execute("DELETE FROM supplier_products WHERE supplier_id=?", (supplier_id,))
+        for product_id in set(payload.products):
+            if conn.execute("SELECT id FROM products WHERE id=? AND business_id=? AND active=1", (product_id, business_id)).fetchone():
+                conn.execute("INSERT OR IGNORE INTO supplier_products (supplier_id,product_id) VALUES (?,?)", (supplier_id, product_id))
+        audit(conn, "update", "supplier", supplier_id)
+        conn.commit()
+        return next(x for x in list_suppliers() if x["id"] == supplier_id)
+
+
 @router.delete("/api/suppliers/{supplier_id}")
 def delete_supplier(supplier_id: str):
     with connection() as conn:

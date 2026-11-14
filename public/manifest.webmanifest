@@ -1,0 +1,14 @@
+{
+  "name": "Manager Stock",
+  "short_name": "Manager Stock",
+  "description": "Inventario, ventas y operación para negocios pequeños.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F4F4F6",
+  "theme_color": "#F26A1B",
+  "lang": "es-CO",
+  "icons": [
+    { "src": "/icon-256.png", "sizes": "256x256", "type": "image/png", "purpose": "any" }
+  ]
+}
