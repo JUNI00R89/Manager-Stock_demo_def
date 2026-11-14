@@ -108,6 +108,10 @@ def save_customer(payload, customer_id=None):
                 old = resolve_customer(conn, customer_id, active=False)
                 if old['revision'] != payload.revision:
                     raise HTTPException(409, 'El cliente cambió en otra pantalla. Actualiza antes de guardar.')
+                identity = core.current_identity()
+                if identity['role'] == 'cashier' and not identity.get('custom_role_id'):
+                    # A base cashier fixes contact data only; the tax document and the active flag feed billing.
+                    payload = payload.model_copy(update={'documentType': old['documentType'], 'documentNumber': old['documentNumber'], 'active': old['active']})
             else:
                 customer_id = 'CLI-' + uuid.uuid4().hex[:16]
                 conn.execute('INSERT INTO customers (id,business_id,name) VALUES (?,?,?)', (customer_id, core.current_business_id(), payload.name))
