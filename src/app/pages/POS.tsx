@@ -26,6 +26,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
 } from '../components/ui/dialog';
 import { BarcodeScanner } from '../components/BarcodeScanner';
+import { quickCashAmounts } from '../utils/quickCash';
 import { formatMoney as money } from '../utils/restaurantFormat';
 
 interface CartItem {
@@ -178,6 +179,16 @@ export function POS() {
   const afterDiscount = subtotal - discountAmount;
   const tax = afterDiscount * TAX_RATE;
   const total = afterDiscount + tax;
+
+  // Keyboard shortcuts for the cashier: F2 search, F4 charge (a disabled button ignores the click).
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'F2') { event.preventDefault(); document.getElementById('pos-search')?.focus(); }
+      if (event.key === 'F4') { event.preventDefault(); document.getElementById('pos-charge')?.click(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const splitTotal = splitPayments.reduce((sum, p) => sum + p.amount, 0);
   const splitRemaining = total - splitTotal;
@@ -359,6 +370,7 @@ export function POS() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
               <Barcode className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
               <Input
+                id="pos-search"
                 placeholder="Buscar producto, SKU o escanear código..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
@@ -611,6 +623,15 @@ export function POS() {
                 <div className="space-y-1">
                   <label htmlFor="pos-cash-received" className="text-xs text-muted-foreground">Efectivo recibido</label>
                   <Input id="pos-cash-received" type="number" placeholder="0.00" value={cashReceived} onChange={e => setCashReceived(e.target.value)} className="h-10" />
+                  {total > 0 && (
+                    <div className="flex flex-wrap gap-1.5" aria-label="Montos rápidos">
+                      {[total, ...quickCashAmounts(total)].map((amount, index) => (
+                        <Button key={amount} type="button" size="sm" variant="outline" className="h-8 px-2 text-xs" onClick={() => setCashReceived(String(amount))}>
+                          {index === 0 ? 'Exacto' : money(amount)}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
                   {cashReceived && parseFloat(cashReceived) >= total && (
                     <div className="text-xs bg-green-50 dark:bg-green-950/30 p-2 rounded border border-green-200 dark:border-green-800 flex justify-between">
                       <span className="text-muted-foreground">Cambio:</span>
@@ -649,6 +670,7 @@ export function POS() {
             </div>
 
             <Button
+              id="pos-charge"
               onClick={handlePayment}
               disabled={cart.length === 0 || !paymentMethod || processingPayment}
               className="w-full h-12 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 disabled:opacity-40 text-white text-base font-semibold"
@@ -656,6 +678,7 @@ export function POS() {
               <Check size={20} className="mr-2" />
               {processingPayment ? 'Guardando venta…' : `Cobrar ${money(total)}`}
             </Button>
+            <p className="mt-2 hidden text-center text-[11px] text-muted-foreground sm:block">F2 buscar · F4 cobrar</p>
           </Card>
         </div>
       </div>
