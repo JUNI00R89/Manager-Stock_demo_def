@@ -19,6 +19,7 @@ import { dataService, deleteServiceAppointment, editServiceAppointment, getServi
 import { toast } from 'sonner';
 import { toastError } from '../../utils/notifications';
 import { uniqueRestaurantId } from '../../utils/restaurantStorage';
+import { formatMoney as money } from '../../utils/restaurantFormat';
 
 type ViewMode = 'semana' | 'dia';
 
@@ -286,7 +287,7 @@ export function Appointments() {
                   <p className="flex items-center gap-2"><User size={14} className="text-orange-500" />{pro?.nombre}</p>
                   <p className="flex items-center gap-2"><Clock size={14} className="text-orange-500" />{selectedCita.horaInicio} — {selectedCita.horaFin}</p>
                 </div>
-                <p className="text-xl font-bold text-orange-600">{(appointmentRows.find(r => r.id === selectedCita.id)?.price ?? svc?.precio ?? 0).toLocaleString('es-CO', { style: 'currency', currency: 'COP' })}</p>
+                <p className="text-xl font-bold text-orange-600">{money(appointmentRows.find(r => r.id === selectedCita.id)?.price ?? svc?.precio ?? 0)}</p>
               </div>
               {!['cancelada', 'no_asistio'].includes(selectedCita.estado) && (appointmentRows.find(r => r.id === selectedCita.id)?.saleId || canManage && canPerformAction(user, 'cash.manage')) && <Button className="w-full min-h-11 mt-4" onClick={() => { const row = appointmentRows.find(r => r.id === selectedCita.id); if (row) { setCheckout(row); setSelectedCita(null); } }}>{appointmentRows.find(r => r.id === selectedCita.id)?.saleId ? 'Ver comprobante' : 'Finalizar y cobrar'}</Button>}
               <div style={{ display: canManage ? undefined : 'none' }} className="flex gap-2 mt-5">
@@ -308,8 +309,11 @@ export function Appointments() {
                 {selectedCita.estado === 'atendida' && selectedCita.saleId && (
                   <Badge className="flex-1 justify-center bg-green-100 text-green-800">Cobrada</Badge>
                 )}
-                <Button size="sm" variant="outline" className="flex-1" onClick={() => beginEdit(selectedCita)}>Editar</Button>
-                <Button size="sm" variant="outline" disabled={deletingCita} className="border-red-200 text-red-600" onClick={() => setConfirmDeleteCita(true)}>{deletingCita ? 'Eliminando…' : 'Eliminar'}</Button>
+                {/* A charged appointment is part of a sale: the server refuses to edit or delete it. */}
+                {!selectedCita.saleId && <>
+                  <Button size="sm" variant="outline" className="flex-1" onClick={() => beginEdit(selectedCita)}>Editar</Button>
+                  <Button size="sm" variant="outline" disabled={deletingCita} className="border-red-200 text-red-600" onClick={() => setConfirmDeleteCita(true)}>{deletingCita ? 'Eliminando…' : 'Eliminar'}</Button>
+                </>}
               </div>
               {canManage && selectedCita.estado === 'atendida' && !selectedCita.saleId && (
                 <div className="mt-3 space-y-1">
