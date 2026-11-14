@@ -89,11 +89,11 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: Props) 
           {busy && !report && <p className="text-sm text-muted-foreground">Leyendo el archivo…</p>}
           {report && (
             <section aria-label="Vista previa" className="space-y-2 rounded-xl border border-border/70 p-3 text-sm">
-              <p className="flex items-center gap-2 font-medium"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{count} productos se crearán</p>
-              {report.skipped.length > 0 && <p className="flex items-start gap-2"><SkipForward className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />{report.skipped.length} ya existen (se saltan): {report.skipped.map(item => item.sku || item.name).join(', ')}</p>}
+              <p className="flex items-center gap-2 font-medium"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{count === 1 ? '1 producto se creará' : `${count} productos se crearán`}</p>
+              {report.skipped.length > 0 && <p className="flex items-start gap-2"><SkipForward className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />{report.skipped.length === 1 ? '1 ya existe' : `${report.skipped.length} ya existen`} (se saltan): {report.skipped.map(item => `${item.sku || item.name}${item.archived ? ' (archivado)' : ''}`).join(', ')}</p>}
               {report.newCategories.length > 0 && <p className="flex items-start gap-2"><FolderPlus className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />Categorías nuevas: {report.newCategories.join(', ')}</p>}
               {report.errors.length > 0 && <div className="space-y-1">
-                <p className="flex items-center gap-2 font-medium text-rose-600"><XCircle className="h-4 w-4" />{report.errors.length} filas con error</p>
+                <p className="flex items-center gap-2 font-medium text-rose-600"><XCircle className="h-4 w-4" />{report.errors.length === 1 ? '1 fila con error' : `${report.errors.length} filas con error`}</p>
                 <ul className="max-h-40 space-y-0.5 overflow-y-auto pl-6 text-xs text-muted-foreground">
                   {report.errors.map(error => <li key={error.row}>Fila {error.row}: {error.message}</li>)}
                 </ul>
@@ -104,7 +104,7 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: Props) 
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => close(false)} disabled={busy}>Cancelar</Button>
-          {report && <Button type="button" onClick={() => void confirm()} disabled={busy || count === 0} className="bg-orange-600 text-white hover:bg-orange-700">Importar {count} productos</Button>}
+          {report && <Button type="button" onClick={() => void confirm()} disabled={busy || count === 0} className="bg-orange-600 text-white hover:bg-orange-700">{count === 1 ? 'Importar 1 producto' : `Importar ${count} productos`}</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>

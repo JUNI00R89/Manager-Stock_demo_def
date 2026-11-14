@@ -7,7 +7,7 @@ export type PaymentPartMethod = 'cash' | 'card' | 'digital' | 'transfer';
 /** Result of reading a product spreadsheet; `row` is the spreadsheet row number (header = 1). */
 export type ImportReport = {
   toCreate: { row: number; sku: string; name: string; category: string }[];
-  skipped: { row: number; sku: string; name: string }[];
+  skipped: { row: number; sku: string; name: string; archived?: boolean }[];
   errors: { row: number; message: string }[];
   newCategories: string[];
   created: number;
@@ -1036,6 +1036,8 @@ export const dataService = {
     } catch (error) {
       if (!canFallbackToLocal(error)) throw error;
       const db = readLocal();
+      // Offline there is no server to generate the code, so an empty SKU gets a local unique one.
+      if (!payload.sku.trim()) payload.sku = uniqueId('PRD');
       if (db.products.some(p => p.sku.toLowerCase() === payload.sku.trim().toLowerCase())) throw new Error('Ya existe un producto con ese SKU.');
       const created: Product = { ...payload, id: input.id || uniqueId('PRD') };
       db.products.push(created);
