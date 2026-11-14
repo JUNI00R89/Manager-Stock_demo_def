@@ -149,6 +149,7 @@ export const router = createBrowserRouter([
       { path: 'products/:id/edit', element: <NewProduct /> },
       { path: 'suppliers', element: <Suppliers /> },
       { path: 'suppliers/new', element: <NewSupplier /> },
+      { path: 'suppliers/:id/edit', element: <NewSupplier /> },
       { path: 'inventory/transfers', element: <Navigate to="/warehouse/transfers" replace /> },
       { path: 'inventory/physical-count', element: <Navigate to="/warehouse/counts" replace /> },
       { path: 'inventory/movements', element: <Navigate to="/warehouse/movements" replace /> },
