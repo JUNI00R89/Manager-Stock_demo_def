@@ -10,9 +10,10 @@ import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
 import { AnimatedCounter } from '../components/motion/AnimatedCounter';
 import { dataService, colombiaDateKey, type SaleRecord } from '../services/dataService';
-import { saleNetTotal, saleNetRevenue, saleCost, returnedUnits, csvCell } from '../utils/saleMetrics';
+import { saleNetTotal, saleNetRevenue, saleCost, returnedUnits } from '../utils/saleMetrics';
 
 import { formatMoney as money } from '../utils/restaurantFormat';
+import { downloadCsv } from '../utils/csv';
 
 const daysAgo = (days: number) => colombiaDateKey(new Date(Date.now() - days * 86400000));
 const formatDate = (value: string) => new Intl.DateTimeFormat('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(value));
@@ -57,14 +58,10 @@ export function Reports() {
   }, [validSales]);
 
   const exportCsv = () => {
-    const rows = [
+    downloadCsv(`manager-stock-reporte-${start || 'inicio'}-${end || 'hoy'}.csv`, [
       ['Venta', 'Fecha', 'Cliente', 'Estado', 'Productos', 'Unidades', 'Subtotal', 'Descuento línea', 'Descuento general', 'Impuesto', 'Total original', 'Devuelto', 'Venta neta con impuesto', 'Ingreso neto sin impuesto', 'Costo estimado', 'Utilidad estimada'],
       ...reportSales.map(sale => [sale.id, sale.date, sale.customer, sale.status, sale.productName, sale.quantity, sale.subtotal, sale.lineDiscount, sale.globalDiscount, sale.tax, sale.totalPrice, sale.returnedTotal || 0, saleNetTotal(sale), saleNetRevenue(sale), saleCost(sale), saleNetRevenue(sale) - saleCost(sale)]),
-    ];
-    const csv = rows.map(row => row.map(csvCell).join(';')).join('\r\n');
-    const blob = new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob); const link = document.createElement('a');
-    link.href = url; link.download = `manager-stock-reporte-${start || 'inicio'}-${end || 'hoy'}.csv`; link.click(); URL.revokeObjectURL(url);
+    ]);
   };
 
   return <Layout><div className="mx-auto max-w-7xl space-y-6">

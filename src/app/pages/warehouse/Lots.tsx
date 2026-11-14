@@ -9,6 +9,7 @@ import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
 import { dataService, type InventoryLotRecord } from '../../services/dataService';
 import { dateOnly, fmtQty, money, PageTitle, StatCard, useWarehouseRefs } from './shared';
+import { downloadCsv } from '../../utils/csv';
 
 const statusLabels: Record<InventoryLotRecord['status'], string> = {
   vencido: 'Vencido', por_vencer: 'Por vencer', vigente: 'Vigente', sin_vencimiento: 'Sin vencimiento',
@@ -52,10 +53,7 @@ export function WarehouseLots() {
   const totalUnits = filtered.reduce((sum, lot) => sum + lot.quantity, 0);
 
   const exportCsv = () => {
-    const quote = (value: unknown) => `"${String(value ?? '').replaceAll('"', '""')}"`;
-    const rows = [['Producto', 'SKU', 'Lote', 'Cantidad', 'Unidad', 'Vencimiento', 'Días restantes', 'Estado', 'Ubicación', 'Costo unitario', 'Valor'], ...filtered.map(lot => [lot.productName, lot.sku, lot.lotCode, lot.quantity, lot.productUnit, lot.expiryDate || '', lot.daysLeft ?? '', statusLabels[lot.status], lot.locationCode || '', lot.unitCost, lot.value])];
-    const blob = new Blob(['\ufeff', rows.map(row => row.map(quote).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = `lotes-${new Date().toISOString().slice(0, 10)}.csv`; link.click(); URL.revokeObjectURL(url);
+    downloadCsv(`lotes-${new Date().toISOString().slice(0, 10)}.csv`, [['Producto', 'SKU', 'Lote', 'Cantidad', 'Unidad', 'Vencimiento', 'Días restantes', 'Estado', 'Ubicación', 'Costo unitario', 'Valor'], ...filtered.map(lot => [lot.productName, lot.sku, lot.lotCode, lot.quantity, lot.productUnit, lot.expiryDate || '', lot.daysLeft ?? '', statusLabels[lot.status], lot.locationCode || '', lot.unitCost, lot.value])]);
   };
 
   return <Layout><div className="mx-auto max-w-7xl space-y-6">

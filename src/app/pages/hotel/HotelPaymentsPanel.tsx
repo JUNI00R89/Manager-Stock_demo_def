@@ -5,11 +5,10 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { ConfirmActionDialog } from '../../components/ConfirmActionDialog';
 import { addHotelPayment, closeHotelAccount, dataService, type CashSessionRecord, type HotelAccount, type HotelPaymentInput, type PaymentPartMethod } from '../../services/dataService';
-import { downloadHotelReceipt } from '../../utils/hotelReceipt';
+import { downloadHotelReceipt, HOTEL_PAYMENT_LABELS as methods } from '../../utils/hotelReceipt';
 import { useAuth } from '../../context/AuthContext';
 import { uniqueRestaurantId } from '../../utils/restaurantStorage';
 const money=(v:number)=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP'}).format(v);
-const methods: Record<PaymentPartMethod,string> = {cash:'Efectivo',card:'Tarjeta',transfer:'Transferencia',digital:'Pago digital'};
 
 export function HotelPaymentsPanel({account,canCollect,busy,onBusy,onAccount,onSaved}:{account:HotelAccount;canCollect:boolean;busy:boolean;onBusy:(value:boolean)=>void;onAccount:(account:HotelAccount)=>void;onSaved:()=>void}) {
   const {user}=useAuth();

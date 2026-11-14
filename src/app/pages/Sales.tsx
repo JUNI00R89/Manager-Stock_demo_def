@@ -9,9 +9,10 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
 import { colombiaDateKey, dataService, type SaleRecord, type SaleStatus } from '../services/dataService';
-import { saleNetTotal, csvCell } from '../utils/saleMetrics';
+import { saleNetTotal } from '../utils/saleMetrics';
 import { useAuth } from '../context/AuthContext';
 import { formatMoney as money } from '../utils/restaurantFormat';
+import { downloadCsv } from '../utils/csv';
 
 const statusLabel: Record<SaleStatus, string> = { completed: 'Completada', pending: 'Pendiente', cancelled: 'Anulada' };
 
@@ -36,10 +37,7 @@ export function Sales() {
   const revenueToday = todaySales.reduce((sum, sale) => sum + saleNetTotal(sale), 0);
   const badgeClass: Record<SaleStatus, string> = { completed: 'border-emerald-200 bg-emerald-50 text-emerald-700', pending: 'border-amber-200 bg-amber-50 text-amber-700', cancelled: 'border-rose-200 bg-rose-50 text-rose-700' };
   const exportCsv = () => {
-    const rows = [['Venta', 'Fecha', 'Cliente', 'Productos', 'Unidades', 'Método de pago', 'Subtotal', 'Descuento por línea', 'Descuento general', 'Impuesto', 'Total original', 'Devuelto', 'Venta neta', 'Estado'], ...filtered.map(sale => [sale.id, sale.date, sale.customer, sale.productName, sale.quantity, sale.paymentMethod, sale.subtotal, sale.lineDiscount, sale.globalDiscount, sale.tax, sale.totalPrice, sale.returnedTotal || 0, saleNetTotal(sale), statusLabel[sale.status]])];
-    const csv = rows.map(row => row.map(csvCell).join(';')).join('\r\n');
-    const url = URL.createObjectURL(new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8;' }));
-    const link = document.createElement('a'); link.href = url; link.download = `ventas-manager-stock-${colombiaDateKey()}.csv`; link.click(); URL.revokeObjectURL(url);
+    downloadCsv(`ventas-manager-stock-${colombiaDateKey()}.csv`, [['Venta', 'Fecha', 'Cliente', 'Productos', 'Unidades', 'Método de pago', 'Subtotal', 'Descuento por línea', 'Descuento general', 'Impuesto', 'Total original', 'Devuelto', 'Venta neta', 'Estado'], ...filtered.map(sale => [sale.id, sale.date, sale.customer, sale.productName, sale.quantity, sale.paymentMethod, sale.subtotal, sale.lineDiscount, sale.globalDiscount, sale.tax, sale.totalPrice, sale.returnedTotal || 0, saleNetTotal(sale), statusLabel[sale.status]])]);
   };
 
   return <Layout><div className="mx-auto max-w-7xl space-y-6">

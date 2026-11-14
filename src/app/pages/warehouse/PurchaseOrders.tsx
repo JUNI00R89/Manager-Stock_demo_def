@@ -11,7 +11,7 @@ import { Textarea } from '../../components/ui/textarea';
 import { Badge } from '../../components/ui/badge';
 import { dataService, type InventoryMovementRecord, type PurchaseOrderRecord, type SupplierPriceHistoryRecord } from '../../services/dataService';
 import type { Product } from '../../utils/types';
-import { dateOnly, dateTime, fmtQty, money, PageTitle, ProductSelect, useWarehousePermissions, useWarehouseRefs } from './shared';
+import { dateOnly, dateTime, fmtQty, money, PageTitle, ProductSelect, useWarehousePermissions, useWarehouseRefs, withoutLine } from './shared';
 
 type ReplenishmentItem = Product & { suggestedQuantity: number; lastCost: number; estimatedCost: number };
 
@@ -99,7 +99,7 @@ export function WarehousePurchaseOrders() {
   const orderTotal = lines.reduce((sum, line) => sum + (Number(line.quantity) || 0) * (Number(line.unitCost) || 0), 0);
 
   const updateLine = (key: string, patch: Partial<OrderLine>) => setLines(current => current.map(line => line.key === key ? { ...line, ...patch } : line));
-  const removeLine = (key: string) => setLines(current => current.length === 1 ? current : current.filter(line => line.key !== key));
+  const removeLine = (key: string) => setLines(current => withoutLine(current, key));
   const changeProduct = (key: string, productId: string) => {
     const product = productById.get(productId);
     updateLine(key, { productId, unit: product?.unit || '', unitCost: String(product?.cost ?? 0) });

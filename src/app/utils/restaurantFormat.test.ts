@@ -12,6 +12,7 @@ import {
   jornadaDateFromKey,
   minutesSince,
   orderItemSummary,
+  normalizeText,
   parseTimeToMinutes,
 } from './restaurantFormat'
 
@@ -158,5 +159,11 @@ describe('orderItemSummary', () => {
     expect(orderItemSummary(1)).toBe('1 producto')
     expect(orderItemSummary(0)).toBe('0 productos')
     expect(orderItemSummary(3)).toBe('3 productos')
+  })
+})
+
+describe('normalizeText', () => {
+  it('quita tildes y mayúsculas para buscar', () => {
+    expect(normalizeText('Café con Leche ÑANDÚ')).toBe('cafe con leche nandu')
   })
 })

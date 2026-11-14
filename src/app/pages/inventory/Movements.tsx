@@ -10,6 +10,7 @@ import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
 import { dataService, type InventoryMovementRecord, type InventoryMovementType } from '../../services/dataService';
 import { dateTime, fmtQty, money, PageTitle, StatCard, useWarehouseRefs } from '../warehouse/shared';
+import { downloadCsv } from '../../utils/csv';
 
 const typeLabels: Record<InventoryMovementType, string> = {
   opening: 'Existencias iniciales',
@@ -99,22 +100,14 @@ export function Movements() {
   const wasteCost = rows.filter(row => row.movementType === 'waste').reduce((sum, row) => sum + Math.abs(row.quantityDelta) * (row.unitCost || 0), 0);
 
   const exportCsv = () => {
-    const quote = (value: unknown) => `"${String(value ?? '').replaceAll('"', '""')}"`;
-    const csv = [
+    downloadCsv(`movimientos-inventario-${todayIso()}.csv`, [
       ['Fecha', 'Producto', 'SKU', 'Tipo', 'Cantidad', 'Unidad', 'Stock antes', 'Stock después', 'Costo unitario', 'Lote', 'Ubicación', 'Usuario', 'Motivo / nota', 'Referencia'],
       ...rows.map(row => [
         new Date(row.createdAt).toISOString(), row.productName, row.sku || '', typeLabels[row.movementType],
         row.quantityDelta, row.productUnit || '', row.stockBefore, row.stockAfter, row.unitCost || 0,
         row.lotCode || '', row.locationCode || '', row.createdByName || '', row.reason || row.note || '', referenceFor(row),
       ]),
-    ];
-    const blob = new Blob(['\ufeff', csv.map(line => line.map(quote).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `movimientos-inventario-${todayIso()}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    ]);
   };
 
   return <Layout><div className="mx-auto max-w-7xl space-y-6">

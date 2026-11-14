@@ -1,5 +1,7 @@
 import type { HotelReceipt, HotelRefundRecord, HotelReservationRecord } from '../services/dataService';
 
+export const HOTEL_PAYMENT_LABELS: Record<string, string> = { cash: 'Efectivo', card: 'Tarjeta', transfer: 'Transferencia', digital: 'Pago digital' };
+
 /** Builds an inert, printable document; guest names and notes are text nodes. */
 export function downloadHotelReceipt(receipt: HotelReceipt) {
   const doc = document.implementation.createHTMLDocument('Comprobante de hotel');
@@ -10,7 +12,7 @@ export function downloadHotelReceipt(receipt: HotelReceipt) {
   doc.head.append(style);
   const line = (tag: string, value: string) => { const el=doc.createElement(tag); el.textContent=value; doc.body.append(el); };
   const money = (n: number) => new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP'}).format(n);
-  const methods: Record<string,string> = {cash:'Efectivo',card:'Tarjeta',transfer:'Transferencia',digital:'Pago digital'};
+  const methods = HOTEL_PAYMENT_LABELS;
   line('h1',receipt.businessName);
   line('h2',`Comprobante interno ${receipt.receiptId}`);
   line('p',`Fecha de cierre: ${new Date(receipt.closedAt!).toLocaleString('es-CO')}`);
@@ -29,7 +31,7 @@ export function downloadHotelRefund(refund: HotelRefundRecord, reservation: Hote
   const doc=document.implementation.createHTMLDocument('Comprobante de devolución');
   doc.documentElement.lang='es';
   const meta=doc.createElement('meta');meta.setAttribute('charset','utf-8');doc.head.prepend(meta);
-  const methods={cash:'Efectivo',card:'Tarjeta',transfer:'Transferencia',digital:'Pago digital'};
+  const methods = HOTEL_PAYMENT_LABELS;
   for(const text of ['Comprobante interno de devolución',refund.id,`Habitación ${reservation.roomNumber} · ${reservation.guestName}`,`Reserva: ${reservation.id}`,`Pago original: ${refund.paymentId}`,`Importe: ${refund.amount.toFixed(2)} COP · ${methods[refund.method]}`,`Fecha: ${new Date(refund.createdAt).toLocaleString('es-CO')}`,`Motivo: ${refund.reason}`,`Turno: ${refund.cashSessionId}`]){const p=doc.createElement('p');p.textContent=text;doc.body.append(p);}
   const url=URL.createObjectURL(new Blob(['<!doctype html>'+doc.documentElement.outerHTML],{type:'text/html;charset=utf-8'}));
   const link=document.createElement('a');link.href=url;link.download=`devolucion-${refund.id}.html`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);

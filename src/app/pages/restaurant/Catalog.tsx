@@ -19,14 +19,11 @@ import { useAuth } from '../../context/AuthContext';
 import { useBusiness } from '../../context/BusinessContext';
 import { useRestaurantScope } from '../../utils/restaurantScope';
 import { useRestaurantCatalog } from '../../utils/restaurantCatalogStore';
-import { formatMoney } from '../../utils/restaurantFormat';
+import { formatMoney, normalizeText } from '../../utils/restaurantFormat';
 
 type CatalogTab = 'productos' | 'ingredientes';
 type ActiveFilter = 'todos' | 'activos';
 
-function normalizeText(value: string) {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-}
 
 export function Catalog() {
   const { user } = useAuth();

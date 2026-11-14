@@ -8,6 +8,7 @@ import { Button } from '../../components/ui/button';
 import { dataService, type InventoryLotRecord, type InventoryReportsRecord } from '../../services/dataService';
 import { dateOnly, dateTime, fmtQty, money, PageTitle, StatCard } from './shared';
 import { Label } from '../../components/ui/label';
+import { downloadCsv } from '../../utils/csv';
 
 export function WarehouseReports() {
   const [report, setReport] = useState<InventoryReportsRecord | null>(null);
@@ -28,9 +29,7 @@ export function WarehouseReports() {
   const exportCritical = () => {
     if (!report) return;
     const rows = [['Producto', 'SKU', 'Stock', 'Mínimo', 'Faltante'], ...report.criticalStock.map(product => [product.name, product.sku, product.stock, product.minStock, Math.max(0, product.minStock - product.stock)])];
-    const quote = (value: unknown) => `"${String(value ?? '').replaceAll('"', '""')}"`;
-    const blob = new Blob(['\ufeff', rows.map(row => row.map(quote).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = `inventario-reporte-${new Date().toISOString().slice(0, 10)}.csv`; link.click(); URL.revokeObjectURL(url);
+    downloadCsv(`inventario-reporte-${new Date().toISOString().slice(0, 10)}.csv`, rows);
   };
 
   return <Layout><div className="mx-auto max-w-7xl space-y-6">
