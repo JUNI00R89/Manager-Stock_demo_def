@@ -13,24 +13,29 @@ export function useRestaurantOrders(scope: string) {
     let active = true;
     setLoading(true);
     setError(null);
-    const unsubscribe = repository.suscribirse(scope, (rows) => {
-      if (!active) return;
-      setOrders(rows);
-      setLoading(false);
-      setError(null);
-    }, (reason) => {
-      if (!active) return;
-      setError(reason instanceof Error ? reason.message : 'No se pudieron actualizar los pedidos.');
-      setLoading(false);
-    });
-    repository.listar(scope)
-      .then((rows) => {
+    const unsubscribe = repository.suscribirse(
+      scope,
+      rows => {
+        if (!active) return;
+        setOrders(rows);
+        setLoading(false);
+        setError(null);
+      },
+      reason => {
+        if (!active) return;
+        setError(reason instanceof Error ? reason.message : 'No se pudieron actualizar los pedidos.');
+        setLoading(false);
+      },
+    );
+    repository
+      .listar(scope)
+      .then(rows => {
         if (active) {
           setOrders(rows);
           setLoading(false);
         }
       })
-      .catch((reason) => {
+      .catch(reason => {
         if (!active) return;
         setError(reason instanceof Error ? reason.message : 'No se pudieron cargar los pedidos.');
         setLoading(false);
@@ -84,17 +89,19 @@ export function useRestaurantTables() {
       let active = true;
       dataService
         .getTables()
-        .then((rows) => {
+        .then(rows => {
           if (!active) return;
           setTables(rows.slice().sort((a, b) => a.number - b.number));
           setLoading(false);
         })
-        .catch((reason) => {
+        .catch(reason => {
           if (!active) return;
           setError(reason instanceof Error ? reason.message : 'No se pudieron cargar las mesas.');
           setLoading(false);
         });
-      const onFocus = () => { refresh(); };
+      const onFocus = () => {
+        refresh();
+      };
       window.addEventListener('focus', onFocus);
       return () => {
         active = false;
@@ -112,9 +119,9 @@ export function useRestaurantTables() {
         const q = query(collection(firebaseDb, `businesses/${businessId}/tables`));
         const unsub = onSnapshot(
           q,
-          (snap) => {
+          snap => {
             if (!active) return;
-            const rows = snap.docs.map((d) => {
+            const rows = snap.docs.map(d => {
               const data = d.data() as Record<string, unknown>;
               return {
                 id: d.id,
@@ -132,7 +139,7 @@ export function useRestaurantTables() {
             setLoading(false);
             setError(null);
           },
-          (err) => {
+          err => {
             if (!active) return;
             setError(err instanceof Error ? err.message : 'No se pudieron cargar las mesas.');
             setLoading(false);
@@ -140,7 +147,7 @@ export function useRestaurantTables() {
         );
         unsubscribe = unsub;
       })
-      .catch((reason) => {
+      .catch(reason => {
         if (!active) return;
         setError(reason instanceof Error ? reason.message : 'No se pudieron cargar las mesas.');
         setLoading(false);

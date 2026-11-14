@@ -20,12 +20,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let active = true;
     const token = localStorage.getItem(TOKEN_KEY);
-    if (!token) { setLoading(false); return; }
-    authService.me()
-      .then((currentUser) => { if (active) setUser(currentUser); })
-      .catch(() => { localStorage.removeItem(TOKEN_KEY); if (active) setUser(null); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+    authService
+      .me()
+      .then(currentUser => {
+        if (active) setUser(currentUser);
+      })
+      .catch(() => {
+        localStorage.removeItem(TOKEN_KEY);
+        if (active) setUser(null);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   const establishSession = (token: string, nextUser: AuthUser) => {
@@ -59,7 +72,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) setUser({ ...user, subscription });
   };
 
-  return <AuthContext.Provider value={{ user, loading, login, register, logout, updateSubscription }}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ user, loading, login, register, logout, updateSubscription }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {

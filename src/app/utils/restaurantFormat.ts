@@ -14,7 +14,10 @@ export function formatMoney(value: number, currency = 'COP'): string {
 
 /** Lowercase without accents, so "cafe" finds "Café". */
 export function normalizeText(value: string): string {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
 }
 
 export function formatTime(value: Date | string): string {

@@ -95,10 +95,20 @@ interface DesktopBusinessMeta {
 
 export const DESKTOP_DEMO_ACCOUNTS: DesktopDemoAccount[] = [
   { label: 'Hotel Senderos', detail: 'Hotel', email: 'owner.hotel@managerstock.test', password: 'HotelDemo2026!' },
-  { label: 'Sabores del Parque', detail: 'Comidas', email: 'owner.comidas@managerstock.test', password: 'ComidasDemo2026!' },
+  {
+    label: 'Sabores del Parque',
+    detail: 'Comidas',
+    email: 'owner.comidas@managerstock.test',
+    password: 'ComidasDemo2026!',
+  },
   { label: 'Tienda Aurora', detail: 'Tienda', email: 'owner.retail@managerstock.test', password: 'TiendaDemo2026!' },
   { label: 'Logística Norte', detail: 'Bodega', email: 'owner.bodega@managerstock.test', password: 'BodegaDemo2026!' },
-  { label: 'Estudio Nube', detail: 'Servicios', email: 'owner.servicios@managerstock.test', password: 'ServiciosDemo2026!' },
+  {
+    label: 'Estudio Nube',
+    detail: 'Servicios',
+    email: 'owner.servicios@managerstock.test',
+    password: 'ServiciosDemo2026!',
+  },
   { label: 'SUPERADMIN', detail: 'Plataforma', email: 'superadmin@managerstock.test', password: 'SuperAdminDemo2026!' },
 ];
 
@@ -145,13 +155,15 @@ export async function loadDesktopSeed(): Promise<DesktopSeed> {
   if (seedCache) return seedCache;
   if (!seedRequest) {
     seedRequest = fetch('/desktop-seed.json', { cache: 'no-cache' })
-      .then(async (response) => {
+      .then(async response => {
         if (!response.ok) throw new Error(`No se pudo cargar el paquete de datos local (HTTP ${response.status}).`);
-        const data = await response.json() as DesktopSeed;
+        const data = (await response.json()) as DesktopSeed;
         seedCache = data;
         return data;
       })
-      .finally(() => { seedRequest = null; });
+      .finally(() => {
+        seedRequest = null;
+      });
   }
   return seedRequest;
 }
@@ -159,7 +171,7 @@ export async function loadDesktopSeed(): Promise<DesktopSeed> {
 function readJson<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) as T : fallback;
+    return raw ? (JSON.parse(raw) as T) : fallback;
   } catch {
     return fallback;
   }
@@ -200,14 +212,30 @@ export function databaseKeyFor(businessId: string): string {
   return `${DB_PREFIX}:${businessId}`;
 }
 
-function configKey(businessId: string) { return `${CONFIG_PREFIX}:${businessId}`; }
-function roomsKey(businessId: string) { return `${ROOMS_PREFIX}:${businessId}`; }
-function reservationsKey(businessId: string) { return `${RESERVATIONS_PREFIX}:${businessId}`; }
-function servicesKey(businessId: string) { return `${SERVICES_PREFIX}:${businessId}`; }
-function businessUsersKey(businessId: string) { return `${BUSINESS_USERS_PREFIX}:${businessId}`; }
-function rolesKey(businessId: string) { return `${ROLES_PREFIX}:${businessId}`; }
-function categoriesKey(businessId: string) { return `${CATEGORIES_PREFIX}:${businessId}`; }
-function subscriptionKey(businessId: string) { return `${SUBSCRIPTION_PREFIX}:${businessId}`; }
+function configKey(businessId: string) {
+  return `${CONFIG_PREFIX}:${businessId}`;
+}
+function roomsKey(businessId: string) {
+  return `${ROOMS_PREFIX}:${businessId}`;
+}
+function reservationsKey(businessId: string) {
+  return `${RESERVATIONS_PREFIX}:${businessId}`;
+}
+function servicesKey(businessId: string) {
+  return `${SERVICES_PREFIX}:${businessId}`;
+}
+function businessUsersKey(businessId: string) {
+  return `${BUSINESS_USERS_PREFIX}:${businessId}`;
+}
+function rolesKey(businessId: string) {
+  return `${ROLES_PREFIX}:${businessId}`;
+}
+function categoriesKey(businessId: string) {
+  return `${CATEGORIES_PREFIX}:${businessId}`;
+}
+function subscriptionKey(businessId: string) {
+  return `${SUBSCRIPTION_PREFIX}:${businessId}`;
+}
 
 function readRegisteredUsers(): DesktopUser[] {
   return readJson<DesktopUser[]>(REGISTERED_USERS_KEY, []);
@@ -257,18 +285,32 @@ function writeSupportMessages(messages: Record<string, SupportMessageRecord[]>) 
 }
 
 function latestSupportCase(businessId: string): SupportCaseRecord | null {
-  return readSupportCases()
-    .filter(item => item.businessId === businessId)
-    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0] || null;
+  return (
+    readSupportCases()
+      .filter(item => item.businessId === businessId)
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0] || null
+  );
 }
 
-function openSupportCase(businessId: string, businessName: string, reason: string, description: string): SupportCaseRecord {
+function openSupportCase(
+  businessId: string,
+  businessName: string,
+  reason: string,
+  description: string,
+): SupportCaseRecord {
   const cases = readSupportCases();
   const now = new Date().toISOString();
   const existing = cases.find(item => item.businessId === businessId && !['resolved', 'closed'].includes(item.status));
   if (existing) {
-    const updated = { ...existing, businessName, reason: reason || existing.reason, description: description || existing.description, updatedAt: now, unreadCount: existing.unreadCount || 0 };
-    writeSupportCases(cases.map(item => item.id === existing.id ? updated : item));
+    const updated = {
+      ...existing,
+      businessName,
+      reason: reason || existing.reason,
+      description: description || existing.description,
+      updatedAt: now,
+      unreadCount: existing.unreadCount || 0,
+    };
+    writeSupportCases(cases.map(item => (item.id === existing.id ? updated : item)));
     return updated;
   }
   const created: SupportCaseRecord = {
@@ -292,7 +334,13 @@ function openSupportCase(businessId: string, businessName: string, reason: strin
 function resolveOpenSupportCases(businessId: string, status: SupportCaseRecord['status']) {
   const cases = readSupportCases();
   const now = new Date().toISOString();
-  writeSupportCases(cases.map(item => item.businessId === businessId && !['resolved', 'closed'].includes(item.status) ? { ...item, status, updatedAt: now } : item));
+  writeSupportCases(
+    cases.map(item =>
+      item.businessId === businessId && !['resolved', 'closed'].includes(item.status)
+        ? { ...item, status, updatedAt: now }
+        : item,
+    ),
+  );
 }
 
 function setLocalBusinessActive(businessId: string, active: boolean) {
@@ -383,7 +431,11 @@ function toBusinessUser(user: DesktopUser): BusinessUserRecord {
     businessId: user.businessId || '',
     name: user.name,
     email: user.email,
-    role: (user.role === 'owner' ? 'owner' : user.role === 'business_admin' ? 'business_admin' : 'cashier') as BusinessUserRecord['role'],
+    role: (user.role === 'owner'
+      ? 'owner'
+      : user.role === 'business_admin'
+        ? 'business_admin'
+        : 'cashier') as BusinessUserRecord['role'],
     customRoleId: null,
     customRoleName: null,
     active: user.active,
@@ -399,7 +451,7 @@ function publicBusinessUser(user: DesktopUser): PlatformUserRecord {
   return {
     id: user.id,
     businessId,
-    businessName: business?.name ?? (businessId ? readJson<any>(configKey(businessId), null)?.name ?? null : null),
+    businessName: business?.name ?? (businessId ? (readJson<any>(configKey(businessId), null)?.name ?? null) : null),
     name: user.name,
     email: user.email,
     role: user.role,
@@ -426,12 +478,19 @@ function allUsersWithSeed(): DesktopUser[] {
 }
 
 async function ensureSeedLoaded(): Promise<DesktopSeed | null> {
-  try { return await loadDesktopSeed(); } catch { return null; }
+  try {
+    return await loadDesktopSeed();
+  } catch {
+    return null;
+  }
 }
 
 /** Plan vigente con las mismas reglas de vencimiento que backend/services/subscriptions.py. */
 function subscriptionFor(businessId: string): BusinessSubscriptionRecord {
-  const saved = readJson<BusinessSubscriptionRecord | null>(subscriptionKey(businessId), null) ?? seedCache?.businesses?.[businessId]?.subscription ?? null;
+  const saved =
+    readJson<BusinessSubscriptionRecord | null>(subscriptionKey(businessId), null) ??
+    seedCache?.businesses?.[businessId]?.subscription ??
+    null;
   if (saved) return applySubscriptionExpiry(businessId, saved);
   return {
     businessId,
@@ -451,9 +510,10 @@ function applySubscriptionExpiry(businessId: string, record: BusinessSubscriptio
   if (Number.isFinite(expires) && expires > Date.now()) return record;
   const now = new Date().toISOString();
   // Con una renovación pendiente baja a Gratis, pero la solicitud se conserva.
-  const updated: BusinessSubscriptionRecord = record.status === 'pending_payment'
-    ? { ...record, plan: PLANS[0], expiresAt: null, updatedAt: now }
-    : { ...record, plan: PLANS[0], status: 'expired', pendingPlan: null, updatedAt: now };
+  const updated: BusinessSubscriptionRecord =
+    record.status === 'pending_payment'
+      ? { ...record, plan: PLANS[0], expiresAt: null, updatedAt: now }
+      : { ...record, plan: PLANS[0], status: 'expired', pendingPlan: null, updatedAt: now };
   writeJson(subscriptionKey(businessId), updated);
   return updated;
 }
@@ -472,28 +532,47 @@ function lastSubscriptionPayment(businessId: string): SubscriptionPaymentRecord 
 }
 
 /** Igual que apply_verified_payment del backend: el mismo plan vigente se extiende desde su vencimiento. */
-function applyVerifiedSubscriptionPayment(businessId: string, current: BusinessSubscriptionRecord, planId: PaidPlanId, paymentReference: string): BusinessSubscriptionRecord {
+function applyVerifiedSubscriptionPayment(
+  businessId: string,
+  current: BusinessSubscriptionRecord,
+  planId: PaidPlanId,
+  paymentReference: string,
+): BusinessSubscriptionRecord {
   const plan = PLANS.find(item => item.id === planId);
   if (!plan || plan.priceCOP <= 0) throw new Error('Solo se pueden registrar pagos de planes de pago.');
   const reference = paymentReference.trim();
   if (reference.length < 4) throw new Error('Registra una referencia de pago verificada antes de activar el plan.');
   const payments = readSubscriptionPayments();
-  if (payments.some(item => item.paymentReference === reference)) throw new Error('Esa referencia de pago ya se registró. Cada cobro solo puede sumar un periodo.');
+  if (payments.some(item => item.paymentReference === reference))
+    throw new Error('Esa referencia de pago ya se registró. Cada cobro solo puede sumar un periodo.');
   const now = Date.now();
   const currentExpiry = current.expiresAt ? Date.parse(current.expiresAt) : NaN;
-  const samePlanInForce = current.plan.id === planId && (current.status === 'active' || current.status === 'pending_payment') && Number.isFinite(currentExpiry) && currentExpiry > now;
+  const samePlanInForce =
+    current.plan.id === planId &&
+    (current.status === 'active' || current.status === 'pending_payment') &&
+    Number.isFinite(currentExpiry) &&
+    currentExpiry > now;
   const periodStart = samePlanInForce ? currentExpiry : now;
   const periodEnd = periodStart + BILLING_PERIOD_MS;
   const nowIso = new Date(now).toISOString();
   const payment: StoredSubscriptionPayment = {
-    businessId, planId, amountCOP: plan.priceCOP, paymentReference: reference,
-    periodStart: new Date(periodStart).toISOString(), periodEnd: new Date(periodEnd).toISOString(), createdAt: nowIso,
+    businessId,
+    planId,
+    amountCOP: plan.priceCOP,
+    paymentReference: reference,
+    periodStart: new Date(periodStart).toISOString(),
+    periodEnd: new Date(periodEnd).toISOString(),
+    createdAt: nowIso,
   };
   writeJson(SUBSCRIPTION_PAYMENTS_KEY, [payment, ...payments].slice(0, 2000));
   const updated: BusinessSubscriptionRecord = {
-    ...current, plan, status: 'active', pendingPlan: null,
+    ...current,
+    plan,
+    status: 'active',
+    pendingPlan: null,
     startedAt: samePlanInForce ? current.startedAt : nowIso,
-    expiresAt: new Date(periodEnd).toISOString(), updatedAt: nowIso,
+    expiresAt: new Date(periodEnd).toISOString(),
+    updatedAt: nowIso,
   };
   writeJson(subscriptionKey(businessId), updated);
   return updated;
@@ -584,7 +663,14 @@ export const desktop = {
       const database = readJson<any>(databaseKeyFor(businessId), null);
       const products: Product[] = Array.isArray(database?.products) ? database.products : [];
       const names = [...new Set(products.map(product => product.category).filter(Boolean))];
-      return names.map((name, index) => ({ id: `categoria-local-${index + 1}`, name, description: '', active: true, custom: false, createdAt: null }));
+      return names.map((name, index) => ({
+        id: `categoria-local-${index + 1}`,
+        name,
+        description: '',
+        active: true,
+        custom: false,
+        createdAt: null,
+      }));
     },
     async create(payload: { name: string; description?: string; active?: boolean }): Promise<ProductCategoryRecord> {
       const businessId = requireBusinessId();
@@ -616,17 +702,41 @@ export const desktop = {
       writeJson(roomsKey(businessId), rooms);
       return rooms;
     },
-    async updateHousekeeping(id: string, input: { cleaningStatus: import('./dataService').CleaningStatus; cleaningAssignee: string; expectedStatus?: string }): Promise<HotelRoomRecord> {
+    async updateHousekeeping(
+      id: string,
+      input: {
+        cleaningStatus: import('./dataService').CleaningStatus;
+        cleaningAssignee: string;
+        expectedStatus?: string;
+      },
+    ): Promise<HotelRoomRecord> {
       const rooms = await this.rooms();
       const room = rooms.find(row => row.id === id);
       if (!room) throw new Error('Habitación no encontrada.');
       const current = room.cleaningStatus || (room.status === 'cleaning' ? 'sucia' : 'inspeccionada');
-      if (input.expectedStatus && input.expectedStatus !== current) throw new Error('La limpieza cambió. Actualiza el tablero.');
+      if (input.expectedStatus && input.expectedStatus !== current)
+        throw new Error('La limpieza cambió. Actualiza el tablero.');
       const reservations = await this.reservations();
-      const reserved = reservations.some(r => r.roomId === id && r.status === 'confirmed' && r.checkOut > new Date().toISOString().slice(0, 10));
-      const updated: HotelRoomRecord = { ...room, cleaningStatus: input.cleaningStatus, cleaningAssignee: input.cleaningAssignee.trim(), updatedAt: new Date().toISOString(),
-        status: ['occupied', 'maintenance'].includes(room.status) ? room.status : input.cleaningStatus === 'inspeccionada' ? (reserved ? 'reserved' : 'available') : 'cleaning' };
-      writeJson(roomsKey(requireBusinessId()), rooms.map(row => row.id === id ? updated : row));
+      const reserved = reservations.some(
+        r => r.roomId === id && r.status === 'confirmed' && r.checkOut > new Date().toISOString().slice(0, 10),
+      );
+      const updated: HotelRoomRecord = {
+        ...room,
+        cleaningStatus: input.cleaningStatus,
+        cleaningAssignee: input.cleaningAssignee.trim(),
+        updatedAt: new Date().toISOString(),
+        status: ['occupied', 'maintenance'].includes(room.status)
+          ? room.status
+          : input.cleaningStatus === 'inspeccionada'
+            ? reserved
+              ? 'reserved'
+              : 'available'
+            : 'cleaning',
+      };
+      writeJson(
+        roomsKey(requireBusinessId()),
+        rooms.map(row => (row.id === id ? updated : row)),
+      );
       return updated;
     },
     async createRoom(input: any): Promise<HotelRoomRecord> {
@@ -634,7 +744,8 @@ export const desktop = {
       const rooms = await this.rooms();
       const roomNumber = String(input.roomNumber || input.number || '').trim();
       if (!roomNumber) throw new Error('Escribe el número de habitación.');
-      if (rooms.some(room => room.roomNumber === roomNumber)) throw new Error('Ya existe una habitación con ese número.');
+      if (rooms.some(room => room.roomNumber === roomNumber))
+        throw new Error('Ya existe una habitación con ese número.');
       const created: HotelRoomRecord = {
         id: uid('HAB'),
         number: roomNumber,
@@ -663,7 +774,15 @@ export const desktop = {
       writeJson(reservationsKey(businessId), reservations);
       return reservations;
     },
-    async createReservation(input: { roomId: string; guestName: string; guestEmail?: string; guestPhone?: string; checkIn: string; checkOut: string; advance?: number }): Promise<HotelReservationRecord> {
+    async createReservation(input: {
+      roomId: string;
+      guestName: string;
+      guestEmail?: string;
+      guestPhone?: string;
+      checkIn: string;
+      checkOut: string;
+      advance?: number;
+    }): Promise<HotelReservationRecord> {
       const businessId = requireBusinessId();
       const rooms = await this.rooms();
       const room = rooms.find(item => item.id === input.roomId);
@@ -671,7 +790,8 @@ export const desktop = {
       const checkIn = new Date(`${input.checkIn}T12:00:00`);
       const checkOut = new Date(`${input.checkOut}T12:00:00`);
       const nights = Math.round((checkOut.getTime() - checkIn.getTime()) / 86_400_000);
-      if (!Number.isFinite(nights) || nights <= 0) throw new Error('La fecha de salida debe ser posterior a la de entrada.');
+      if (!Number.isFinite(nights) || nights <= 0)
+        throw new Error('La fecha de salida debe ser posterior a la de entrada.');
       const created: HotelReservationRecord = {
         id: uid('RES'),
         roomId: room.id,
@@ -688,56 +808,133 @@ export const desktop = {
         createdAt: new Date().toISOString(),
       };
       const reservations = await this.reservations();
-      if (['maintenance','cleaning'].includes(room.status)) throw new Error('La habitación no está habilitada para reservas.');
-      if (reservations.some(r => r.roomId === room.id && ['confirmed','checkin'].includes(r.status) && r.checkIn < input.checkOut && r.checkOut > input.checkIn)) throw new Error('Ya existe una reserva durante ese periodo.');
-      if (!Number.isFinite(created.advance) || created.advance < 0 || created.advance > created.totalCharges) throw new Error('Anticipo no válido.');
+      if (['maintenance', 'cleaning'].includes(room.status))
+        throw new Error('La habitación no está habilitada para reservas.');
+      if (
+        reservations.some(
+          r =>
+            r.roomId === room.id &&
+            ['confirmed', 'checkin'].includes(r.status) &&
+            r.checkIn < input.checkOut &&
+            r.checkOut > input.checkIn,
+        )
+      )
+        throw new Error('Ya existe una reserva durante ese periodo.');
+      if (!Number.isFinite(created.advance) || created.advance < 0 || created.advance > created.totalCharges)
+        throw new Error('Anticipo no válido.');
       writeJson(reservationsKey(businessId), [created, ...reservations]);
-      writeJson(roomsKey(businessId), rooms.map(item => item.id === room.id && item.status === 'available' ? { ...item, status: 'reserved' } : item));
+      writeJson(
+        roomsKey(businessId),
+        rooms.map(item =>
+          item.id === room.id && item.status === 'available' ? { ...item, status: 'reserved' } : item,
+        ),
+      );
       return created;
     },
-    async moveReservation(id: string, input: import('./dataService').HotelScheduleInput): Promise<HotelReservationRecord> {
+    async moveReservation(
+      id: string,
+      input: import('./dataService').HotelScheduleInput,
+    ): Promise<HotelReservationRecord> {
       const businessId = requireBusinessId();
       const rooms = await this.rooms();
       const reservations = await this.reservations();
       const current = reservations.find(r => r.id === id);
-      if (!current || current.status !== 'confirmed') throw new Error('Solo se pueden mover reservas confirmadas antes del check-in.');
+      if (!current || current.status !== 'confirmed')
+        throw new Error('Solo se pueden mover reservas confirmadas antes del check-in.');
       const nights = (Date.parse(input.expectedCheckOut) - Date.parse(input.expectedCheckIn)) / 86400000;
       const start = Date.parse(input.checkIn);
       if (!Number.isFinite(start) || !Number.isFinite(nights) || nights < 1) throw new Error('Fechas no válidas.');
-      const checkOut = new Date(start + nights * 86400000).toISOString().slice(0,10);
-      if (current.roomId === input.roomId && current.checkIn === input.checkIn && current.checkOut === checkOut) return current;
-      if (current.roomId !== input.expectedRoomId || current.checkIn !== input.expectedCheckIn || current.checkOut !== input.expectedCheckOut) throw new Error('La reserva cambió. Actualiza el calendario.');
+      const checkOut = new Date(start + nights * 86400000).toISOString().slice(0, 10);
+      if (current.roomId === input.roomId && current.checkIn === input.checkIn && current.checkOut === checkOut)
+        return current;
+      if (
+        current.roomId !== input.expectedRoomId ||
+        current.checkIn !== input.expectedCheckIn ||
+        current.checkOut !== input.expectedCheckOut
+      )
+        throw new Error('La reserva cambió. Actualiza el calendario.');
       const room = rooms.find(r => r.id === input.roomId);
-      if (!room || ['maintenance','cleaning'].includes(room.status)) throw new Error('Habitación no disponible.');
-      if (reservations.some(r => r.id !== id && r.roomId === input.roomId && ['confirmed','checkin'].includes(r.status) && r.checkIn < checkOut && r.checkOut > input.checkIn)) throw new Error('Ya existe una reserva durante ese periodo.');
-      const updated = { ...current, roomId: room.id, roomNumber: room.number, checkIn: input.checkIn, checkOut, nights };
-      const next = reservations.map(r => r.id === id ? updated : r);
+      if (!room || ['maintenance', 'cleaning'].includes(room.status)) throw new Error('Habitación no disponible.');
+      if (
+        reservations.some(
+          r =>
+            r.id !== id &&
+            r.roomId === input.roomId &&
+            ['confirmed', 'checkin'].includes(r.status) &&
+            r.checkIn < checkOut &&
+            r.checkOut > input.checkIn,
+        )
+      )
+        throw new Error('Ya existe una reserva durante ese periodo.');
+      const updated = {
+        ...current,
+        roomId: room.id,
+        roomNumber: room.number,
+        checkIn: input.checkIn,
+        checkOut,
+        nights,
+      };
+      const next = reservations.map(r => (r.id === id ? updated : r));
       writeJson(reservationsKey(businessId), next);
-      writeJson(roomsKey(businessId), rooms.map(r => {
-        if (![current.roomId,room.id].includes(r.id) || ['maintenance','cleaning'].includes(r.status)) return r;
-        const status: HotelRoomRecord['status'] = next.some(b => b.roomId === r.id && b.status === 'checkin') ? 'occupied' : next.some(b => b.roomId === r.id && b.status === 'confirmed' && b.checkOut > new Date().toISOString().slice(0,10)) ? 'reserved' : 'available';
-        return { ...r, status };
-      }));
+      writeJson(
+        roomsKey(businessId),
+        rooms.map(r => {
+          if (![current.roomId, room.id].includes(r.id) || ['maintenance', 'cleaning'].includes(r.status)) return r;
+          const status: HotelRoomRecord['status'] = next.some(b => b.roomId === r.id && b.status === 'checkin')
+            ? 'occupied'
+            : next.some(
+                  b =>
+                    b.roomId === r.id && b.status === 'confirmed' && b.checkOut > new Date().toISOString().slice(0, 10),
+                )
+              ? 'reserved'
+              : 'available';
+          return { ...r, status };
+        }),
+      );
       return updated;
     },
-    async updateReservationStatus(id: string, status: HotelReservationRecord['status']): Promise<HotelReservationRecord> {
+    async updateReservationStatus(
+      id: string,
+      status: HotelReservationRecord['status'],
+    ): Promise<HotelReservationRecord> {
       const businessId = requireBusinessId();
       const reservations = await this.reservations();
       const reservation = reservations.find(item => item.id === id);
       if (!reservation) throw new Error('No se encontró la reserva.');
       const updated = { ...reservation, status };
-      writeJson(reservationsKey(businessId), reservations.map(item => item.id === id ? updated : item));
+      writeJson(
+        reservationsKey(businessId),
+        reservations.map(item => (item.id === id ? updated : item)),
+      );
       const rooms = await this.rooms();
       const dirty = status === 'checkout' && reservation.status === 'checkin';
-      const nextReservations = reservations.map(item => item.id === id ? updated : item);
+      const nextReservations = reservations.map(item => (item.id === id ? updated : item));
       const occupied = nextReservations.some(item => item.roomId === reservation.roomId && item.status === 'checkin');
-      const reserved = nextReservations.some(item => item.roomId === reservation.roomId && item.status === 'confirmed' && item.checkOut > new Date().toISOString().slice(0, 10));
-      writeJson(roomsKey(businessId), rooms.map(room => {
-        if (room.id !== reservation.roomId) return room;
-        let roomStatus: HotelRoomRecord['status'] = ['maintenance', 'cleaning'].includes(room.status) ? room.status : occupied ? 'occupied' : reserved ? 'reserved' : 'available';
-        if (dirty && roomStatus === 'available') roomStatus = 'cleaning';
-        return { ...room, status: roomStatus, ...(dirty ? { cleaningStatus: 'sucia' as const, cleaningAssignee: '' } : {}) };
-      }));
+      const reserved = nextReservations.some(
+        item =>
+          item.roomId === reservation.roomId &&
+          item.status === 'confirmed' &&
+          item.checkOut > new Date().toISOString().slice(0, 10),
+      );
+      writeJson(
+        roomsKey(businessId),
+        rooms.map(room => {
+          if (room.id !== reservation.roomId) return room;
+          let roomStatus: HotelRoomRecord['status'] = ['maintenance', 'cleaning'].includes(room.status)
+            ? room.status
+            : occupied
+              ? 'occupied'
+              : reserved
+                ? 'reserved'
+                : 'available';
+          if (dirty && roomStatus === 'available') roomStatus = 'cleaning';
+          return {
+            ...room,
+            status: roomStatus,
+            ...(dirty ? { cleaningStatus: 'sucia' as const, cleaningAssignee: '' } : {}),
+          };
+        }),
+      );
       return updated;
     },
   },
@@ -761,7 +958,13 @@ export const desktop = {
     async appointments(): Promise<ServiceAppointmentRecord[]> {
       return (await this.data()).appointments;
     },
-    async createCatalogItem(input: { name: string; durationMinutes: number; price: number; category?: string; color?: string }): Promise<ServiceCatalogRecord> {
+    async createCatalogItem(input: {
+      name: string;
+      durationMinutes: number;
+      price: number;
+      category?: string;
+      color?: string;
+    }): Promise<ServiceCatalogRecord> {
       const businessId = requireBusinessId();
       const data = await this.data();
       const name = input.name.trim();
@@ -782,7 +985,12 @@ export const desktop = {
       writeJson(servicesKey(businessId), { ...data, catalog: [...data.catalog, created] });
       return created;
     },
-    async createProfessional(input: { name: string; specialty?: string; color?: string; availability?: { dia?: number; inicio?: string; fin?: string }[] }): Promise<ServiceProfessionalRecord> {
+    async createProfessional(input: {
+      name: string;
+      specialty?: string;
+      color?: string;
+      availability?: { dia?: number; inicio?: string; fin?: string }[];
+    }): Promise<ServiceProfessionalRecord> {
       const businessId = requireBusinessId();
       const data = await this.data();
       const name = input.name.trim();
@@ -802,35 +1010,85 @@ export const desktop = {
       writeJson(servicesKey(businessId), { ...data, professionals: [...data.professionals, created] });
       return created;
     },
-    async moveAppointment(id: string, input: import('./dataService').AppointmentMoveInput): Promise<ServiceAppointmentRecord> {
-      const businessId = requireBusinessId(); const data = await this.data();
+    async moveAppointment(
+      id: string,
+      input: import('./dataService').AppointmentMoveInput,
+    ): Promise<ServiceAppointmentRecord> {
+      const businessId = requireBusinessId();
+      const data = await this.data();
       const old = data.appointments.find(a => a.id === id);
       if (!old) throw new Error('Cita no encontrada.');
-      if (old.saleId || !['reserved', 'confirmed'].includes(old.estado)) throw new Error('Solo puedes mover citas pendientes sin cobrar.');
-      if (old.profesionalId === input.professionalId && old.fecha === input.appointmentDate && old.horaInicio === input.startTime) return old;
-      if (old.profesionalId !== input.expectedProfessionalId || old.fecha !== input.expectedDate || old.horaInicio !== input.expectedStartTime || old.horaFin !== input.expectedEndTime) throw new Error('La cita cambió. Actualiza antes de moverla.');
+      if (old.saleId || !['reserved', 'confirmed'].includes(old.estado))
+        throw new Error('Solo puedes mover citas pendientes sin cobrar.');
+      if (
+        old.profesionalId === input.professionalId &&
+        old.fecha === input.appointmentDate &&
+        old.horaInicio === input.startTime
+      )
+        return old;
+      if (
+        old.profesionalId !== input.expectedProfessionalId ||
+        old.fecha !== input.expectedDate ||
+        old.horaInicio !== input.expectedStartTime ||
+        old.horaFin !== input.expectedEndTime
+      )
+        throw new Error('La cita cambió. Actualiza antes de moverla.');
       const pro = data.professionals.find(p => p.id === input.professionalId && p.active);
       if (!pro) throw new Error('Profesional no encontrado.');
       checkLocalServiceSlot(pro, data.appointments, input.appointmentDate, input.startTime, old.durationMinutes, id);
-      const [h, m] = input.startTime.split(':').map(Number); const end = h * 60 + m + old.durationMinutes;
-      const updated = { ...old, profesionalId: pro.id, profesionalNombre: pro.name, fecha: input.appointmentDate, horaInicio: input.startTime, horaFin: `${String(Math.floor(end / 60)).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}` };
-      writeJson(servicesKey(businessId), { ...data, appointments: data.appointments.map(a => a.id === id ? updated : a) });
+      const [h, m] = input.startTime.split(':').map(Number);
+      const end = h * 60 + m + old.durationMinutes;
+      const updated = {
+        ...old,
+        profesionalId: pro.id,
+        profesionalNombre: pro.name,
+        fecha: input.appointmentDate,
+        horaInicio: input.startTime,
+        horaFin: `${String(Math.floor(end / 60)).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}`,
+      };
+      writeJson(servicesKey(businessId), {
+        ...data,
+        appointments: data.appointments.map(a => (a.id === id ? updated : a)),
+      });
       return updated;
     },
     async saveSchedule(id: string, input: ProfessionalSchedule): Promise<ServiceProfessionalRecord> {
       validateSchedule(input);
-      const businessId = requireBusinessId(); const data = await this.data();
+      const businessId = requireBusinessId();
+      const data = await this.data();
       const old = data.professionals.find(p => p.id === id);
-      if (!old || (old.scheduleRevision || 1) !== input.revision) throw new Error('El horario cambió. Actualiza antes de guardarlo.');
-      const updated = { ...old, availability: input.availability, horario: input.availability, daysOff: input.daysOff, bufferMinutes: input.bufferMinutes, scheduleRevision: input.revision + 1 };
-      writeJson(servicesKey(businessId), { ...data, professionals: data.professionals.map(p => p.id === id ? updated : p) });
+      if (!old || (old.scheduleRevision || 1) !== input.revision)
+        throw new Error('El horario cambió. Actualiza antes de guardarlo.');
+      const updated = {
+        ...old,
+        availability: input.availability,
+        horario: input.availability,
+        daysOff: input.daysOff,
+        bufferMinutes: input.bufferMinutes,
+        scheduleRevision: input.revision + 1,
+      };
+      writeJson(servicesKey(businessId), {
+        ...data,
+        professionals: data.professionals.map(p => (p.id === id ? updated : p)),
+      });
       return updated;
     },
-    async createAppointment(input: { serviceId: string; professionalId: string; clientName: string; clientEmail?: string; clientPhone?: string; appointmentDate: string; startTime: string; notes?: string }): Promise<ServiceAppointmentRecord> {
+    async createAppointment(input: {
+      serviceId: string;
+      professionalId: string;
+      clientName: string;
+      clientEmail?: string;
+      clientPhone?: string;
+      appointmentDate: string;
+      startTime: string;
+      notes?: string;
+    }): Promise<ServiceAppointmentRecord> {
       const businessId = requireBusinessId();
       const data = await this.data();
       const service = data.catalog.find((item: ServiceCatalogRecord) => item.id === input.serviceId);
-      const professional = data.professionals.find((item: ServiceProfessionalRecord) => item.id === input.professionalId);
+      const professional = data.professionals.find(
+        (item: ServiceProfessionalRecord) => item.id === input.professionalId,
+      );
       if (!service) throw new Error('Selecciona un servicio válido.');
       if (!professional) throw new Error('Selecciona un profesional válido.');
       const duration = service.durationMinutes || service.duracion || 30;
@@ -860,16 +1118,34 @@ export const desktop = {
       writeJson(servicesKey(businessId), { ...data, appointments: [created, ...data.appointments] });
       return created;
     },
-    async editAppointment(id: string, input: { serviceId: string; professionalId: string; clientName: string; clientEmail?: string; clientPhone?: string; appointmentDate: string; startTime: string; notes?: string }): Promise<ServiceAppointmentRecord> {
+    async editAppointment(
+      id: string,
+      input: {
+        serviceId: string;
+        professionalId: string;
+        clientName: string;
+        clientEmail?: string;
+        clientPhone?: string;
+        appointmentDate: string;
+        startTime: string;
+        notes?: string;
+      },
+    ): Promise<ServiceAppointmentRecord> {
       const businessId = requireBusinessId();
       const data = await this.data();
       const current = data.appointments.find((item: ServiceAppointmentRecord) => item.id === id);
       if (!current) throw new Error('No se encontró la cita.');
-      const service = data.catalog.find((item: ServiceCatalogRecord) => item.id === input.serviceId) || data.catalog.find((item: ServiceCatalogRecord) => item.id === current.servicioId);
-      const professional = data.professionals.find((item: ServiceProfessionalRecord) => item.id === input.professionalId) || data.professionals.find((item: ServiceProfessionalRecord) => item.id === current.profesionalId);
+      const service =
+        data.catalog.find((item: ServiceCatalogRecord) => item.id === input.serviceId) ||
+        data.catalog.find((item: ServiceCatalogRecord) => item.id === current.servicioId);
+      const professional =
+        data.professionals.find((item: ServiceProfessionalRecord) => item.id === input.professionalId) ||
+        data.professionals.find((item: ServiceProfessionalRecord) => item.id === current.profesionalId);
       if (!service || !professional) throw new Error('Servicio o profesional no válido.');
       const sameService = service.id === current.servicioId;
-      const duration = sameService ? (current.durationMinutes || service.durationMinutes || service.duracion || 30) : (service.durationMinutes || service.duracion || 30);
+      const duration = sameService
+        ? current.durationMinutes || service.durationMinutes || service.duracion || 30
+        : service.durationMinutes || service.duracion || 30;
       checkLocalServiceSlot(professional, data.appointments, input.appointmentDate, input.startTime, duration, id);
       const [hours, minutes] = input.startTime.split(':').map(Number);
       const end = new Date(2000, 0, 1, hours || 0, (minutes || 0) + duration);
@@ -890,15 +1166,24 @@ export const desktop = {
         durationMinutes: duration,
         price: sameService ? current.price : service.price,
       };
-      writeJson(servicesKey(businessId), { ...data, appointments: data.appointments.map((item: ServiceAppointmentRecord) => item.id === id ? updated : item) });
+      writeJson(servicesKey(businessId), {
+        ...data,
+        appointments: data.appointments.map((item: ServiceAppointmentRecord) => (item.id === id ? updated : item)),
+      });
       return updated;
     },
     async deleteAppointment(id: string): Promise<void> {
       const businessId = requireBusinessId();
       const data = await this.data();
-      writeJson(servicesKey(businessId), { ...data, appointments: data.appointments.filter((item: ServiceAppointmentRecord) => item.id !== id) });
+      writeJson(servicesKey(businessId), {
+        ...data,
+        appointments: data.appointments.filter((item: ServiceAppointmentRecord) => item.id !== id),
+      });
     },
-    async updateAppointmentStatus(id: string, status: ServiceAppointmentRecord['estado']): Promise<ServiceAppointmentRecord> {
+    async updateAppointmentStatus(
+      id: string,
+      status: ServiceAppointmentRecord['estado'],
+    ): Promise<ServiceAppointmentRecord> {
       const businessId = requireBusinessId();
       const data = await this.data();
       const current = data.appointments.find((item: ServiceAppointmentRecord) => item.id === id);
@@ -910,7 +1195,10 @@ export const desktop = {
         checkLocalServiceSlot(pro, data.appointments, current.fecha, current.horaInicio, current.durationMinutes, id);
       }
       const updated = { ...current, estado: status };
-      writeJson(servicesKey(businessId), { ...data, appointments: data.appointments.map((item: ServiceAppointmentRecord) => item.id === id ? updated : item) });
+      writeJson(servicesKey(businessId), {
+        ...data,
+        appointments: data.appointments.map((item: ServiceAppointmentRecord) => (item.id === id ? updated : item)),
+      });
       return updated;
     },
   },
@@ -926,11 +1214,19 @@ export const desktop = {
       [...seeded, ...extras, ...registered].forEach(user => merged.set(user.id, applyUserStatus(user)));
       return [...merged.values()];
     },
-    async create(payload: { name: string; email: string; password: string; role: 'business_admin' | 'cashier'; customRoleId?: string | null }): Promise<BusinessUserRecord> {
+    async create(payload: {
+      name: string;
+      email: string;
+      password: string;
+      role: 'business_admin' | 'cashier';
+      customRoleId?: string | null;
+    }): Promise<BusinessUserRecord> {
       const businessId = requireBusinessId();
       const email = normalizedEmail(payload.email);
-      if (allUsersWithSeed().some(user => normalizedEmail(user.email) === email)) throw new Error('Ya existe una cuenta con ese correo.');
-      if (!payload.password || payload.password.length < 6) throw new Error('La contraseña debe tener al menos 6 caracteres.');
+      if (allUsersWithSeed().some(user => normalizedEmail(user.email) === email))
+        throw new Error('Ya existe una cuenta con ese correo.');
+      if (!payload.password || payload.password.length < 6)
+        throw new Error('La contraseña debe tener al menos 6 caracteres.');
       const user: DesktopUser = {
         id: uid('USUARIO'),
         businessId,
@@ -946,13 +1242,20 @@ export const desktop = {
       const created = toBusinessUser(user);
       return { ...created, customRoleId: payload.customRoleId || null };
     },
-    async update(id: string, patch: { role?: 'business_admin' | 'cashier'; customRoleId?: string | null; active?: boolean }): Promise<BusinessUserRecord> {
+    async update(
+      id: string,
+      patch: { role?: 'business_admin' | 'cashier'; customRoleId?: string | null; active?: boolean },
+    ): Promise<BusinessUserRecord> {
       const businessId = requireBusinessId();
       const registered = readRegisteredUsers();
       const target = registered.find(user => user.id === id);
       if (target) {
-        const updated = { ...target, role: (patch.role || target.role) as DesktopUser['role'], active: patch.active ?? target.active };
-        writeRegisteredUsers(registered.map(user => user.id === id ? updated : user));
+        const updated = {
+          ...target,
+          role: (patch.role || target.role) as DesktopUser['role'],
+          active: patch.active ?? target.active,
+        };
+        writeRegisteredUsers(registered.map(user => (user.id === id ? updated : user)));
         return { ...toBusinessUser(updated), customRoleId: patch.customRoleId || null };
       }
       if (patch.active !== undefined) {
@@ -988,7 +1291,9 @@ export const desktop = {
   },
 
   subscription: {
-    plans(): SubscriptionPlanRecord[] { return PLANS; },
+    plans(): SubscriptionPlanRecord[] {
+      return PLANS;
+    },
     async current(): Promise<BusinessSubscriptionRecord> {
       const businessId = requireBusinessId();
       if (!seedCache) await ensureSeedLoaded();
@@ -1002,9 +1307,18 @@ export const desktop = {
       const current = subscriptionFor(businessId);
       const now = new Date().toISOString();
       if (current.plan.id === plan.id && current.status === 'active') return current;
-      const updated: BusinessSubscriptionRecord = plan.id === 'free'
-        ? { ...current, plan, status: 'active', pendingPlan: null, startedAt: current.startedAt || now, updatedAt: now, expiresAt: null }
-        : { ...current, status: 'pending_payment', pendingPlan: plan, updatedAt: now };
+      const updated: BusinessSubscriptionRecord =
+        plan.id === 'free'
+          ? {
+              ...current,
+              plan,
+              status: 'active',
+              pendingPlan: null,
+              startedAt: current.startedAt || now,
+              updatedAt: now,
+              expiresAt: null,
+            }
+          : { ...current, status: 'pending_payment', pendingPlan: plan, updatedAt: now };
       writeJson(subscriptionKey(businessId), updated);
       return updated;
     },
@@ -1014,7 +1328,10 @@ export const desktop = {
     async businesses() {
       const seed = await ensureSeedLoaded();
       const registered = readRegisteredUsers();
-      const map = new Map<string, { id: string; name: string; type: string; currency: string; active: boolean; createdAt: string; users: number }>();
+      const map = new Map<
+        string,
+        { id: string; name: string; type: string; currency: string; active: boolean; createdAt: string; users: number }
+      >();
       Object.values(seed?.businesses ?? {}).forEach(business => {
         map.set(business.id, {
           id: business.id,
@@ -1077,7 +1394,10 @@ export const desktop = {
       const term = search.trim().toLowerCase();
       return allUsersWithSeed()
         .map(publicBusinessUser)
-        .filter(user => !term || [user.name, user.email, user.businessName || ''].some(value => value.toLowerCase().includes(term)));
+        .filter(
+          user =>
+            !term || [user.name, user.email, user.businessName || ''].some(value => value.toLowerCase().includes(term)),
+        );
     },
     async audit(limit = 100): Promise<PlatformAuditRecord[]> {
       return readPlatformAuditEntries().slice(0, Math.max(1, limit));
@@ -1090,27 +1410,54 @@ export const desktop = {
         lastPayment: lastSubscriptionPayment(business.id),
       }));
     },
-    async updateSubscription(businessId: string, action: PlatformSubscriptionAction, paymentReference = '', planId?: PaidPlanId): Promise<BusinessSubscriptionRecord> {
+    async updateSubscription(
+      businessId: string,
+      action: PlatformSubscriptionAction,
+      paymentReference = '',
+      planId?: PaidPlanId,
+    ): Promise<BusinessSubscriptionRecord> {
       const current = subscriptionFor(businessId);
       if (action === 'confirm_payment') {
-        if (current.status !== 'pending_payment' || !current.pendingPlan) throw new Error('No existe una solicitud de pago pendiente para este negocio.');
-        const updated = applyVerifiedSubscriptionPayment(businessId, current, current.pendingPlan.id as PaidPlanId, paymentReference);
-        appendPlatformAudit('subscription_payment_manually_verified', businessId, { planId: updated.plan.id, paymentReference: paymentReference.trim(), verificationMode: 'manual_by_superadmin' });
+        if (current.status !== 'pending_payment' || !current.pendingPlan)
+          throw new Error('No existe una solicitud de pago pendiente para este negocio.');
+        const updated = applyVerifiedSubscriptionPayment(
+          businessId,
+          current,
+          current.pendingPlan.id as PaidPlanId,
+          paymentReference,
+        );
+        appendPlatformAudit('subscription_payment_manually_verified', businessId, {
+          planId: updated.plan.id,
+          paymentReference: paymentReference.trim(),
+          verificationMode: 'manual_by_superadmin',
+        });
         return updated;
       }
       if (action === 'renew') {
         const inForce = current.status === 'active' || current.status === 'pending_payment';
-        const target = planId
-          ?? (inForce && current.plan.priceCOP > 0 ? current.plan.id as PaidPlanId : undefined)
-          ?? (lastSubscriptionPayment(businessId)?.planId as PaidPlanId | undefined);
-        if (!target) throw new Error('Indica el plan pagado: el negocio no tiene un plan de pago vigente ni pagos anteriores.');
+        const target =
+          planId ??
+          (inForce && current.plan.priceCOP > 0 ? (current.plan.id as PaidPlanId) : undefined) ??
+          (lastSubscriptionPayment(businessId)?.planId as PaidPlanId | undefined);
+        if (!target)
+          throw new Error('Indica el plan pagado: el negocio no tiene un plan de pago vigente ni pagos anteriores.');
         const updated = applyVerifiedSubscriptionPayment(businessId, current, target, paymentReference);
-        appendPlatformAudit('subscription_renewed', businessId, { planId: target, paymentReference: paymentReference.trim(), verificationMode: 'manual_by_superadmin' });
+        appendPlatformAudit('subscription_renewed', businessId, {
+          planId: target,
+          paymentReference: paymentReference.trim(),
+          verificationMode: 'manual_by_superadmin',
+        });
         return updated;
       }
-      if (current.status !== 'pending_payment') throw new Error('No existe una solicitud de pago pendiente para este negocio.');
+      if (current.status !== 'pending_payment')
+        throw new Error('No existe una solicitud de pago pendiente para este negocio.');
       const cancelledPlanId = current.pendingPlan?.id ?? null;
-      const updated: BusinessSubscriptionRecord = { ...current, status: 'active', pendingPlan: null, updatedAt: new Date().toISOString() };
+      const updated: BusinessSubscriptionRecord = {
+        ...current,
+        status: 'active',
+        pendingPlan: null,
+        updatedAt: new Date().toISOString(),
+      };
       writeJson(subscriptionKey(businessId), updated);
       appendPlatformAudit('subscription_request_cancelled', businessId, { cancelledPlanId });
       return updated;
@@ -1131,13 +1478,25 @@ export const desktop = {
         writeJson(PLATFORM_BUSINESS_META_PREFIX, meta);
         openSupportCase(id, businessName, reason.trim(), description.trim());
       }
-      appendPlatformAudit(active ? 'activate' : 'suspend', `business:${id}`, { active, reason: active ? '' : reason.trim(), description: active ? '' : description.trim() });
+      appendPlatformAudit(active ? 'activate' : 'suspend', `business:${id}`, {
+        active,
+        reason: active ? '' : reason.trim(),
+        description: active ? '' : description.trim(),
+      });
       return { id, active, caseId: active ? null : latestSupportCase(id)?.id || null };
     },
-    async createUser(input: { name: string; email: string; password: string; role: AuthUser['role']; businessId?: string | null }): Promise<PlatformUserRecord> {
+    async createUser(input: {
+      name: string;
+      email: string;
+      password: string;
+      role: AuthUser['role'];
+      businessId?: string | null;
+    }): Promise<PlatformUserRecord> {
       const email = normalizedEmail(input.email);
-      if (allUsersWithSeed().some(user => normalizedEmail(user.email) === email)) throw new Error('Ya existe una cuenta con ese correo.');
-      if (!input.password || input.password.length < 6) throw new Error('La contraseña debe tener al menos 6 caracteres.');
+      if (allUsersWithSeed().some(user => normalizedEmail(user.email) === email))
+        throw new Error('Ya existe una cuenta con ese correo.');
+      if (!input.password || input.password.length < 6)
+        throw new Error('La contraseña debe tener al menos 6 caracteres.');
       const user: DesktopUser = {
         id: uid('USUARIO'),
         businessId: input.businessId || null,
@@ -1151,14 +1510,23 @@ export const desktop = {
       };
       writeRegisteredUsers([...readRegisteredUsers(), user]);
       const created = publicBusinessUser(user);
-      appendPlatformAudit('create_user', user.id, { role: user.role, businessId: user.businessId, email: user.email, name: user.name });
+      appendPlatformAudit('create_user', user.id, {
+        role: user.role,
+        businessId: user.businessId,
+        email: user.email,
+        name: user.name,
+      });
       return created;
     },
     async setUserStatus(id: string, active: boolean) {
       const statuses = readJson<Record<string, boolean>>(USER_STATUS_PREFIX, {});
       writeJson(USER_STATUS_PREFIX, { ...statuses, [id]: active });
       const target = allUsersWithSeed().find(user => user.id === id);
-      appendPlatformAudit(active ? 'activate_user' : 'suspend_user', id, { active, name: target?.name || '', email: target?.email || '' });
+      appendPlatformAudit(active ? 'activate_user' : 'suspend_user', id, {
+        active,
+        name: target?.name || '',
+        email: target?.email || '',
+      });
       return { id, active };
     },
   },
@@ -1168,7 +1536,8 @@ export const desktop = {
       const user = readCurrentDesktopUser();
       const businessId = user?.businessId || '';
       const seed = await ensureSeedLoaded().catch(() => null);
-      const businessName = seed?.businesses?.[businessId]?.name || desktopBusinessName(businessId, user?.name || 'Mi negocio');
+      const businessName =
+        seed?.businesses?.[businessId]?.name || desktopBusinessName(businessId, user?.name || 'Mi negocio');
       const statuses = readJson<Record<string, boolean>>(PLATFORM_STATUS_PREFIX, {});
       const meta = readJson<Record<string, DesktopBusinessMeta>>(PLATFORM_BUSINESS_META_PREFIX, {});
       const caseItem = latestSupportCase(businessId);
@@ -1211,12 +1580,18 @@ export const desktop = {
       messages[caseItem.id] = [...(messages[caseItem.id] || []), created];
       writeSupportMessages(messages);
       const cases = readSupportCases();
-      writeSupportCases(cases.map(item => item.id === caseItem.id ? {
-        ...item,
-        status: item.status === 'open' ? 'in_review' : item.status,
-        updatedAt: created.createdAt,
-        unreadCount: (item.unreadCount || 0) + 1,
-      } : item));
+      writeSupportCases(
+        cases.map(item =>
+          item.id === caseItem.id
+            ? {
+                ...item,
+                status: item.status === 'open' ? 'in_review' : item.status,
+                updatedAt: created.createdAt,
+                unreadCount: (item.unreadCount || 0) + 1,
+              }
+            : item,
+        ),
+      );
       return created;
     },
     async platformCases(): Promise<SupportCaseRecord[]> {
@@ -1241,12 +1616,18 @@ export const desktop = {
       const messages = readSupportMessages();
       messages[caseId] = [...(messages[caseId] || []), created];
       writeSupportMessages(messages);
-      writeSupportCases(readSupportCases().map(item => item.id === caseId ? {
-        ...item,
-        status: item.status === 'open' ? 'in_review' : item.status,
-        updatedAt: created.createdAt,
-        unreadCount: 0,
-      } : item));
+      writeSupportCases(
+        readSupportCases().map(item =>
+          item.id === caseId
+            ? {
+                ...item,
+                status: item.status === 'open' ? 'in_review' : item.status,
+                updatedAt: created.createdAt,
+                unreadCount: 0,
+              }
+            : item,
+        ),
+      );
       appendPlatformAudit('support_reply', caseId, { businessId: caseItem.businessId, messageLength: message.length });
       return created;
     },
@@ -1254,9 +1635,15 @@ export const desktop = {
       const caseItem = readSupportCases().find(item => item.id === caseId);
       if (!caseItem) throw new Error('No se encontró el caso de soporte.');
       const now = new Date().toISOString();
-      writeSupportCases(readSupportCases().map(item => item.id === caseId ? { ...item, status, updatedAt: now } : item));
+      writeSupportCases(
+        readSupportCases().map(item => (item.id === caseId ? { ...item, status, updatedAt: now } : item)),
+      );
       if (status === 'resolved') setLocalBusinessActive(caseItem.businessId, true);
-      appendPlatformAudit('support_case_status', caseId, { businessId: caseItem.businessId, status, reactivated: status === 'resolved' });
+      appendPlatformAudit('support_case_status', caseId, {
+        businessId: caseItem.businessId,
+        status,
+        reactivated: status === 'resolved',
+      });
       return { id: caseId, status };
     },
   },

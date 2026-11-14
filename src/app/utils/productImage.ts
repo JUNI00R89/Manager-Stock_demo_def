@@ -30,7 +30,10 @@ export function resizeImage(file: File, maxSide = 400): Promise<string> {
       URL.revokeObjectURL(url);
       resolve(canvas.toDataURL('image/jpeg', 0.8));
     };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('No se pudo leer la imagen.')); };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('No se pudo leer la imagen.'));
+    };
     img.src = url;
   });
 }
@@ -42,7 +45,11 @@ export function fitWithin(width: number, height: number, maxSide: number): { wid
 }
 
 /** Crops an image (data URL, http(s) URL or raw base64) to the given rect (fractions 0..1, clamped), then shrinks it to maxSide. */
-export function cropDataUrl(source: string, rect: { x: number; y: number; w: number; h: number }, maxSide = 400): Promise<string> {
+export function cropDataUrl(
+  source: string,
+  rect: { x: number; y: number; w: number; h: number },
+  maxSide = 400,
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const isHttp = /^https?:\/\//i.test(source);
     const src = source.startsWith('data:') || isHttp ? source : `data:image/png;base64,${source}`;
@@ -61,7 +68,17 @@ export function cropDataUrl(source: string, rect: { x: number; y: number; w: num
       if (ctx) {
         ctx.fillStyle = '#ffffff'; // JPEG has no transparency
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, Math.round(x * img.width), Math.round(y * img.height), Math.round(w * img.width), Math.round(h * img.height), 0, 0, canvas.width, canvas.height);
+        ctx.drawImage(
+          img,
+          Math.round(x * img.width),
+          Math.round(y * img.height),
+          Math.round(w * img.width),
+          Math.round(h * img.height),
+          0,
+          0,
+          canvas.width,
+          canvas.height,
+        );
       }
       resolve(canvas.toDataURL('image/jpeg', 0.85));
     };

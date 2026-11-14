@@ -12,22 +12,31 @@ function normalizeMessage(value: unknown): string {
 function messageFromDetail(detail: unknown): string {
   if (typeof detail === 'string') return detail.trim();
   if (Array.isArray(detail)) {
-    return detail.map(item => {
-      if (typeof item === 'string') return item.trim();
-      if (!item || typeof item !== 'object') return '';
-      const record = item as Record<string, unknown>;
-      const field = Array.isArray(record.loc)
-        ? record.loc.filter(part => part !== 'body' && part !== 'query' && part !== 'path').join('.')
-        : '';
-      const message = normalizeMessage(record.msg) || normalizeMessage(record.message) || normalizeMessage(record.detail);
-      return field && message ? `${field}: ${message}` : message;
-    }).filter(Boolean).join('; ');
+    return detail
+      .map(item => {
+        if (typeof item === 'string') return item.trim();
+        if (!item || typeof item !== 'object') return '';
+        const record = item as Record<string, unknown>;
+        const field = Array.isArray(record.loc)
+          ? record.loc.filter(part => part !== 'body' && part !== 'query' && part !== 'path').join('.')
+          : '';
+        const message =
+          normalizeMessage(record.msg) || normalizeMessage(record.message) || normalizeMessage(record.detail);
+        return field && message ? `${field}: ${message}` : message;
+      })
+      .filter(Boolean)
+      .join('; ');
   }
   if (detail && typeof detail === 'object') {
     const record = detail as Record<string, unknown>;
-    const message = normalizeMessage(record.message) || normalizeMessage(record.detail) || normalizeMessage(record.error);
+    const message =
+      normalizeMessage(record.message) || normalizeMessage(record.detail) || normalizeMessage(record.error);
     if (message) return message;
-    try { return JSON.stringify(detail); } catch { return ''; }
+    try {
+      return JSON.stringify(detail);
+    } catch {
+      return '';
+    }
   }
   return '';
 }
@@ -47,11 +56,12 @@ export function getErrorMessage(error: unknown, fallback = 'Ocurrió un error in
   }
   if (error && typeof error === 'object') {
     const record = error as Record<string, unknown>;
-    const message = normalizeMessage(record.detail)
-      || normalizeMessage(record.message)
-      || normalizeMessage(record.error)
-      || normalizeMessage(record.msg)
-      || messageFromDetail(record.detail);
+    const message =
+      normalizeMessage(record.detail) ||
+      normalizeMessage(record.message) ||
+      normalizeMessage(record.error) ||
+      normalizeMessage(record.msg) ||
+      messageFromDetail(record.detail);
     if (message) return message;
   }
   return fallback;

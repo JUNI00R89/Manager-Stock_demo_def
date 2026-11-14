@@ -3,7 +3,11 @@ import { getJornadaKey } from './restaurantFormat';
 import type { CrearPedidoInput, EmpleadoRef, Pedido, PedidoEstado, PedidosRepository } from './restaurantTypes';
 
 const states: Record<OrderRecord['status'], PedidoEstado> = {
-  received: 'pendiente', preparing: 'en_preparacion', ready: 'finalizado', delivered: 'entregado', cancelled: 'cancelado',
+  received: 'pendiente',
+  preparing: 'en_preparacion',
+  ready: 'finalizado',
+  delivered: 'entregado',
+  cancelled: 'cancelado',
 };
 
 /** Common order store for tables, waiters and kitchen. Legacy browser orders
@@ -13,7 +17,9 @@ export class SharedPedidosRepository implements PedidosRepository {
 
   async listar(scope: string): Promise<Pedido[]> {
     const [rows, old, tables, config] = await Promise.all([
-      dataService.getOrders(), this.legacy.listar(scope), dataService.getTables(),
+      dataService.getOrders(),
+      this.legacy.listar(scope),
+      dataService.getTables(),
       getBusinessConfig<{ taxRate: number }>(),
     ]);
     const taxRate = config?.taxRate ?? 0;
@@ -21,21 +27,39 @@ export class SharedPedidosRepository implements PedidosRepository {
       const meta = row.restaurantMetadata || {};
       const table = tables.find(t => t.number === row.tableNumber);
       const items = row.items.map((item, index) => ({
-        id: `${row.id}-${index}`, productId: item.productId, nombre: item.productName,
-        cantidad: item.quantity, precioUnitario: item.unitPrice, nota: item.notes,
+        id: `${row.id}-${index}`,
+        productId: item.productId,
+        nombre: item.productName,
+        cantidad: item.quantity,
+        precioUnitario: item.unitPrice,
+        nota: item.notes,
         ventaDirecta: (meta.directProductIds || []).includes(item.productId),
       }));
       const impuesto = Math.round(row.total * taxRate * 100) / 100;
       return {
-        ...meta, source: 'shared', id: row.id, negocioId: scope,
+        ...meta,
+        source: 'shared',
+        id: row.id,
+        negocioId: scope,
         numero: meta.numero || parseInt(row.id.slice(-6), 16) || 1,
         jornada: meta.jornada || getJornadaKey(new Date(row.created_at), '06:00'),
-        estado: states[row.status], canal: 'local', mesaId: table?.id || meta.mesaId || '',
-        mesaNumero: row.tableNumber || 0, mesaNombre: row.tableNumber ? `Mesa ${row.tableNumber}` : row.customer,
-        meseroId: meta.meseroId || '', meseroNombre: row.waiter || '',
-        items, subtotal: row.total, impuesto, taxRate, total: row.total + impuesto,
-        nota: row.notes, creadoEn: row.created_at, actualizadoEn: row.created_at,
-        ventaId: row.saleId, listoParaLlevar: items.every(item => item.ventaDirecta),
+        estado: states[row.status],
+        canal: 'local',
+        mesaId: table?.id || meta.mesaId || '',
+        mesaNumero: row.tableNumber || 0,
+        mesaNombre: row.tableNumber ? `Mesa ${row.tableNumber}` : row.customer,
+        meseroId: meta.meseroId || '',
+        meseroNombre: row.waiter || '',
+        items,
+        subtotal: row.total,
+        impuesto,
+        taxRate,
+        total: row.total + impuesto,
+        nota: row.notes,
+        creadoEn: row.created_at,
+        actualizadoEn: row.created_at,
+        ventaId: row.saleId,
+        listoParaLlevar: items.every(item => item.ventaDirecta),
       };
     });
     const ids = new Set(shared.map(order => order.id));
@@ -48,15 +72,27 @@ export class SharedPedidosRepository implements PedidosRepository {
     const refresh = async () => {
       if (busy || !active) return;
       busy = true;
-      try { const orders = await this.listar(scope); if (active) listener(orders); }
-      catch (error) { if (active) onError?.(error); }
-      finally { busy = false; }
+      try {
+        const orders = await this.listar(scope);
+        if (active) listener(orders);
+      } catch (error) {
+        if (active) onError?.(error);
+      } finally {
+        busy = false;
+      }
     };
-    const unsub = this.legacy.suscribirse(scope, () => { void refresh(); });
+    const unsub = this.legacy.suscribirse(scope, () => {
+      void refresh();
+    });
     const timer = window.setInterval(refresh, 2000);
     window.addEventListener('focus', refresh);
     void refresh();
-    return () => { active = false; clearInterval(timer); unsub(); window.removeEventListener('focus', refresh); };
+    return () => {
+      active = false;
+      clearInterval(timer);
+      unsub();
+      window.removeEventListener('focus', refresh);
+    };
   }
 
   private async find(id: string, scope: string) {
@@ -67,15 +103,26 @@ export class SharedPedidosRepository implements PedidosRepository {
 
   async crearPedido(input: CrearPedidoInput) {
     const row = await dataService.createOrder({
-      channel: 'table', tableNumber: input.mesaNumero, tableId: input.mesaId,
-      customer: input.mesaNombre, waiter: input.mesero.nombre, notes: input.nota,
+      channel: 'table',
+      tableNumber: input.mesaNumero,
+      tableId: input.mesaId,
+      customer: input.mesaNombre,
+      waiter: input.mesero.nombre,
+      notes: input.nota,
       items: input.items.map(item => ({ productId: item.productId, quantity: item.cantidad, notes: item.nota })),
-      restaurantMetadata: { mesaId: input.mesaId, meseroId: input.mesero.id,
+      restaurantMetadata: {
+        mesaId: input.mesaId,
+        meseroId: input.mesero.id,
         jornada: getJornadaKey(new Date(), input.horaInicioJornada),
-        directProductIds: input.items.filter(item => item.ventaDirecta).map(item => item.productId) },
+        directProductIds: input.items.filter(item => item.ventaDirecta).map(item => item.productId),
+      },
     });
     if (row.status === 'received' && input.items.every(item => item.ventaDirecta)) {
-      await dataService.updateOrderStatus(row.id, 'ready', { expectedStatus: 'received', actorId: input.mesero.id, actorName: input.mesero.nombre });
+      await dataService.updateOrderStatus(row.id, 'ready', {
+        expectedStatus: 'received',
+        actorId: input.mesero.id,
+        actorName: input.mesero.nombre,
+      });
     }
     return this.find(row.id, input.negocioId);
   }
@@ -84,7 +131,11 @@ export class SharedPedidosRepository implements PedidosRepository {
     const order = await this.find(id, scope);
     if (order.source !== 'shared') return this.legacy.tomarPedido(id, scope, employee);
     if (order.estado === 'en_preparacion' && order.tomadoPorId === employee.id) return order;
-    await dataService.updateOrderStatus(id, 'preparing', { expectedStatus: 'received', actorId: employee.id, actorName: employee.nombre });
+    await dataService.updateOrderStatus(id, 'preparing', {
+      expectedStatus: 'received',
+      actorId: employee.id,
+      actorName: employee.nombre,
+    });
     return this.find(id, scope);
   }
 
@@ -92,7 +143,11 @@ export class SharedPedidosRepository implements PedidosRepository {
     const order = await this.find(id, scope);
     if (order.source !== 'shared') return this.legacy.finalizarPedido(id, scope, employee);
     if (order.estado === 'finalizado') return order;
-    await dataService.updateOrderStatus(id, 'ready', { expectedStatus: 'preparing', actorId: employee.id, actorName: employee.nombre });
+    await dataService.updateOrderStatus(id, 'ready', {
+      expectedStatus: 'preparing',
+      actorId: employee.id,
+      actorName: employee.nombre,
+    });
     return this.find(id, scope);
   }
 
@@ -100,7 +155,8 @@ export class SharedPedidosRepository implements PedidosRepository {
     const order = await this.find(id, scope);
     if (order.source !== 'shared') return this.legacy.entregarPedido(id, scope, employee, saleId);
     // Shared checkout closes the order in the sale transaction.
-    if (order.estado !== 'entregado' || !order.ventaId || order.ventaId !== saleId) throw new Error('El pedido debe cobrarse antes de entregarlo.');
+    if (order.estado !== 'entregado' || !order.ventaId || order.ventaId !== saleId)
+      throw new Error('El pedido debe cobrarse antes de entregarlo.');
     return order;
   }
 
@@ -111,7 +167,12 @@ export class SharedPedidosRepository implements PedidosRepository {
     if (order.estado === 'cancelado') return order;
     if (order.estado === 'entregado') throw new Error('El pedido ya fue entregado.');
     const status = Object.entries(states).find(([, state]) => state === order.estado)![0];
-    await dataService.updateOrderStatus(id, 'cancelled', { expectedStatus: status, actorId: employee.id, actorName: employee.nombre, reason });
+    await dataService.updateOrderStatus(id, 'cancelled', {
+      expectedStatus: status,
+      actorId: employee.id,
+      actorName: employee.nombre,
+      reason,
+    });
     return this.find(id, scope);
   }
 }

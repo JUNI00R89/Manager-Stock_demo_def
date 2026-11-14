@@ -9,12 +9,13 @@ import { toastError } from '../utils/notifications';
 
 type Props = { open: boolean; onOpenChange: (open: boolean) => void; onImported: () => void };
 
-const readAsDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
-  const reader = new FileReader();
-  reader.onload = () => resolve(String(reader.result));
-  reader.onerror = () => reject(new Error('No se pudo leer el archivo.'));
-  reader.readAsDataURL(file);
-});
+const readAsDataUrl = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error('No se pudo leer el archivo.'));
+    reader.readAsDataURL(file);
+  });
 
 /** Upload a spreadsheet, preview what would be created, then confirm. */
 export function ImportProductsDialog({ open, onOpenChange, onImported }: Props) {
@@ -24,7 +25,10 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: Props) 
 
   const close = (next: boolean) => {
     if (busy) return;
-    if (!next) { setFile(null); setReport(null); }
+    if (!next) {
+      setFile(null);
+      setReport(null);
+    }
     onOpenChange(next);
   };
 
@@ -35,7 +39,9 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: Props) 
       link.href = template.dataUrl;
       link.download = template.fileName;
       link.click();
-    } catch (error) { toastError(error, 'No se pudo descargar la plantilla.'); }
+    } catch (error) {
+      toastError(error, 'No se pudo descargar la plantilla.');
+    }
   };
 
   const pick = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -51,7 +57,9 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: Props) 
     } catch (error) {
       setFile(null);
       toastError(error, 'No se pudo leer el archivo.');
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
   };
 
   const confirm = async () => {
@@ -62,7 +70,9 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: Props) 
       toast.success(`${result.created} productos importados`);
       onImported();
       setBusy(false);
-      setFile(null); setReport(null); onOpenChange(false);
+      setFile(null);
+      setReport(null);
+      onOpenChange(false);
     } catch (error) {
       toastError(error, 'No se pudo importar el archivo.');
       setBusy(false);
@@ -75,36 +85,89 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: Props) 
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Importar productos</DialogTitle>
-          <DialogDescription>Sube un Excel o CSV. Solo se crean productos nuevos; los códigos que ya existen se saltan.</DialogDescription>
+          <DialogDescription>
+            Sube un Excel o CSV. Solo se crean productos nuevos; los códigos que ya existen se saltan.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          <Button type="button" variant="outline" className="w-full rounded-xl" onClick={() => void downloadTemplate()}><Download className="mr-2 h-4 w-4" />Descargar plantilla</Button>
+          <Button type="button" variant="outline" className="w-full rounded-xl" onClick={() => void downloadTemplate()}>
+            <Download className="mr-2 h-4 w-4" />
+            Descargar plantilla
+          </Button>
           <div className="space-y-2">
             <Label htmlFor="import-file">Archivo (.xlsx o .csv)</Label>
-            <input id="import-file" type="file" accept=".xlsx,.csv" disabled={busy} onChange={event => void pick(event)} className="block w-full text-sm file:mr-3 file:rounded-lg file:border file:border-border file:bg-background file:px-3 file:py-2 file:text-sm" />
-            {file && <p className="flex items-center gap-1 text-xs text-muted-foreground"><FileSpreadsheet className="h-3.5 w-3.5" />{file.name}</p>}
+            <input
+              id="import-file"
+              type="file"
+              accept=".xlsx,.csv"
+              disabled={busy}
+              onChange={event => void pick(event)}
+              className="block w-full text-sm file:mr-3 file:rounded-lg file:border file:border-border file:bg-background file:px-3 file:py-2 file:text-sm"
+            />
+            {file && (
+              <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                <FileSpreadsheet className="h-3.5 w-3.5" />
+                {file.name}
+              </p>
+            )}
           </div>
 
           {busy && !report && <p className="text-sm text-muted-foreground">Leyendo el archivo…</p>}
           {report && (
             <section aria-label="Vista previa" className="space-y-2 rounded-xl border border-border/70 p-3 text-sm">
-              <p className="flex items-center gap-2 font-medium"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{count === 1 ? '1 producto se creará' : `${count} productos se crearán`}</p>
-              {report.skipped.length > 0 && <p className="flex items-start gap-2"><SkipForward className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />{report.skipped.length === 1 ? '1 ya existe' : `${report.skipped.length} ya existen`} (se saltan): {report.skipped.map(item => `${item.sku || item.name}${item.archived ? ' (archivado)' : ''}`).join(', ')}</p>}
-              {report.newCategories.length > 0 && <p className="flex items-start gap-2"><FolderPlus className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />Categorías nuevas: {report.newCategories.join(', ')}</p>}
-              {report.errors.length > 0 && <div className="space-y-1">
-                <p className="flex items-center gap-2 font-medium text-rose-600"><XCircle className="h-4 w-4" />{report.errors.length === 1 ? '1 fila con error' : `${report.errors.length} filas con error`}</p>
-                <ul className="max-h-40 space-y-0.5 overflow-y-auto pl-6 text-xs text-muted-foreground">
-                  {report.errors.map(error => <li key={error.row}>Fila {error.row}: {error.message}</li>)}
-                </ul>
-              </div>}
+              <p className="flex items-center gap-2 font-medium">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                {count === 1 ? '1 producto se creará' : `${count} productos se crearán`}
+              </p>
+              {report.skipped.length > 0 && (
+                <p className="flex items-start gap-2">
+                  <SkipForward className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  {report.skipped.length === 1 ? '1 ya existe' : `${report.skipped.length} ya existen`} (se saltan):{' '}
+                  {report.skipped
+                    .map(item => `${item.sku || item.name}${item.archived ? ' (archivado)' : ''}`)
+                    .join(', ')}
+                </p>
+              )}
+              {report.newCategories.length > 0 && (
+                <p className="flex items-start gap-2">
+                  <FolderPlus className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  Categorías nuevas: {report.newCategories.join(', ')}
+                </p>
+              )}
+              {report.errors.length > 0 && (
+                <div className="space-y-1">
+                  <p className="flex items-center gap-2 font-medium text-rose-600">
+                    <XCircle className="h-4 w-4" />
+                    {report.errors.length === 1 ? '1 fila con error' : `${report.errors.length} filas con error`}
+                  </p>
+                  <ul className="max-h-40 space-y-0.5 overflow-y-auto pl-6 text-xs text-muted-foreground">
+                    {report.errors.map(error => (
+                      <li key={error.row}>
+                        Fila {error.row}: {error.message}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </section>
           )}
         </div>
 
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => close(false)} disabled={busy}>Cancelar</Button>
-          {report && <Button type="button" onClick={() => void confirm()} disabled={busy || count === 0} className="bg-orange-600 text-white hover:bg-orange-700">{count === 1 ? 'Importar 1 producto' : `Importar ${count} productos`}</Button>}
+          <Button type="button" variant="outline" onClick={() => close(false)} disabled={busy}>
+            Cancelar
+          </Button>
+          {report && (
+            <Button
+              type="button"
+              onClick={() => void confirm()}
+              disabled={busy || count === 0}
+              className="bg-orange-600 text-white hover:bg-orange-700"
+            >
+              {count === 1 ? 'Importar 1 producto' : `Importar ${count} productos`}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

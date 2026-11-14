@@ -31,10 +31,13 @@ export async function deliverRestaurantOrder(
     }
     sale = await dataService.createSale({
       orderIds: order.source === 'shared' ? [order.id] : undefined,
-      items: order.source === 'shared' ? [] : order.items.map((item) => ({
-        productId: item.productId,
-        quantity: item.cantidad,
-      })),
+      items:
+        order.source === 'shared'
+          ? []
+          : order.items.map(item => ({
+              productId: item.productId,
+              quantity: item.cantidad,
+            })),
       customer: `${order.mesaNombre} · Pedido #${order.numero}`,
       paymentMethod: 'cash',
       taxRate: order.taxRate,

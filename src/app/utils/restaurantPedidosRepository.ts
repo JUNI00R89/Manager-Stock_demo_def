@@ -24,19 +24,22 @@ const VALID_STATES: PedidoEstado[] = ['pendiente', 'en_preparacion', 'finalizado
 function normalizeOrders(value: unknown): Pedido[] {
   if (!Array.isArray(value)) return [];
   const result: Pedido[] = [];
-  value.forEach((candidate) => {
+  value.forEach(candidate => {
     if (!candidate || typeof candidate !== 'object') return;
     const order = candidate as Partial<Pedido>;
     if (!order.id || !order.negocioId || !VALID_STATES.includes(order.estado as PedidoEstado)) return;
     if (!Array.isArray(order.items)) return;
-    const items = order.items.filter((item) => item && item.productId && item.nombre).map((item) => ({
-      ...item,
-      id: item.id || uniqueRestaurantId('item'),
-      cantidad: Math.max(1, Number(item.cantidad) || 1),
-      precioUnitario: Number(item.precioUnitario) || 0,
-      ventaDirecta: item.ventaDirecta === true,
-    }));
-    const subtotal = Number(order.subtotal) || items.reduce((sum, item) => sum + item.precioUnitario * item.cantidad, 0);
+    const items = order.items
+      .filter(item => item && item.productId && item.nombre)
+      .map(item => ({
+        ...item,
+        id: item.id || uniqueRestaurantId('item'),
+        cantidad: Math.max(1, Number(item.cantidad) || 1),
+        precioUnitario: Number(item.precioUnitario) || 0,
+        ventaDirecta: item.ventaDirecta === true,
+      }));
+    const subtotal =
+      Number(order.subtotal) || items.reduce((sum, item) => sum + item.precioUnitario * item.cantidad, 0);
     const taxRate = Number.isFinite(Number(order.taxRate)) ? Math.max(0, Number(order.taxRate)) : 0;
     const impuesto = Number.isFinite(Number(order.impuesto)) ? Number(order.impuesto) : Math.round(subtotal * taxRate);
     result.push({
@@ -65,11 +68,7 @@ function normalizeOrders(value: unknown): Pedido[] {
   return result;
 }
 
-const ordersStore = createScopedLocalStore<Pedido[]>(
-  ORDERS_PREFIX,
-  () => [],
-  normalizeOrders,
-);
+const ordersStore = createScopedLocalStore<Pedido[]>(ORDERS_PREFIX, () => [], normalizeOrders);
 
 type Listener = (orders: Pedido[]) => void;
 const subscribers = new Map<string, Set<Listener>>();
@@ -77,12 +76,15 @@ let realtimeInitialized = false;
 let channel: BroadcastChannel | null = null;
 
 function sortedOrders(scope: string): Pedido[] {
-  return ordersStore.get(scope).slice().sort((a, b) => b.creadoEn.localeCompare(a.creadoEn));
+  return ordersStore
+    .get(scope)
+    .slice()
+    .sort((a, b) => b.creadoEn.localeCompare(a.creadoEn));
 }
 
 function emit(scope: string) {
   const rows = sortedOrders(scope);
-  subscribers.get(scope)?.forEach((listener) => {
+  subscribers.get(scope)?.forEach(listener => {
     try {
       listener(rows);
     } catch {
@@ -95,10 +97,10 @@ function initializeRealtime() {
   if (realtimeInitialized || typeof window === 'undefined') return;
   realtimeInitialized = true;
 
-  window.addEventListener('storage', (event) => {
+  window.addEventListener('storage', event => {
     if (!event.key || !event.key.startsWith(ORDERS_PREFIX)) return;
     const scopes = new Set(subscribers.keys());
-    scopes.forEach((scope) => {
+    scopes.forEach(scope => {
       if (ordersStore.key(scope) === event.key) emit(scope);
     });
   });
@@ -106,7 +108,7 @@ function initializeRealtime() {
   if (typeof BroadcastChannel !== 'undefined') {
     try {
       channel = new BroadcastChannel(CHANNEL_NAME);
-      channel.onmessage = (event) => {
+      channel.onmessage = event => {
         const scope = event.data?.scope;
         if (typeof scope === 'string') emit(scope);
       };
@@ -140,13 +142,11 @@ function estadoConflicto(pedido: Pedido): string {
 }
 
 function withStatusError(pedido: Pedido, expected: PedidoEstado): never {
-  const message = pedido.estado === expected
-    ? 'El pedido ya se encuentra en ese estado.'
-    : estadoConflicto(pedido);
+  const message = pedido.estado === expected ? 'El pedido ya se encuentra en ese estado.' : estadoConflicto(pedido);
   throw new PedidoConflictoError(message, pedido);
 }
 
-const localLockWait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+const localLockWait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
 async function withLocalStorageLock<T>(scope: string, action: () => Promise<T> | T): Promise<T> {
   const lockKey = `${ORDERS_PREFIX}lock_${scope}`;
@@ -193,9 +193,14 @@ async function withLocalStorageLock<T>(scope: string, action: () => Promise<T> |
 }
 
 async function withOrdersLock<T>(scope: string, action: () => Promise<T> | T): Promise<T> {
-  const lockManager = typeof navigator !== 'undefined'
-    ? (navigator as unknown as { locks?: { request: <R>(name: string, callback: () => Promise<R> | R) => Promise<R> } }).locks
-    : undefined;
+  const lockManager =
+    typeof navigator !== 'undefined'
+      ? (
+          navigator as unknown as {
+            locks?: { request: <R>(name: string, callback: () => Promise<R> | R) => Promise<R> };
+          }
+        ).locks
+      : undefined;
   if (lockManager?.request) {
     return lockManager.request(`manager-stock-restaurant-${scope}`, action);
   }
@@ -233,8 +238,8 @@ class LocalPedidosRepository implements PedidosRepository {
   async crearPedido(input: CrearPedidoInput): Promise<Pedido> {
     if (!input.items.length) throw new Error('Agrega al menos un producto al pedido.');
     const cleanedItems = input.items
-      .filter((item) => item.productId && item.nombre && Number(item.cantidad) > 0)
-      .map((item) => ({
+      .filter(item => item.productId && item.nombre && Number(item.cantidad) > 0)
+      .map(item => ({
         id: uniqueRestaurantId('item'),
         productId: item.productId,
         nombre: item.nombre.trim(),
@@ -249,10 +254,9 @@ class LocalPedidosRepository implements PedidosRepository {
       const orders = ordersStore.get(input.negocioId);
       const now = new Date();
       const jornada = getJornadaKey(now, input.horaInicioJornada);
-      const numero = orders
-        .filter((order) => order.jornada === jornada)
-        .reduce((max, order) => Math.max(max, order.numero), 0) + 1;
-      const directOnly = cleanedItems.every((item) => item.ventaDirecta);
+      const numero =
+        orders.filter(order => order.jornada === jornada).reduce((max, order) => Math.max(max, order.numero), 0) + 1;
+      const directOnly = cleanedItems.every(item => item.ventaDirecta);
       const subtotal = cleanedItems.reduce((sum, item) => sum + item.precioUnitario * item.cantidad, 0);
       const taxRate = Math.max(0, Math.min(1, Number(input.taxRate) || 0));
       const impuesto = Math.round(subtotal * taxRate);
@@ -279,11 +283,13 @@ class LocalPedidosRepository implements PedidosRepository {
         creadoEn: timestamp,
         actualizadoEn: timestamp,
         listoParaLlevar: directOnly,
-        ...(directOnly ? {
-          finalizadoEn: timestamp,
-          finalizadoPorId: 'venta-directa',
-          finalizadoPorNombre: 'Venta directa',
-        } : {}),
+        ...(directOnly
+          ? {
+              finalizadoEn: timestamp,
+              finalizadoPorId: 'venta-directa',
+              finalizadoPorNombre: 'Venta directa',
+            }
+          : {}),
       };
       writeOrders(input.negocioId, [...orders, order]);
       return order;
@@ -293,7 +299,7 @@ class LocalPedidosRepository implements PedidosRepository {
   async tomarPedido(pedidoId: string, negocioId: string, empleado: EmpleadoRef): Promise<Pedido> {
     return withOrdersLock(negocioId, () => {
       const orders = ordersStore.get(negocioId);
-      const current = orders.find((order) => order.id === pedidoId);
+      const current = orders.find(order => order.id === pedidoId);
       if (!current) throw new Error('No se encontró el pedido.');
       if (current.estado === 'en_preparacion' && current.tomadoPorId === empleado.id) return current;
       if (current.estado !== 'pendiente') {
@@ -308,7 +314,10 @@ class LocalPedidosRepository implements PedidosRepository {
         tomadoEn: now,
         actualizadoEn: now,
       };
-      writeOrders(negocioId, orders.map((order) => order.id === pedidoId ? updated : order));
+      writeOrders(
+        negocioId,
+        orders.map(order => (order.id === pedidoId ? updated : order)),
+      );
       return updated;
     });
   }
@@ -316,7 +325,7 @@ class LocalPedidosRepository implements PedidosRepository {
   async finalizarPedido(pedidoId: string, negocioId: string, empleado: EmpleadoRef): Promise<Pedido> {
     return withOrdersLock(negocioId, () => {
       const orders = ordersStore.get(negocioId);
-      const current = orders.find((order) => order.id === pedidoId);
+      const current = orders.find(order => order.id === pedidoId);
       if (!current) throw new Error('No se encontró el pedido.');
       if (current.estado === 'finalizado') return current;
       if (current.estado !== 'en_preparacion') withStatusError(current, 'en_preparacion');
@@ -329,7 +338,10 @@ class LocalPedidosRepository implements PedidosRepository {
         finalizadoEn: now,
         actualizadoEn: now,
       };
-      writeOrders(negocioId, orders.map((order) => order.id === pedidoId ? updated : order));
+      writeOrders(
+        negocioId,
+        orders.map(order => (order.id === pedidoId ? updated : order)),
+      );
       return updated;
     });
   }
@@ -337,7 +349,7 @@ class LocalPedidosRepository implements PedidosRepository {
   async entregarPedido(pedidoId: string, negocioId: string, empleado: EmpleadoRef, ventaId?: string): Promise<Pedido> {
     return withOrdersLock(negocioId, () => {
       const orders = ordersStore.get(negocioId);
-      const current = orders.find((order) => order.id === pedidoId);
+      const current = orders.find(order => order.id === pedidoId);
       if (!current) throw new Error('No se encontró el pedido.');
       if (current.estado === 'entregado') return current;
       if (current.estado !== 'finalizado') withStatusError(current, 'finalizado');
@@ -352,7 +364,10 @@ class LocalPedidosRepository implements PedidosRepository {
         ventaId: ventaId || current.ventaId,
         ventaRegistradaEn: ventaId ? now : current.ventaRegistradaEn,
       };
-      writeOrders(negocioId, orders.map((order) => order.id === pedidoId ? updated : order));
+      writeOrders(
+        negocioId,
+        orders.map(order => (order.id === pedidoId ? updated : order)),
+      );
       return updated;
     });
   }
@@ -362,7 +377,7 @@ class LocalPedidosRepository implements PedidosRepository {
     if (!cleanReason) throw new Error('Escribe el motivo de la cancelación.');
     return withOrdersLock(negocioId, () => {
       const orders = ordersStore.get(negocioId);
-      const current = orders.find((order) => order.id === pedidoId);
+      const current = orders.find(order => order.id === pedidoId);
       if (!current) throw new Error('No se encontró el pedido.');
       if (current.estado === 'cancelado') return current;
       if (current.estado === 'entregado') throw new Error('Un pedido entregado no se puede cancelar.');
@@ -376,7 +391,10 @@ class LocalPedidosRepository implements PedidosRepository {
         motivoCancelacion: cleanReason,
         actualizadoEn: now,
       };
-      writeOrders(negocioId, orders.map((order) => order.id === pedidoId ? updated : order));
+      writeOrders(
+        negocioId,
+        orders.map(order => (order.id === pedidoId ? updated : order)),
+      );
       return updated;
     });
   }
@@ -396,9 +414,9 @@ export function getPedidosRepository(): PedidosRepository {
 }
 
 export function isKitchenOrder(order: Pedido): boolean {
-  return order.items.some((item) => !item.ventaDirecta);
+  return order.items.some(item => !item.ventaDirecta);
 }
 
 export function kitchenItems(order: Pedido) {
-  return order.items.filter((item) => !item.ventaDirecta);
+  return order.items.filter(item => !item.ventaDirecta);
 }

@@ -38,8 +38,11 @@ export function RevenueForecastCard({ sales, rooms, isHotel, loading }: RevenueF
   );
 
   const chartData = useMemo(() => {
-    const rows: { day: string; ingresos: number | null; proyeccion: number | null }[] =
-      history.map(point => ({ day: labelOf(point.key), ingresos: point.revenue, proyeccion: null }));
+    const rows: { day: string; ingresos: number | null; proyeccion: number | null }[] = history.map(point => ({
+      day: labelOf(point.key),
+      ingresos: point.revenue,
+      proyeccion: null,
+    }));
     if (rows.length) {
       // Une la serie real con la proyectada en el último día observado.
       rows[rows.length - 1].proyeccion = rows[rows.length - 1].ingresos;
@@ -52,9 +55,10 @@ export function RevenueForecastCard({ sales, rooms, isHotel, loading }: RevenueF
 
   if (!projection) return null;
 
-  const weekDelta = projection.lastWeekTotal > 0
-    ? ((projection.weekTotal - projection.lastWeekTotal) / projection.lastWeekTotal) * 100
-    : null;
+  const weekDelta =
+    projection.lastWeekTotal > 0
+      ? ((projection.weekTotal - projection.lastWeekTotal) / projection.lastWeekTotal) * 100
+      : null;
 
   return (
     <Card className="rounded-2xl border-border/70 p-5 shadow-sm">
@@ -67,7 +71,8 @@ export function RevenueForecastCard({ sales, rooms, isHotel, loading }: RevenueF
             </span>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Tendencia y estacionalidad semanal sobre {projection.historyDays} días. La línea punteada estima los próximos {horizon} días.
+            Tendencia y estacionalidad semanal sobre {projection.historyDays} días. La línea punteada estima los
+            próximos {horizon} días.
           </p>
         </div>
         <div className="flex rounded-xl border border-border/70 p-1 text-xs">
@@ -88,24 +93,68 @@ export function RevenueForecastCard({ sales, rooms, isHotel, loading }: RevenueF
       <div className="mt-4 grid gap-5 lg:grid-cols-[1.7fr_1fr]">
         <div>
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1.5"><span className="h-2 w-4 rounded-full bg-[var(--chart-1)]" />Real</span>
-            <span className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-[var(--chart-2)]" />Proyección</span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-4 rounded-full bg-[var(--chart-1)]" />
+              Real
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-4 border-t-2 border-dashed border-[var(--chart-2)]" />
+              Proyección
+            </span>
           </div>
           <div className="mt-3 h-[240px]">
             {loading ? (
-              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Calculando proyección…</div>
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                Calculando proyección…
+              </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData} margin={{ top: 8, right: 12, left: 2, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" strokeOpacity={0.55} />
-                  <XAxis dataKey="day" tick={{ fontSize: 12 }} stroke="var(--muted-foreground)" tickLine={false} axisLine={false} interval="preserveStartEnd" />
-                  <YAxis tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" tickLine={false} axisLine={false} width={56} tickFormatter={(value: number) => `${Math.round(value / 1000)}k`} />
+                  <XAxis
+                    dataKey="day"
+                    tick={{ fontSize: 12 }}
+                    stroke="var(--muted-foreground)"
+                    tickLine={false}
+                    axisLine={false}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis
+                    tick={{ fontSize: 11 }}
+                    stroke="var(--muted-foreground)"
+                    tickLine={false}
+                    axisLine={false}
+                    width={56}
+                    tickFormatter={(value: number) => `${Math.round(value / 1000)}k`}
+                  />
                   <Tooltip
                     formatter={(value: number, name: string) => [money(value), name]}
-                    contentStyle={{ borderRadius: 12, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--card-foreground)' }}
+                    contentStyle={{
+                      borderRadius: 12,
+                      border: '1px solid var(--border)',
+                      background: 'var(--card)',
+                      color: 'var(--card-foreground)',
+                    }}
                   />
-                  <Line type="monotone" dataKey="ingresos" name="Real" stroke="var(--chart-1)" strokeWidth={2.5} dot={{ r: 3 }} connectNulls={false} />
-                  <Line type="monotone" dataKey="proyeccion" name="Proyección" stroke="var(--chart-2)" strokeWidth={2} strokeDasharray="6 5" dot={{ r: 2 }} connectNulls={false} />
+                  <Line
+                    type="monotone"
+                    dataKey="ingresos"
+                    name="Real"
+                    stroke="var(--chart-1)"
+                    strokeWidth={2.5}
+                    dot={{ r: 3 }}
+                    connectNulls={false}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="proyeccion"
+                    name="Proyección"
+                    stroke="var(--chart-2)"
+                    strokeWidth={2}
+                    strokeDasharray="6 5"
+                    dot={{ r: 2 }}
+                    connectNulls={false}
+                  />
                 </LineChart>
               </ResponsiveContainer>
             )}
@@ -117,7 +166,9 @@ export function RevenueForecastCard({ sales, rooms, isHotel, loading }: RevenueF
             <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Próxima semana</p>
             <p className="mt-1 text-lg font-semibold tracking-tight">{money(projection.weekTotal)}</p>
             {weekDelta !== null && (
-              <p className={`mt-0.5 flex items-center gap-1 text-[11px] ${weekDelta >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+              <p
+                className={`mt-0.5 flex items-center gap-1 text-[11px] ${weekDelta >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}
+              >
                 {weekDelta >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
                 {percent(weekDelta)} vs. los últimos 7 días
               </p>
@@ -136,7 +187,9 @@ export function RevenueForecastCard({ sales, rooms, isHotel, loading }: RevenueF
                 <BedDouble className="h-3 w-3" /> Ocupación estimada (30 d)
               </p>
               <p className="mt-1 text-lg font-semibold tracking-tight">{occupancy.occupancyPct.toFixed(1)}%</p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">ADR {money(occupancy.adr)} · {occupancy.rooms} habitaciones</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                ADR {money(occupancy.adr)} · {occupancy.rooms} habitaciones
+              </p>
             </div>
           ) : (
             <div className="rounded-xl border border-border/60 p-3">
@@ -163,7 +216,9 @@ export function RevenueForecastCard({ sales, rooms, isHotel, loading }: RevenueF
             ? 'Ocupación estimada con ingresos y tarifa promedio: el POS no registra noches vendidas.'
             : 'Proyección estadística de demanda; no sustituye un cierre contable.'}
         </span>
-        {projection.reliable === false && <span className="text-amber-600">Pocos días con actividad: interpreta como tendencia.</span>}
+        {projection.reliable === false && (
+          <span className="text-amber-600">Pocos días con actividad: interpreta como tendencia.</span>
+        )}
       </div>
     </Card>
   );

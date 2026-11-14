@@ -66,7 +66,7 @@ export function Register() {
                 type="text"
                 placeholder="Juan Pérez"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={e => setName(e.target.value)}
                 required
                 className="border-orange-200 focus:border-orange-400 focus:ring-orange-400"
               />
@@ -79,7 +79,7 @@ export function Register() {
                 type="email"
                 placeholder="ejemplo@correo.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={e => setEmail(e.target.value)}
                 required
                 className="border-orange-200 focus:border-orange-400 focus:ring-orange-400"
               />
@@ -93,7 +93,7 @@ export function Register() {
                 placeholder="Mínimo 8 caracteres"
                 minLength={8}
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={e => setPassword(e.target.value)}
                 required
                 className="border-orange-200 focus:border-orange-400 focus:ring-orange-400"
               />
@@ -106,7 +106,7 @@ export function Register() {
                 type="password"
                 placeholder="••••••••"
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                onChange={e => setConfirmPassword(e.target.value)}
                 required
                 className="border-orange-200 focus:border-orange-400 focus:ring-orange-400"
               />

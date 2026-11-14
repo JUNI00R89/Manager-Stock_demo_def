@@ -16,10 +16,11 @@ export const DEFAULT_RESTAURANT_SETTINGS: RestaurantSettings = {
 };
 
 function normalizeSettings(value: unknown): RestaurantSettings {
-  const input = value && typeof value === 'object' ? value as Partial<RestaurantSettings> : {};
-  const startTime = typeof input.startTime === 'string' && /^\d{2}:\d{2}$/.test(input.startTime)
-    ? input.startTime
-    : DEFAULT_RESTAURANT_SETTINGS.startTime;
+  const input = value && typeof value === 'object' ? (value as Partial<RestaurantSettings>) : {};
+  const startTime =
+    typeof input.startTime === 'string' && /^\d{2}:\d{2}$/.test(input.startTime)
+      ? input.startTime
+      : DEFAULT_RESTAURANT_SETTINGS.startTime;
   const parsedMinutes = Number(input.expectedMinutes);
   const expectedMinutes = Number.isFinite(parsedMinutes)
     ? Math.max(1, Math.min(180, Math.round(parsedMinutes)))
@@ -43,17 +44,20 @@ export function useRestaurantSettings(scope: string) {
   const settings = useScopedLocalStore(settingsStore, scope);
   return {
     settings,
-    saveSettings: (patch: Partial<RestaurantSettings>) => settingsStore.update(scope, (current) => normalizeSettings({ ...current, ...patch })),
-    setTableName: (tableId: string, name: string) => settingsStore.update(scope, (current) => {
-      const tableNames = { ...current.tableNames };
-      if (name.trim()) tableNames[tableId] = name.trim();
-      else delete tableNames[tableId];
-      return { ...current, tableNames };
-    }),
-    removeTableName: (tableId: string) => settingsStore.update(scope, (current) => {
-      const tableNames = { ...current.tableNames };
-      delete tableNames[tableId];
-      return { ...current, tableNames };
-    }),
+    saveSettings: (patch: Partial<RestaurantSettings>) =>
+      settingsStore.update(scope, current => normalizeSettings({ ...current, ...patch })),
+    setTableName: (tableId: string, name: string) =>
+      settingsStore.update(scope, current => {
+        const tableNames = { ...current.tableNames };
+        if (name.trim()) tableNames[tableId] = name.trim();
+        else delete tableNames[tableId];
+        return { ...current, tableNames };
+      }),
+    removeTableName: (tableId: string) =>
+      settingsStore.update(scope, current => {
+        const tableNames = { ...current.tableNames };
+        delete tableNames[tableId];
+        return { ...current, tableNames };
+      }),
   };
 }

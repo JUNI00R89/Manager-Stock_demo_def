@@ -60,19 +60,26 @@ export function Kitchen() {
 
   const jornada = getJornadaKey(now, settings.startTime);
   const kitchenOrders = useMemo(
-    () => orders.filter((order) => order.jornada === jornada && isKitchenOrder(order)),
+    () => orders.filter(order => order.jornada === jornada && isKitchenOrder(order)),
     [orders, jornada],
   );
   const pending = useMemo(
-    () => kitchenOrders.filter((order) => order.estado === 'pendiente').sort((a, b) => a.creadoEn.localeCompare(b.creadoEn)),
+    () =>
+      kitchenOrders.filter(order => order.estado === 'pendiente').sort((a, b) => a.creadoEn.localeCompare(b.creadoEn)),
     [kitchenOrders],
   );
   const preparing = useMemo(
-    () => kitchenOrders.filter((order) => order.estado === 'en_preparacion').sort((a, b) => (a.tomadoEn || '').localeCompare(b.tomadoEn || '')),
+    () =>
+      kitchenOrders
+        .filter(order => order.estado === 'en_preparacion')
+        .sort((a, b) => (a.tomadoEn || '').localeCompare(b.tomadoEn || '')),
     [kitchenOrders],
   );
   const finalized = useMemo(
-    () => kitchenOrders.filter((order) => order.estado === 'finalizado').sort((a, b) => (b.finalizadoEn || '').localeCompare(a.finalizadoEn || '')),
+    () =>
+      kitchenOrders
+        .filter(order => order.estado === 'finalizado')
+        .sort((a, b) => (b.finalizadoEn || '').localeCompare(a.finalizadoEn || '')),
     [kitchenOrders],
   );
   const inProgressCount = pending.length + preparing.length;
@@ -96,13 +103,13 @@ export function Kitchen() {
 
   useEffect(() => {
     if (loading) return;
-    const ids = new Set(pending.map((order) => order.id));
+    const ids = new Set(pending.map(order => order.id));
     const previous = seenPendingRef.current;
     if (!previous || previous.key !== realtimeKey) {
       seenPendingRef.current = { key: realtimeKey, ids };
       return;
     }
-    const nuevos = [...ids].filter((id) => !previous.ids.has(id));
+    const nuevos = [...ids].filter(id => !previous.ids.has(id));
     seenPendingRef.current = { key: realtimeKey, ids };
     if (nuevos.length > 0 && soundOn) playNewOrderChime();
   }, [pending, soundOn, realtimeKey, loading]);
@@ -143,13 +150,21 @@ export function Kitchen() {
 
   return (
     <Layout>
-      {ordersError && <p role="alert" className="mb-3 rounded border border-red-200 p-3 text-red-600">{ordersError}</p>}
+      {ordersError && (
+        <p role="alert" className="mb-3 rounded border border-red-200 p-3 text-red-600">
+          {ordersError}
+        </p>
+      )}
       <header className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Cocina · {formatDayMonth(now)} · {formatTime(now)}</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
+            Cocina · {formatDayMonth(now)} · {formatTime(now)}
+          </p>
           <div className="mt-1 flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Pedidos en curso</h1>
-            <Badge className="border-transparent bg-primary/10 text-primary">{inProgressCount} activo{inProgressCount === 1 ? '' : 's'}</Badge>
+            <Badge className="border-transparent bg-primary/10 text-primary">
+              {inProgressCount} activo{inProgressCount === 1 ? '' : 's'}
+            </Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
             Entrantes y preparación en tiempo real. La alerta visual aparece a los {settings.expectedMinutes} min.
@@ -160,7 +175,7 @@ export function Kitchen() {
           <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-full border border-border bg-card px-3 text-sm font-semibold text-foreground shadow-sm">
             <Switch
               checked={soundOn}
-              onCheckedChange={(checked) => {
+              onCheckedChange={checked => {
                 setSoundOn(checked);
                 if (checked) {
                   primeRestaurantAudio();
@@ -169,7 +184,11 @@ export function Kitchen() {
               }}
               aria-label="Activar sonido de nuevos pedidos"
             />
-            {soundOn ? <Bell size={16} className="text-primary" /> : <BellOff size={16} className="text-muted-foreground" />}
+            {soundOn ? (
+              <Bell size={16} className="text-primary" />
+            ) : (
+              <BellOff size={16} className="text-muted-foreground" />
+            )}
             Sonido
           </label>
           {canManage && <StaffSwitcher scope={scope} role="cocina" currentUserName={user?.name || ''} />}
@@ -189,7 +208,9 @@ export function Kitchen() {
           className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${tab === 'en_curso' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'}`}
         >
           <Flame size={18} /> En curso
-          <span className={`rounded-full px-1.5 py-0.5 text-[11px] ${tab === 'en_curso' ? 'bg-white/20' : 'bg-muted'}`}>{inProgressCount}</span>
+          <span className={`rounded-full px-1.5 py-0.5 text-[11px] ${tab === 'en_curso' ? 'bg-white/20' : 'bg-muted'}`}>
+            {inProgressCount}
+          </span>
         </button>
         <button
           type="button"
@@ -197,13 +218,19 @@ export function Kitchen() {
           className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${tab === 'finalizados' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'}`}
         >
           <CheckCircle2 size={18} /> Finalizados
-          <span className={`rounded-full px-1.5 py-0.5 text-[11px] ${tab === 'finalizados' ? 'bg-white/20' : 'bg-muted'}`}>{finalized.length}</span>
+          <span
+            className={`rounded-full px-1.5 py-0.5 text-[11px] ${tab === 'finalizados' ? 'bg-white/20' : 'bg-muted'}`}
+          >
+            {finalized.length}
+          </span>
         </button>
       </div>
 
       {loading ? (
         <div className="mt-5 grid gap-4 lg:grid-cols-2">
-          {[1, 2].map((item) => <div key={item} className="h-64 animate-pulse rounded-3xl border border-border bg-muted/50" />)}
+          {[1, 2].map(item => (
+            <div key={item} className="h-64 animate-pulse rounded-3xl border border-border bg-muted/50" />
+          ))}
         </div>
       ) : tab === 'en_curso' ? (
         <div className="mt-5 grid gap-4 lg:grid-cols-2">
@@ -215,20 +242,25 @@ export function Kitchen() {
             icon={<Clock3 size={20} />}
           >
             {pending.length === 0 ? (
-              <KitchenEmpty title="Sin pedidos entrantes" text="Cuando el mesero envíe un pedido, aparecerá aquí al instante." />
-            ) : pending.map((order) => (
-              <KitchenOrderCard
-                key={order.id}
-                order={order}
-                mode="pending"
-                busy={busyOrderId === order.id}
-                delayed={minutesSince(order.creadoEn, now) >= settings.expectedMinutes}
-                expectedMinutes={settings.expectedMinutes}
-                currency={config?.currency}
-                now={now}
-                onTake={canManage ? () => takeOrder(order) : undefined}
+              <KitchenEmpty
+                title="Sin pedidos entrantes"
+                text="Cuando el mesero envíe un pedido, aparecerá aquí al instante."
               />
-            ))}
+            ) : (
+              pending.map(order => (
+                <KitchenOrderCard
+                  key={order.id}
+                  order={order}
+                  mode="pending"
+                  busy={busyOrderId === order.id}
+                  delayed={minutesSince(order.creadoEn, now) >= settings.expectedMinutes}
+                  expectedMinutes={settings.expectedMinutes}
+                  currency={config?.currency}
+                  now={now}
+                  onTake={canManage ? () => takeOrder(order) : undefined}
+                />
+              ))
+            )}
           </KitchenColumn>
 
           <KitchenColumn
@@ -240,19 +272,21 @@ export function Kitchen() {
           >
             {preparing.length === 0 ? (
               <KitchenEmpty title="Nada en preparación" text="Toma un pedido de Entrantes para empezar a cocinarlo." />
-            ) : preparing.map((order) => (
-              <KitchenOrderCard
-                key={order.id}
-                order={order}
-                mode="preparing"
-                busy={busyOrderId === order.id}
-                delayed={minutesSince(order.creadoEn, now) >= settings.expectedMinutes}
-                expectedMinutes={settings.expectedMinutes}
-                currency={config?.currency}
-                now={now}
-                onFinish={canManage ? () => finishOrder(order) : undefined}
-              />
-            ))}
+            ) : (
+              preparing.map(order => (
+                <KitchenOrderCard
+                  key={order.id}
+                  order={order}
+                  mode="preparing"
+                  busy={busyOrderId === order.id}
+                  delayed={minutesSince(order.creadoEn, now) >= settings.expectedMinutes}
+                  expectedMinutes={settings.expectedMinutes}
+                  currency={config?.currency}
+                  now={now}
+                  onFinish={canManage ? () => finishOrder(order) : undefined}
+                />
+              ))
+            )}
           </KitchenColumn>
         </div>
       ) : (
@@ -261,11 +295,13 @@ export function Kitchen() {
             <div className="rounded-3xl border border-dashed border-border p-10 text-center">
               <CheckCircle2 size={30} className="mx-auto text-muted-foreground" />
               <p className="mt-3 font-semibold text-foreground">Todavía no hay pedidos finalizados</p>
-              <p className="mt-1 text-sm text-muted-foreground">Los pedidos que termines aparecerán aquí hasta que se entreguen.</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Los pedidos que termines aparecerán aquí hasta que se entreguen.
+              </p>
             </div>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {finalized.map((order) => (
+              {finalized.map(order => (
                 <KitchenOrderCard
                   key={order.id}
                   order={order}
@@ -300,9 +336,10 @@ function KitchenColumn({
   icon: React.ReactNode;
   children: React.ReactNode;
 }) {
-  const toneClass = tone === 'amber'
-    ? 'border-amber-500/25 bg-amber-500/5 text-amber-700 dark:text-amber-300'
-    : 'border-sky-500/25 bg-sky-500/5 text-sky-700 dark:text-sky-300';
+  const toneClass =
+    tone === 'amber'
+      ? 'border-amber-500/25 bg-amber-500/5 text-amber-700 dark:text-amber-300'
+      : 'border-sky-500/25 bg-sky-500/5 text-sky-700 dark:text-sky-300';
   return (
     <section className="rounded-3xl border border-border bg-card/60 p-3 shadow-sm sm:p-4">
       <div className={`flex items-center gap-3 rounded-2xl border px-3 py-2.5 ${toneClass}`}>
@@ -311,7 +348,9 @@ function KitchenColumn({
           <h2 className="font-bold leading-tight">{title}</h2>
           <p className="truncate text-xs opacity-80">{subtitle}</p>
         </div>
-        <span className="flex h-7 min-w-7 items-center justify-center rounded-full bg-background/80 px-2 text-sm font-bold">{count}</span>
+        <span className="flex h-7 min-w-7 items-center justify-center rounded-full bg-background/80 px-2 text-sm font-bold">
+          {count}
+        </span>
       </div>
       <div className="mt-3 space-y-3">{children}</div>
     </section>
@@ -352,16 +391,26 @@ function KitchenOrderCard({
   const age = minutesSince(order.creadoEn, now);
   const isNew = age < 1;
   const visibleItems = kitchenItems(order);
-  const hasDirectItems = order.items.some((item) => item.ventaDirecta);
+  const hasDirectItems = order.items.some(item => item.ventaDirecta);
   return (
-    <article className={`rounded-2xl border bg-card p-4 shadow-sm transition-colors ${delayed ? 'border-rose-500/50 ring-1 ring-rose-500/15' : 'border-border'}`}>
+    <article
+      className={`rounded-2xl border bg-card p-4 shadow-sm transition-colors ${delayed ? 'border-rose-500/50 ring-1 ring-rose-500/15' : 'border-border'}`}
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xl font-bold leading-none text-foreground">#{order.numero}</span>
-            {isNew && mode === 'pending' && <Badge className="border-transparent bg-primary text-primary-foreground">NUEVO</Badge>}
-            {delayed && <Badge variant="outline" className="border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300">Demorado · {age} min</Badge>}
-            <Badge variant="outline" className="text-muted-foreground">Local</Badge>
+            {isNew && mode === 'pending' && (
+              <Badge className="border-transparent bg-primary text-primary-foreground">NUEVO</Badge>
+            )}
+            {delayed && (
+              <Badge variant="outline" className="border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300">
+                Demorado · {age} min
+              </Badge>
+            )}
+            <Badge variant="outline" className="text-muted-foreground">
+              Local
+            </Badge>
           </div>
           <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
             <Clock3 size={12} /> {formatTime(order.creadoEn)} · hace {age < 1 ? 'menos de 1 min' : `${age} min`}
@@ -376,30 +425,49 @@ function KitchenOrderCard({
       </div>
 
       <ul className="mt-3 space-y-2 border-y border-border/70 py-3">
-        {visibleItems.map((item) => (
+        {visibleItems.map(item => (
           <li key={item.id}>
             <div className="flex items-start justify-between gap-3 text-sm">
-              <span className="min-w-0 text-foreground"><strong className="text-base">{item.cantidad}×</strong> {item.nombre}</span>
-              <span className="shrink-0 text-xs text-muted-foreground">{formatMoney(item.precioUnitario * item.cantidad, currency)}</span>
+              <span className="min-w-0 text-foreground">
+                <strong className="text-base">{item.cantidad}×</strong> {item.nombre}
+              </span>
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {formatMoney(item.precioUnitario * item.cantidad, currency)}
+              </span>
             </div>
-            {item.nota && <p className="mt-0.5 rounded-lg bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-800 dark:text-amber-200">Nota: {item.nota}</p>}
+            {item.nota && (
+              <p className="mt-0.5 rounded-lg bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-800 dark:text-amber-200">
+                Nota: {item.nota}
+              </p>
+            )}
           </li>
         ))}
       </ul>
 
       {hasDirectItems && (
-        <p className="mt-2 text-[11px] font-medium text-muted-foreground">Incluye productos de venta directa; no se preparan en cocina.</p>
+        <p className="mt-2 text-[11px] font-medium text-muted-foreground">
+          Incluye productos de venta directa; no se preparan en cocina.
+        </p>
       )}
 
       <div className="mt-3 flex items-center justify-between gap-2">
         <div className="min-w-0 text-xs text-muted-foreground">
           {mode === 'preparing' && order.tomadoPorNombre && (
-            <span className="flex items-center gap-1"><Users size={12} /> Tomado por {order.tomadoPorNombre}</span>
+            <span className="flex items-center gap-1">
+              <Users size={12} /> Tomado por {order.tomadoPorNombre}
+            </span>
           )}
           {mode === 'finalized' && order.finalizadoEn && (
-            <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-300"><CheckCircle2 size={13} /> {order.finalizadoEn ? `Listo a las ${formatTime(order.finalizadoEn)}` : 'Listo'}</span>
+            <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
+              <CheckCircle2 size={13} />{' '}
+              {order.finalizadoEn ? `Listo a las ${formatTime(order.finalizadoEn)}` : 'Listo'}
+            </span>
           )}
-          {mode === 'pending' && <span className="flex items-center gap-1"><Timer size={12} /> Objetivo: {expectedMinutes} min</span>}
+          {mode === 'pending' && (
+            <span className="flex items-center gap-1">
+              <Timer size={12} /> Objetivo: {expectedMinutes} min
+            </span>
+          )}
         </div>
         <span className="shrink-0 text-sm font-bold text-foreground">{formatMoney(order.total, currency)}</span>
       </div>
@@ -410,7 +478,11 @@ function KitchenOrderCard({
         </Button>
       )}
       {mode === 'preparing' && onFinish && (
-        <Button className="mt-3 h-12 w-full bg-emerald-600 text-white hover:bg-emerald-700" onClick={onFinish} disabled={busy}>
+        <Button
+          className="mt-3 h-12 w-full bg-emerald-600 text-white hover:bg-emerald-700"
+          onClick={onFinish}
+          disabled={busy}
+        >
           <CheckCircle2 size={18} /> {busy ? 'Finalizando…' : 'Finalizado'}
         </Button>
       )}

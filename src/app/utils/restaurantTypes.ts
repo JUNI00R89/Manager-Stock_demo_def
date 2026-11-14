@@ -5,12 +5,7 @@
  * repositorio local (fase 1) y una futura implementación remota (fase 2).
  */
 
-export type PedidoEstado =
-  | 'pendiente'
-  | 'en_preparacion'
-  | 'finalizado'
-  | 'entregado'
-  | 'cancelado';
+export type PedidoEstado = 'pendiente' | 'en_preparacion' | 'finalizado' | 'entregado' | 'cancelado';
 
 export type EmpleadoRol = 'mesero' | 'cocina' | 'admin';
 

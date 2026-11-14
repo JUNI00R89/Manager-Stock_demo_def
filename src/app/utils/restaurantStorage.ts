@@ -77,7 +77,7 @@ export function createScopedLocalStore<T>(
   const emit = (scope: string) => {
     const set = listeners.get(scope);
     if (!set) return;
-    set.forEach((listener) => {
+    set.forEach(listener => {
       try {
         listener();
       } catch {
@@ -127,7 +127,7 @@ export function createScopedLocalStore<T>(
   };
 
   if (typeof window !== 'undefined') {
-    window.addEventListener('storage', (event) => {
+    window.addEventListener('storage', event => {
       if (!event.key || !event.key.startsWith(prefix)) return;
       cache.clear();
       const scopes = new Set<string>(listeners.keys());
@@ -148,7 +148,7 @@ export function createScopedLocalStore<T>(
 
 export function useScopedLocalStore<T>(store: ScopedLocalStore<T>, scope: string): T {
   return useSyncExternalStore(
-    (listener) => store.subscribe(scope, listener),
+    listener => store.subscribe(scope, listener),
     () => store.get(scope),
     () => store.get(scope),
   );

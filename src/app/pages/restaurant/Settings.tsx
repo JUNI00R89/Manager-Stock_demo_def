@@ -49,7 +49,10 @@ export function RestaurantSettingsPage() {
   const scope = useRestaurantScope();
   const { settings, saveSettings, setTableName, removeTableName } = useRestaurantSettings(scope);
   const { tables, loading: tablesLoading, refresh: refreshTables } = useRestaurantTables();
-  const { staff, activeByRole, addStaff, updateStaff, removeStaff, setActive } = useRestaurantStaff(scope, user?.name || '');
+  const { staff, activeByRole, addStaff, updateStaff, removeStaff, setActive } = useRestaurantStaff(
+    scope,
+    user?.name || '',
+  );
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = searchParams.get('tab') === 'usuarios' ? 'usuarios' : 'mesas';
   const [tab, setTab] = useState<SettingsTab>(initialTab);
@@ -94,7 +97,7 @@ export function RestaurantSettingsPage() {
   const [deleteTableTarget, setDeleteTableTarget] = useState<RestaurantTableRecord | null>(null);
 
   const nextFreeNumber = useMemo(() => {
-    const taken = new Set(tables.map((table) => table.number));
+    const taken = new Set(tables.map(table => table.number));
     let candidate = 1;
     while (taken.has(candidate)) candidate += 1;
     return candidate;
@@ -229,8 +232,12 @@ export function RestaurantSettingsPage() {
       <header className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Restaurante · Configuración</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Ajustes del restaurante</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Mesas, jornada, alertas de cocina y personas que usan las pantallas.</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+            Ajustes del restaurante
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Mesas, jornada, alertas de cocina y personas que usan las pantallas.
+          </p>
         </div>
         <StaffSwitcher scope={scope} role="admin" currentUserName={user?.name || ''} />
       </header>
@@ -256,60 +263,116 @@ export function RestaurantSettingsPage() {
         <div className="mt-5 space-y-5">
           <section className="rounded-3xl border border-border bg-card p-4 shadow-sm sm:p-5">
             <div className="flex items-start gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary"><CalendarClock size={20} /></span>
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <CalendarClock size={20} />
+              </span>
               <div>
                 <h2 className="font-bold text-foreground">Jornada y alerta de cocina</h2>
-                <p className="mt-0.5 text-sm text-muted-foreground">La numeración reinicia a la hora de inicio. La alerta visual se activa al superar el tiempo esperado.</p>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  La numeración reinicia a la hora de inicio. La alerta visual se activa al superar el tiempo esperado.
+                </p>
               </div>
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,12rem)_minmax(0,12rem)_auto] sm:items-end">
               <div>
                 <Label htmlFor="start-time">Hora de inicio</Label>
-                <Input id="start-time" type="time" value={startDraft} onChange={(event) => setStartDraft(event.target.value)} className="mt-1 h-11" />
+                <Input
+                  id="start-time"
+                  type="time"
+                  value={startDraft}
+                  onChange={event => setStartDraft(event.target.value)}
+                  className="mt-1 h-11"
+                />
               </div>
               <div>
                 <Label htmlFor="expected-minutes">Alerta a los (min)</Label>
-                <Input id="expected-minutes" type="number" min={1} max={180} value={expectedDraft} onChange={(event) => setExpectedDraft(event.target.value)} className="mt-1 h-11" />
+                <Input
+                  id="expected-minutes"
+                  type="number"
+                  min={1}
+                  max={180}
+                  value={expectedDraft}
+                  onChange={event => setExpectedDraft(event.target.value)}
+                  className="mt-1 h-11"
+                />
               </div>
-              <Button className="h-11" onClick={saveSchedule}><Save size={17} /> Guardar</Button>
+              <Button className="h-11" onClick={saveSchedule}>
+                <Save size={17} /> Guardar
+              </Button>
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">Jornada actual: inicia a las {settings.startTime} y la alerta visual está a los {settings.expectedMinutes} min.</p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Jornada actual: inicia a las {settings.startTime} y la alerta visual está a los {settings.expectedMinutes}{' '}
+              min.
+            </p>
           </section>
 
           <section className="rounded-3xl border border-border bg-card p-4 shadow-sm sm:p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="font-bold text-foreground">Mesas del salón</h2>
-                <p className="mt-0.5 text-sm text-muted-foreground">{tables.filter((table) => table.status === 'active').length} activas de {tables.length}. Puedes poner un nombre visible como A2.</p>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  {tables.filter(table => table.status === 'active').length} activas de {tables.length}. Puedes poner un
+                  nombre visible como A2.
+                </p>
               </div>
-              <Button className="h-11" onClick={openCreateTable}><Plus size={17} /> Nueva mesa</Button>
+              <Button className="h-11" onClick={openCreateTable}>
+                <Plus size={17} /> Nueva mesa
+              </Button>
             </div>
 
             {tablesLoading ? (
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                {[1, 2, 3, 4].map((item) => <div key={item} className="h-28 animate-pulse rounded-2xl border border-border bg-muted/50" />)}
+                {[1, 2, 3, 4].map(item => (
+                  <div key={item} className="h-28 animate-pulse rounded-2xl border border-border bg-muted/50" />
+                ))}
               </div>
             ) : tables.length === 0 ? (
               <div className="mt-5 rounded-2xl border border-dashed border-border p-8 text-center">
                 <UtensilsCrossed size={30} className="mx-auto text-muted-foreground" />
                 <p className="mt-2 font-semibold text-foreground">No hay mesas creadas</p>
-                <p className="mt-1 text-sm text-muted-foreground">Crea la primera mesa para que el mesero pueda tomar pedidos.</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Crea la primera mesa para que el mesero pueda tomar pedidos.
+                </p>
               </div>
             ) : (
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                {tables.map((table) => (
-                  <article key={table.id} className={`rounded-2xl border p-4 ${table.status === 'active' ? 'border-border bg-background' : 'border-dashed border-border bg-muted/30 opacity-80'}`}>
+                {tables.map(table => (
+                  <article
+                    key={table.id}
+                    className={`rounded-2xl border p-4 ${table.status === 'active' ? 'border-border bg-background' : 'border-dashed border-border bg-muted/30 opacity-80'}`}
+                  >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-lg font-bold text-foreground">{settings.tableNames[table.id] || `Mesa ${table.number}`}</p>
-                        <p className="text-xs text-muted-foreground">{table.zone || 'Salón'} · {table.capacity} puestos · Número {table.number}</p>
-                        <Badge variant="outline" className={`mt-2 ${table.status === 'active' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'text-muted-foreground'}`}>
+                        <p className="text-lg font-bold text-foreground">
+                          {settings.tableNames[table.id] || `Mesa ${table.number}`}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {table.zone || 'Salón'} · {table.capacity} puestos · Número {table.number}
+                        </p>
+                        <Badge
+                          variant="outline"
+                          className={`mt-2 ${table.status === 'active' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'text-muted-foreground'}`}
+                        >
                           {table.status === 'active' ? 'Habilitada' : 'Deshabilitada'}
                         </Badge>
                       </div>
                       <div className="flex items-center gap-1">
-                        <button type="button" onClick={() => openEditTable(table)} className="flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Editar ${settings.tableNames[table.id] || `Mesa ${table.number}`}`}><Pencil size={17} /></button>
-                        <button type="button" onClick={() => setDeleteTableTarget(table)} className="flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Eliminar ${settings.tableNames[table.id] || `Mesa ${table.number}`}`}><Trash2 size={17} /></button>
+                        <button
+                          type="button"
+                          onClick={() => openEditTable(table)}
+                          className="flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          aria-label={`Editar ${settings.tableNames[table.id] || `Mesa ${table.number}`}`}
+                        >
+                          <Pencil size={17} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTableTarget(table)}
+                          className="flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          aria-label={`Eliminar ${settings.tableNames[table.id] || `Mesa ${table.number}`}`}
+                        >
+                          <Trash2 size={17} />
+                        </button>
                       </div>
                     </div>
                     <label className="mt-3 flex min-h-11 cursor-pointer items-center gap-2 text-sm font-medium text-foreground">
@@ -327,47 +390,97 @@ export function RestaurantSettingsPage() {
           <section className="rounded-3xl border border-border bg-card p-4 shadow-sm sm:p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex items-start gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary"><UserRound size={20} /></span>
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <UserRound size={20} />
+                </span>
                 <div>
                   <h2 className="font-bold text-foreground">Equipo del restaurante</h2>
-                  <p className="mt-0.5 text-sm text-muted-foreground">Meseros, cocina y administración. El PIN es opcional y protege el cambio de usuario en las pantallas.</p>
+                  <p className="mt-0.5 text-sm text-muted-foreground">
+                    Meseros, cocina y administración. El PIN es opcional y protege el cambio de usuario en las
+                    pantallas.
+                  </p>
                 </div>
               </div>
-              <Button className="h-11" onClick={openCreateStaff}><Plus size={17} /> Nuevo usuario</Button>
+              <Button className="h-11" onClick={openCreateStaff}>
+                <Plus size={17} /> Nuevo usuario
+              </Button>
             </div>
 
             {staff.length === 0 ? (
               <div className="mt-5 rounded-2xl border border-dashed border-border p-8 text-center">
                 <Users size={30} className="mx-auto text-muted-foreground" />
                 <p className="mt-2 font-semibold text-foreground">No hay usuarios de restaurante</p>
-                <p className="mt-1 text-sm text-muted-foreground">Agrega al menos un mesero, una persona de cocina y un administrador.</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Agrega al menos un mesero, una persona de cocina y un administrador.
+                </p>
               </div>
             ) : (
               <div className="mt-4 space-y-2.5">
-                {staff.map((person) => {
+                {staff.map(person => {
                   const isActive = activeByRole[person.role] === person.id && person.active;
                   return (
-                    <article key={person.id} className={`rounded-2xl border p-3.5 ${isActive ? 'border-primary/35 bg-primary/5' : 'border-border bg-background'}`}>
+                    <article
+                      key={person.id}
+                      className={`rounded-2xl border p-3.5 ${isActive ? 'border-primary/35 bg-primary/5' : 'border-border bg-background'}`}
+                    >
                       <div className="flex flex-wrap items-center gap-3">
-                        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-sm font-bold text-secondary-foreground">{getInitials(person.name)}</span>
+                        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-sm font-bold text-secondary-foreground">
+                          {getInitials(person.name)}
+                        </span>
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="font-semibold text-foreground">{person.name}</p>
                             <Badge variant="outline">{RESTAURANT_ROLE_LABELS[person.role]}</Badge>
-                            {person.pin && <Badge variant="outline" className="border-amber-500/30 text-amber-700 dark:text-amber-300"><KeyRound size={11} /> PIN</Badge>}
-                            {isActive && <Badge className="border-transparent bg-primary text-primary-foreground">En uso</Badge>}
-                            {!person.active && <Badge variant="outline" className="text-muted-foreground">Inactivo</Badge>}
+                            {person.pin && (
+                              <Badge
+                                variant="outline"
+                                className="border-amber-500/30 text-amber-700 dark:text-amber-300"
+                              >
+                                <KeyRound size={11} /> PIN
+                              </Badge>
+                            )}
+                            {isActive && (
+                              <Badge className="border-transparent bg-primary text-primary-foreground">En uso</Badge>
+                            )}
+                            {!person.active && (
+                              <Badge variant="outline" className="text-muted-foreground">
+                                Inactivo
+                              </Badge>
+                            )}
                           </div>
-                          <p className="mt-0.5 text-xs text-muted-foreground">Rol: {RESTAURANT_ROLE_LABELS[person.role]}</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            Rol: {RESTAURANT_ROLE_LABELS[person.role]}
+                          </p>
                         </div>
                         <div className="flex items-center gap-1">
                           {person.active && !isActive && (
-                            <Button variant="outline" className="h-11" onClick={() => { setActive(person.role, person.id); toast.success(`${person.name} queda activo en ${RESTAURANT_ROLE_LABELS[person.role]}.`); }}>
+                            <Button
+                              variant="outline"
+                              className="h-11"
+                              onClick={() => {
+                                setActive(person.role, person.id);
+                                toast.success(`${person.name} queda activo en ${RESTAURANT_ROLE_LABELS[person.role]}.`);
+                              }}
+                            >
                               <ShieldCheck size={16} /> Usar
                             </Button>
                           )}
-                          <button type="button" onClick={() => openEditStaff(person)} className="flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Editar ${person.name}`}><Pencil size={17} /></button>
-                          <button type="button" onClick={() => setDeleteStaffTarget(person)} className="flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Eliminar ${person.name}`}><Trash2 size={17} /></button>
+                          <button
+                            type="button"
+                            onClick={() => openEditStaff(person)}
+                            className="flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            aria-label={`Editar ${person.name}`}
+                          >
+                            <Pencil size={17} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteStaffTarget(person)}
+                            className="flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            aria-label={`Eliminar ${person.name}`}
+                          >
+                            <Trash2 size={17} />
+                          </button>
                         </div>
                       </div>
                     </article>
@@ -380,10 +493,15 @@ export function RestaurantSettingsPage() {
           <section className="flex flex-col gap-3 rounded-2xl border border-border bg-muted/40 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-semibold text-foreground">Cuentas de acceso al sistema</p>
-              <p className="mt-1 text-sm text-muted-foreground">Los usuarios de la lista anterior operan las pantallas del local. Las cuentas con correo y contraseña se administran en Usuarios y roles.</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Los usuarios de la lista anterior operan las pantallas del local. Las cuentas con correo y contraseña se
+                administran en Usuarios y roles.
+              </p>
             </div>
             <Button variant="outline" className="h-11 shrink-0" asChild>
-              <Link to="/users-roles">Abrir Usuarios y roles <ArrowRight size={17} /></Link>
+              <Link to="/users-roles">
+                Abrir Usuarios y roles <ArrowRight size={17} />
+              </Link>
             </Button>
           </section>
         </div>
@@ -393,29 +511,62 @@ export function RestaurantSettingsPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{editingTable ? 'Editar mesa' : 'Nueva mesa'}</DialogTitle>
-            <DialogDescription>El nombre visible es opcional; si lo dejas vacío se usará “Mesa {tableNumber}”.</DialogDescription>
+            <DialogDescription>
+              El nombre visible es opcional; si lo dejas vacío se usará “Mesa {tableNumber}”.
+            </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <Label htmlFor="table-number">Número</Label>
-              <Input id="table-number" type="number" min={1} value={tableNumber} onChange={(event) => setTableNumber(event.target.value)} className="mt-1 h-11" />
+              <Input
+                id="table-number"
+                type="number"
+                min={1}
+                value={tableNumber}
+                onChange={event => setTableNumber(event.target.value)}
+                className="mt-1 h-11"
+              />
             </div>
             <div>
               <Label htmlFor="table-name">Nombre visible</Label>
-              <Input id="table-name" value={tableNameValue} onChange={(event) => setTableNameValue(event.target.value)} placeholder={`Mesa ${tableNumber}`} className="mt-1 h-11" maxLength={40} />
+              <Input
+                id="table-name"
+                value={tableNameValue}
+                onChange={event => setTableNameValue(event.target.value)}
+                placeholder={`Mesa ${tableNumber}`}
+                className="mt-1 h-11"
+                maxLength={40}
+              />
             </div>
             <div>
               <Label htmlFor="table-zone">Zona</Label>
-              <Input id="table-zone" value={tableZone} onChange={(event) => setTableZone(event.target.value)} className="mt-1 h-11" maxLength={40} />
+              <Input
+                id="table-zone"
+                value={tableZone}
+                onChange={event => setTableZone(event.target.value)}
+                className="mt-1 h-11"
+                maxLength={40}
+              />
             </div>
             <div>
               <Label htmlFor="table-capacity">Capacidad</Label>
-              <Input id="table-capacity" type="number" min={1} value={tableCapacity} onChange={(event) => setTableCapacity(event.target.value)} className="mt-1 h-11" />
+              <Input
+                id="table-capacity"
+                type="number"
+                min={1}
+                value={tableCapacity}
+                onChange={event => setTableCapacity(event.target.value)}
+                className="mt-1 h-11"
+              />
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" className="h-11" onClick={() => setTableDialogOpen(false)}>Cancelar</Button>
-            <Button className="h-11" onClick={saveTable} disabled={savingTable}><Save size={17} /> {savingTable ? 'Guardando…' : 'Guardar mesa'}</Button>
+            <Button variant="outline" className="h-11" onClick={() => setTableDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button className="h-11" onClick={saveTable} disabled={savingTable}>
+              <Save size={17} /> {savingTable ? 'Guardando…' : 'Guardar mesa'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -424,17 +575,28 @@ export function RestaurantSettingsPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{editingStaff ? 'Editar usuario' : 'Nuevo usuario del restaurante'}</DialogTitle>
-            <DialogDescription>El PIN es opcional. Si lo defines, se pedirá al cambiar de usuario activo.</DialogDescription>
+            <DialogDescription>
+              El PIN es opcional. Si lo defines, se pedirá al cambiar de usuario activo.
+            </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
             <div>
               <Label htmlFor="staff-name">Nombre</Label>
-              <Input id="staff-name" value={staffName} onChange={(event) => setStaffName(event.target.value)} className="mt-1 h-11" maxLength={60} placeholder="Ej. Camila" />
+              <Input
+                id="staff-name"
+                value={staffName}
+                onChange={event => setStaffName(event.target.value)}
+                className="mt-1 h-11"
+                maxLength={60}
+                placeholder="Ej. Camila"
+              />
             </div>
             <div>
               <Label htmlFor="staff-role">Rol</Label>
-              <Select value={staffRole} onValueChange={(value) => setStaffRole(value as EmpleadoRol)}>
-                <SelectTrigger id="staff-role" className="mt-1 h-11"><SelectValue /></SelectTrigger>
+              <Select value={staffRole} onValueChange={value => setStaffRole(value as EmpleadoRol)}>
+                <SelectTrigger id="staff-role" className="mt-1 h-11">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="mesero">Mesero</SelectItem>
                   <SelectItem value="cocina">Cocina</SelectItem>
@@ -444,7 +606,17 @@ export function RestaurantSettingsPage() {
             </div>
             <div>
               <Label htmlFor="staff-pin">PIN opcional</Label>
-              <Input id="staff-pin" type="password" inputMode="numeric" value={staffPin} onChange={(event) => setStaffPin(event.target.value.replace(/\D/g, ''))} className="mt-1 h-11" maxLength={8} placeholder="4 a 8 dígitos" autoComplete="off" />
+              <Input
+                id="staff-pin"
+                type="password"
+                inputMode="numeric"
+                value={staffPin}
+                onChange={event => setStaffPin(event.target.value.replace(/\D/g, ''))}
+                className="mt-1 h-11"
+                maxLength={8}
+                placeholder="4 a 8 dígitos"
+                autoComplete="off"
+              />
               <p className="mt-1 text-xs text-muted-foreground">Déjalo vacío para no pedir PIN.</p>
             </div>
             {editingStaff && (
@@ -455,15 +627,21 @@ export function RestaurantSettingsPage() {
             )}
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" className="h-11" onClick={() => setStaffDialogOpen(false)}>Cancelar</Button>
-            <Button className="h-11" onClick={saveStaff}><Save size={17} /> Guardar usuario</Button>
+            <Button variant="outline" className="h-11" onClick={() => setStaffDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button className="h-11" onClick={saveStaff}>
+              <Save size={17} /> Guardar usuario
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <ConfirmActionDialog
         open={!!deleteTableTarget}
-        onOpenChange={(open) => { if (!open) setDeleteTableTarget(null); }}
+        onOpenChange={open => {
+          if (!open) setDeleteTableTarget(null);
+        }}
         title="Eliminar mesa"
         description={`Se eliminará ${deleteTableTarget ? settings.tableNames[deleteTableTarget.id] || `Mesa ${deleteTableTarget.number}` : 'la mesa'}. Esta acción no elimina pedidos ya creados.`}
         confirmLabel="Eliminar mesa"
@@ -473,7 +651,9 @@ export function RestaurantSettingsPage() {
 
       <ConfirmActionDialog
         open={!!deleteStaffTarget}
-        onOpenChange={(open) => { if (!open) setDeleteStaffTarget(null); }}
+        onOpenChange={open => {
+          if (!open) setDeleteStaffTarget(null);
+        }}
         title="Eliminar usuario"
         description={`Se quitará a ${deleteStaffTarget?.name || 'esta persona'} del equipo. Si estaba activo, se elegirá otra persona del mismo rol cuando exista.`}
         confirmLabel="Eliminar usuario"

@@ -7,13 +7,7 @@ import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '../../components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../../components/ui/dialog';
 import { Separator } from '../../components/ui/separator';
 import {
   Users,
@@ -45,11 +39,23 @@ import { formatMoney as money } from '../../utils/restaurantFormat';
 // Mismos métodos que acepta el backend; solo el efectivo suma al cuadre de caja.
 const PAYMENT_LABELS = { cash: 'Efectivo', card: 'Tarjeta', digital: 'Digital' } as const;
 
-const NON_KITCHEN_CATEGORIES = ['bebidas', 'gaseosas', 'aguas', 'jugos', 'café', 'te', 'cervezas', 'vinos', 'licores', 'refrescos', 'sodas'];
-const goesToKitchen = (category: string) => !NON_KITCHEN_CATEGORIES.some((c) => category.toLowerCase().includes(c));
+const NON_KITCHEN_CATEGORIES = [
+  'bebidas',
+  'gaseosas',
+  'aguas',
+  'jugos',
+  'café',
+  'te',
+  'cervezas',
+  'vinos',
+  'licores',
+  'refrescos',
+  'sodas',
+];
+const goesToKitchen = (category: string) => !NON_KITCHEN_CATEGORIES.some(c => category.toLowerCase().includes(c));
 
 const nextFreeNumber = (rows: RestaurantTableRecord[]) => {
-  const taken = new Set(rows.map((table) => table.number));
+  const taken = new Set(rows.map(table => table.number));
   let candidate = 1;
   while (taken.has(candidate)) candidate += 1;
   return candidate;
@@ -88,7 +94,10 @@ export function Tables() {
   const { config } = useBusiness();
   const { user } = useAuth();
   const canCollect = canPerformAction(user, 'sales.create');
-  const canEditTables = user?.role === 'owner' || user?.role === 'business_admin' || (!!user?.customRoleId && canPerformAction(user, 'orders.manage'));
+  const canEditTables =
+    user?.role === 'owner' ||
+    user?.role === 'business_admin' ||
+    (!!user?.customRoleId && canPerformAction(user, 'orders.manage'));
   const canManage = canPerformAction(user, 'orders.manage');
   const [tables, setTables] = useState<RestaurantTableRecord[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -104,8 +113,19 @@ export function Tables() {
   const [savingOrder, setSavingOrder] = useState(false);
   const [checkoutView, setCheckoutView] = useState<TableView | null>(null);
   const [checkoutPayments, setCheckoutPayments] = useState<Record<string, string>>({});
-  const checkoutSubtotal = checkoutView ? [...checkoutView.orders.flatMap(o => o.items.map(i => ({ productId: i.productId, quantity: i.quantity, price: i.unitPrice })))].reduce((sum, i) => sum + Math.round((products.find(p => p.id === i.productId)?.price ?? i.price) * i.quantity * 100) / 100, 0) : 0;
-  const checkoutTotal = Math.round((checkoutSubtotal + Math.round(checkoutSubtotal * (config?.taxRate ?? .19) * 100) / 100) * 100) / 100;
+  const checkoutSubtotal = checkoutView
+    ? [
+        ...checkoutView.orders.flatMap(o =>
+          o.items.map(i => ({ productId: i.productId, quantity: i.quantity, price: i.unitPrice })),
+        ),
+      ].reduce(
+        (sum, i) =>
+          sum + Math.round((products.find(p => p.id === i.productId)?.price ?? i.price) * i.quantity * 100) / 100,
+        0,
+      )
+    : 0;
+  const checkoutTotal =
+    Math.round((checkoutSubtotal + Math.round(checkoutSubtotal * (config?.taxRate ?? 0.19) * 100) / 100) * 100) / 100;
   const [closingId, setClosingId] = useState<string | null>(null);
 
   const [formOpen, setFormOpen] = useState(false);
@@ -137,9 +157,9 @@ export function Tables() {
   useEffect(() => {
     let active = true;
     setProducts([]);
-    void dataService.getProducts().then((list) => {
+    void dataService.getProducts().then(list => {
       if (!active) return;
-      setProducts(list.filter((p) => p.productType !== 'ingredient' && p.productType !== 'supplies'));
+      setProducts(list.filter(p => p.productType !== 'ingredient' && p.productType !== 'supplies'));
     });
     return () => {
       active = false;
@@ -147,17 +167,20 @@ export function Tables() {
   }, [user?.businessId]);
 
   const activeOrders = useMemo(
-    () => orders.filter((o) => o.status !== 'delivered' && o.status !== 'cancelled'),
-    [orders]
+    () => orders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled'),
+    [orders],
   );
 
   const tableViews = useMemo<TableView[]>(
     () =>
-      tables.map((table) => {
-        const tableOrders = activeOrders.filter((o) => Number(o.tableNumber) === table.number);
+      tables.map(table => {
+        const tableOrders = activeOrders.filter(o => Number(o.tableNumber) === table.number);
         // Los productos "solo cuenta" viajan dentro del pedido (restaurantMetadata.directProductIds),
         // así que todo el consumo de la mesa sale del backend.
-        const items = tableOrders.reduce((sum, order) => sum + order.items.reduce((s, item) => s + item.quantity, 0), 0);
+        const items = tableOrders.reduce(
+          (sum, order) => sum + order.items.reduce((s, item) => s + item.quantity, 0),
+          0,
+        );
         const inactive = table.status !== 'active';
         return {
           table,
@@ -169,29 +192,29 @@ export function Tables() {
           since: tableOrders[0]?.created_at ?? null,
         };
       }),
-    [tables, activeOrders]
+    [tables, activeOrders],
   );
 
   const stats = useMemo(() => {
-    const occupied = tableViews.filter((view) => view.occupied).length;
+    const occupied = tableViews.filter(view => view.occupied).length;
     return {
       total: tableViews.length,
-      available: tableViews.filter((view) => !view.inactive && !view.occupied).length,
+      available: tableViews.filter(view => !view.inactive && !view.occupied).length,
       occupied,
       open: activeOrders.length,
     };
   }, [tableViews, activeOrders.length]);
 
   const selectedView = useMemo(
-    () => (selectedTable ? tableViews.find((view) => view.table.id === selectedTable.id) ?? null : null),
-    [selectedTable, tableViews]
+    () => (selectedTable ? (tableViews.find(view => view.table.id === selectedTable.id) ?? null) : null),
+    [selectedTable, tableViews],
   );
 
-  const categories = ['Todos', ...Array.from(new Set(products.map((p) => p.category)))];
+  const categories = ['Todos', ...Array.from(new Set(products.map(p => p.category)))];
 
   const filteredProducts = useMemo(
     () =>
-      products.filter((product) => {
+      products.filter(product => {
         const matchSearch =
           product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
           product.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -199,46 +222,57 @@ export function Tables() {
         const matchCat = activeCategory === 'Todos' || product.category === activeCategory;
         return matchSearch && matchCat;
       }),
-    [products, searchTerm, activeCategory]
+    [products, searchTerm, activeCategory],
   );
 
   // Stock is checked against every line of the product: notes can split it into several lines.
-  const quantityInCart = (productId: string) => cart.reduce((sum, item) => sum + (item.productId === productId ? item.quantity : 0), 0);
+  const quantityInCart = (productId: string) =>
+    cart.reduce((sum, item) => sum + (item.productId === productId ? item.quantity : 0), 0);
 
   const addToCart = (product: Product) => {
     if (quantityInCart(product.id) + 1 > product.stock) {
       toast.error(product.stock < 1 ? 'Producto sin stock' : 'Sin stock suficiente');
       return;
     }
-    const line = mergeableLine(cart, product.id, (item) => item.notes);
+    const line = mergeableLine(cart, product.id, item => item.notes);
     if (line) {
-      setCart(cart.map((item) => (item.lineId === line.lineId ? { ...item, quantity: item.quantity + 1 } : item)));
+      setCart(cart.map(item => (item.lineId === line.lineId ? { ...item, quantity: item.quantity + 1 } : item)));
     } else {
       setCart([
         ...cart,
-        { lineId: uniqueRestaurantId('linea'), productId: product.id, name: product.name, price: product.price, quantity: 1, sku: product.sku, sendToKitchen: goesToKitchen(product.category), notes: '' },
+        {
+          lineId: uniqueRestaurantId('linea'),
+          productId: product.id,
+          name: product.name,
+          price: product.price,
+          quantity: 1,
+          sku: product.sku,
+          sendToKitchen: goesToKitchen(product.category),
+          notes: '',
+        },
       ]);
     }
   };
 
   const updateQuantity = (lineId: string, delta: number) => {
-    const cartItem = cart.find((item) => item.lineId === lineId);
-    const product = products.find((p) => p.id === cartItem?.productId);
+    const cartItem = cart.find(item => item.lineId === lineId);
+    const product = products.find(p => p.id === cartItem?.productId);
     if (!product || !cartItem) return;
     const newQty = cartItem.quantity + delta;
     if (newQty < 1) {
-      setCart(cart.filter((item) => item.lineId !== lineId));
+      setCart(cart.filter(item => item.lineId !== lineId));
       return;
     }
     if (delta > 0 && quantityInCart(product.id) + delta > product.stock) {
       toast.error('Sin stock suficiente');
       return;
     }
-    setCart(cart.map((item) => (item.lineId === lineId ? { ...item, quantity: newQty } : item)));
+    setCart(cart.map(item => (item.lineId === lineId ? { ...item, quantity: newQty } : item)));
   };
 
-  const updateLine = (lineId: string, change: Partial<CartItem>) => setCart(cart.map((item) => (item.lineId === lineId ? { ...item, ...change } : item)));
-  const removeFromCart = (lineId: string) => setCart(cart.filter((item) => item.lineId !== lineId));
+  const updateLine = (lineId: string, change: Partial<CartItem>) =>
+    setCart(cart.map(item => (item.lineId === lineId ? { ...item, ...change } : item)));
+  const removeFromCart = (lineId: string) => setCart(cart.filter(item => item.lineId !== lineId));
 
   const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const cartItemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -272,12 +306,24 @@ export function Tables() {
     setSavingTable(true);
     try {
       if (editing) {
-        const updated = await dataService.updateTable(editing.id, { number: parsedNumber, zone: zone.trim(), capacity: parsedCapacity });
-        setTables((prev) => prev.map((table) => (table.id === updated.id ? updated : table)).sort((a, b) => a.number - b.number));
+        const updated = await dataService.updateTable(editing.id, {
+          number: parsedNumber,
+          zone: zone.trim(),
+          capacity: parsedCapacity,
+        });
+        setTables(prev =>
+          prev.map(table => (table.id === updated.id ? updated : table)).sort((a, b) => a.number - b.number),
+        );
         toast.success(`Mesa ${updated.number} actualizada.`);
       } else {
-        const created = await dataService.createTable({ number: parsedNumber, zone: zone.trim(), capacity: parsedCapacity });
-        setTables((prev) => [...prev.filter((table) => table.id !== created.id), created].sort((a, b) => a.number - b.number));
+        const created = await dataService.createTable({
+          number: parsedNumber,
+          zone: zone.trim(),
+          capacity: parsedCapacity,
+        });
+        setTables(prev =>
+          [...prev.filter(table => table.id !== created.id), created].sort((a, b) => a.number - b.number),
+        );
         toast.success(`Mesa ${created.number} creada.`);
       }
       setFormOpen(false);
@@ -292,13 +338,17 @@ export function Tables() {
     const count = Math.min(50, Math.max(1, Number(bulkCount) || 0));
     setSavingTable(true);
     try {
-      const taken = new Set(tables.map((table) => table.number));
+      const taken = new Set(tables.map(table => table.number));
       const created: RestaurantTableRecord[] = [];
       let candidate = 1;
       for (let index = 0; index < count; index += 1) {
         while (taken.has(candidate)) candidate += 1;
         try {
-          const table = await dataService.createTable({ number: candidate, zone: zone.trim(), capacity: Number(capacity) || 4 });
+          const table = await dataService.createTable({
+            number: candidate,
+            zone: zone.trim(),
+            capacity: Number(capacity) || 4,
+          });
           created.push(table);
           taken.add(candidate);
         } catch (error) {
@@ -308,7 +358,11 @@ export function Tables() {
         candidate += 1;
       }
       if (created.length > 0) {
-        setTables((prev) => [...prev.filter((table) => !created.some((row) => row.id === table.id)), ...created].sort((a, b) => a.number - b.number));
+        setTables(prev =>
+          [...prev.filter(table => !created.some(row => row.id === table.id)), ...created].sort(
+            (a, b) => a.number - b.number,
+          ),
+        );
         toast.success(created.length === 1 ? 'Mesa creada.' : `${created.length} mesas creadas.`);
         setFormOpen(false);
       }
@@ -319,9 +373,15 @@ export function Tables() {
 
   const toggleStatus = async (table: RestaurantTableRecord) => {
     try {
-      const updated = await dataService.updateTable(table.id, { status: table.status === 'active' ? 'inactive' : 'active' });
-      setTables((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
-      toast.success(updated.status === 'active' ? `Mesa ${updated.number} habilitada.` : `Mesa ${updated.number} fuera de servicio.`);
+      const updated = await dataService.updateTable(table.id, {
+        status: table.status === 'active' ? 'inactive' : 'active',
+      });
+      setTables(prev => prev.map(row => (row.id === updated.id ? updated : row)));
+      toast.success(
+        updated.status === 'active'
+          ? `Mesa ${updated.number} habilitada.`
+          : `Mesa ${updated.number} fuera de servicio.`,
+      );
       setFormOpen(false);
     } catch (error) {
       toastError(error, 'No se pudo cambiar el estado de la mesa.');
@@ -331,7 +391,7 @@ export function Tables() {
   const removeTable = async (table: RestaurantTableRecord) => {
     try {
       await dataService.deleteTable(table.id);
-      setTables((prev) => prev.filter((row) => row.id !== table.id));
+      setTables(prev => prev.filter(row => row.id !== table.id));
       setFormOpen(false);
       toast.success(`Mesa ${table.number} eliminada.`);
     } catch (error) {
@@ -361,11 +421,17 @@ export function Tables() {
       const kitchenItems = cart.filter(item => item.sendToKitchen);
       const billOnlyItems = cart.filter(item => !item.sendToKitchen);
       await dataService.createOrder({
-        channel: 'table', customer: customerName.trim() || `Mesa ${selectedTable.number}`,
-        tableId: selectedTable.id, tableNumber: selectedTable.number,
+        channel: 'table',
+        customer: customerName.trim() || `Mesa ${selectedTable.number}`,
+        tableId: selectedTable.id,
+        tableNumber: selectedTable.number,
         waiter: user?.name || '',
         items: cart.map(item => ({ productId: item.productId, quantity: item.quantity, notes: item.notes.trim() })),
-        restaurantMetadata: { mesaId: selectedTable.id, meseroId: user?.id || '', directProductIds: billOnlyItems.map(item => item.productId) },
+        restaurantMetadata: {
+          mesaId: selectedTable.id,
+          meseroId: user?.id || '',
+          directProductIds: billOnlyItems.map(item => item.productId),
+        },
       });
 
       const refreshed = await dataService.getOrders();
@@ -376,7 +442,9 @@ export function Tables() {
       const parts: string[] = [];
       if (kitchenCount > 0) parts.push(`${kitchenCount} a cocina`);
       if (billCount > 0) parts.push(`${billCount} a cuenta`);
-      toast.success(`Mesa ${selectedTable.number} actualizada`, { description: parts.join(' · ') + ` · ${money(cartTotal)}` });
+      toast.success(`Mesa ${selectedTable.number} actualizada`, {
+        description: parts.join(' · ') + ` · ${money(cartTotal)}`,
+      });
       setShowOrderModal(false);
       setCart([]);
     } catch (error) {
@@ -404,17 +472,20 @@ export function Tables() {
       if (!parts.length && checkoutTotal === 0) parts.push({ method: 'cash', amount: 0 });
       const pendingKey = `table_checkout_payload:${user?.businessId}:${user?.id}:${view.table.id}`;
       const saved = localStorage.getItem(pendingKey);
-      if (!saved && Math.abs(parts.reduce((sum, p) => sum + p.amount, 0) - checkoutTotal) > .01) throw new Error('Distribuye el total entre los medios de pago.');
-      const payload = saved ? JSON.parse(saved) : {
-        orderIds: view.orders.map(order => order.id),
-        items: [],
-        customer: `Mesa ${view.table.number}`,
-        paymentMethod: parts.length > 1 ? 'split' : parts[0]?.method || 'cash',
-        payments: parts,
-        taxRate: config?.taxRate,
-        cashSessionId: session?.id,
-        idempotencyKey: key,
-      };
+      if (!saved && Math.abs(parts.reduce((sum, p) => sum + p.amount, 0) - checkoutTotal) > 0.01)
+        throw new Error('Distribuye el total entre los medios de pago.');
+      const payload = saved
+        ? JSON.parse(saved)
+        : {
+            orderIds: view.orders.map(order => order.id),
+            items: [],
+            customer: `Mesa ${view.table.number}`,
+            paymentMethod: parts.length > 1 ? 'split' : parts[0]?.method || 'cash',
+            payments: parts,
+            taxRate: config?.taxRate,
+            cashSessionId: session?.id,
+            idempotencyKey: key,
+          };
       localStorage.setItem(pendingKey, JSON.stringify(payload));
       const sale = await dataService.createSale(payload);
       localStorage.removeItem(pendingKey);
@@ -423,9 +494,18 @@ export function Tables() {
       localStorage.removeItem(keyName);
       setOrders(prev => prev.filter(order => !view.orders.some(closed => closed.id === order.id)));
       toast.success(`Mesa ${view.table.number} cerrada`, { description: `Total cobrado: ${money(sale.totalPrice)}` });
-      void dataService.getOrders().then(setOrders).catch(() => undefined);
+      void dataService
+        .getOrders()
+        .then(setOrders)
+        .catch(() => undefined);
     } catch (error) {
-      if (error && typeof error === 'object' && 'status' in error && [400, 403, 404, 409, 422].includes(Number(error.status))) localStorage.removeItem(`table_checkout_payload:${user?.businessId}:${user?.id}:${view.table.id}`);
+      if (
+        error &&
+        typeof error === 'object' &&
+        'status' in error &&
+        [400, 403, 404, 409, 422].includes(Number(error.status))
+      )
+        localStorage.removeItem(`table_checkout_payload:${user?.businessId}:${user?.id}:${view.table.id}`);
       toastError(error, 'No se pudo cerrar la mesa');
     } finally {
       setClosingId(null);
@@ -435,8 +515,9 @@ export function Tables() {
   const handleBarcodeSearch = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter') {
       const code = searchTerm.trim();
-      const product =
-        products.find((p) => p.barcode === code || p.sku.toLowerCase() === code.toLowerCase() || p.codigosBarras?.includes(code));
+      const product = products.find(
+        p => p.barcode === code || p.sku.toLowerCase() === code.toLowerCase() || p.codigosBarras?.includes(code),
+      );
       if (product) {
         addToCart(product);
         setSearchTerm('');
@@ -524,7 +605,9 @@ export function Tables() {
         ) : tableViews.length === 0 ? (
           <Card className="border-dashed p-10 text-center">
             <UtensilsCrossed className="mx-auto h-8 w-8 text-primary" />
-            <p className="mt-3 text-sm text-muted-foreground">Aún no hay mesas. Crea la primera para empezar a tomar pedidos en el salón.</p>
+            <p className="mt-3 text-sm text-muted-foreground">
+              Aún no hay mesas. Crea la primera para empezar a tomar pedidos en el salón.
+            </p>
             <Button style={{ display: canEditTables ? undefined : 'none' }} className="mt-4" onClick={openCreate}>
               <Plus className="h-4 w-4" />
               Crear mesas
@@ -532,7 +615,7 @@ export function Tables() {
           </Card>
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-            {tableViews.map((view) => (
+            {tableViews.map(view => (
               <Card
                 key={view.table.id}
                 className={`min-w-0 p-5 border transition-colors ${view.inactive ? 'cursor-default' : 'cursor-pointer'} ${statusColor(view)}`}
@@ -556,7 +639,7 @@ export function Tables() {
                         className="h-7 w-7"
                         style={{ display: canEditTables ? undefined : 'none' }}
                         aria-label={`Editar mesa ${view.table.number}`}
-                        onClick={(event) => {
+                        onClick={event => {
                           event.stopPropagation();
                           openEdit(view.table);
                         }}
@@ -588,9 +671,10 @@ export function Tables() {
                         className="w-full bg-rose-600 hover:bg-rose-700"
                         style={{ display: canCollect ? undefined : 'none' }}
                         disabled={closingId === view.table.id}
-                        onClick={(event) => {
+                        onClick={event => {
                           event.stopPropagation();
-                          setCheckoutPayments({}); setCheckoutView(view);
+                          setCheckoutPayments({});
+                          setCheckoutView(view);
                         }}
                       >
                         <Receipt size={14} className="mr-1" />
@@ -621,7 +705,9 @@ export function Tables() {
           <DialogHeader className="p-4 sm:p-6 pb-3 sm:pb-4">
             <DialogTitle className="flex items-center gap-2">
               <UtensilsCrossed className="text-primary" size={24} />
-              {selectedView?.occupied ? `Mesa ${selectedTable?.number} · Agregar pedido` : `Abrir Mesa ${selectedTable?.number}`}
+              {selectedView?.occupied
+                ? `Mesa ${selectedTable?.number} · Agregar pedido`
+                : `Abrir Mesa ${selectedTable?.number}`}
             </DialogTitle>
             <DialogDescription>Selecciona productos y envíalos a cocina o directo a la cuenta</DialogDescription>
           </DialogHeader>
@@ -633,18 +719,20 @@ export function Tables() {
                 <Input
                   placeholder="Buscar producto o código..."
                   value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
+                  onChange={event => setSearchTerm(event.target.value)}
                   onKeyDown={handleBarcodeSearch}
                   className="pl-10 h-12 text-base"
                 />
               </div>
               <div className="flex gap-1.5 overflow-x-auto pb-1">
-                {categories.map((cat) => (
+                {categories.map(cat => (
                   <button
                     key={cat}
                     onClick={() => setActiveCategory(cat)}
                     className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
-                      activeCategory === cat ? 'bg-primary text-primary-foreground' : 'bg-accent text-muted-foreground hover:bg-accent/80'
+                      activeCategory === cat
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-accent text-muted-foreground hover:bg-accent/80'
                     }`}
                   >
                     {cat}
@@ -652,7 +740,7 @@ export function Tables() {
                 ))}
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 items-start gap-3 max-h-[50vh] sm:max-h-[60vh] overflow-y-auto pr-1">
-                {filteredProducts.map((product) => (
+                {filteredProducts.map(product => (
                   <Card
                     key={product.id}
                     className="p-5 border cursor-pointer hover:border-primary transition-colors min-h-[80px] outline-none focus:outline-none focus:ring-0"
@@ -661,7 +749,12 @@ export function Tables() {
                     <div className="space-y-1">
                       {productImageUrl(product.image, imagesEnabled(config)) && (
                         <div className="mb-2 flex h-24 items-center justify-center">
-                          <img src={productImageUrl(product.image, true)!} alt={product.name} loading="lazy" className="max-h-full max-w-full rounded-lg object-contain" />
+                          <img
+                            src={productImageUrl(product.image, true)!}
+                            alt={product.name}
+                            loading="lazy"
+                            className="max-h-full max-w-full rounded-lg object-contain"
+                          />
                         </div>
                       )}
                       <p className="text-base font-semibold text-foreground line-clamp-2">{product.name}</p>
@@ -685,18 +778,22 @@ export function Tables() {
 
                 {selectedView && selectedView.items > 0 && (
                   <div className="mb-3 rounded-lg border border-border bg-muted/30 p-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Consumo actual</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Consumo actual
+                    </p>
                     <ul className="mt-2 max-h-36 space-y-1 overflow-y-auto text-sm">
-                      {selectedView.orders.flatMap((order) =>
+                      {selectedView.orders.flatMap(order =>
                         order.items.map((item, index) => (
                           <li key={`${order.id}-${item.productId}-${index}`} className="flex justify-between gap-2">
                             <span className="text-foreground">
                               {item.quantity} × {item.productName}
-                              {item.notes ? <span className="text-xs text-muted-foreground"> · {item.notes}</span> : null}
+                              {item.notes ? (
+                                <span className="text-xs text-muted-foreground"> · {item.notes}</span>
+                              ) : null}
                             </span>
                             <span className="text-muted-foreground">{money(item.unitPrice * item.quantity)}</span>
                           </li>
-                        ))
+                        )),
                       )}
                     </ul>
                     <div className="mt-2 flex justify-between border-t border-border pt-2 text-sm font-semibold">
@@ -709,7 +806,7 @@ export function Tables() {
                 <Input
                   placeholder="Nombre del cliente (opcional)"
                   value={customerName}
-                  onChange={(event) => setCustomerName(event.target.value)}
+                  onChange={event => setCustomerName(event.target.value)}
                   className="mb-3 h-9"
                 />
 
@@ -723,14 +820,18 @@ export function Tables() {
                       <p className="text-xs">Selecciona productos del menú</p>
                     </div>
                   ) : (
-                    cart.map((item) => (
+                    cart.map(item => (
                       <div key={item.lineId} className="bg-accent/50 rounded-lg p-3 border border-border">
                         <div className="flex justify-between items-start mb-2">
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold text-foreground truncate">{item.name}</p>
                             <p className="text-xs text-muted-foreground">{money(item.price)} c/u</p>
                           </div>
-                          <button onClick={() => removeFromCart(item.lineId)} aria-label={`Quitar ${item.name}`} className="ml-1 p-1 hover:text-rose-500 text-muted-foreground">
+                          <button
+                            onClick={() => removeFromCart(item.lineId)}
+                            aria-label={`Quitar ${item.name}`}
+                            className="ml-1 p-1 hover:text-rose-500 text-muted-foreground"
+                          >
                             <X size={14} />
                           </button>
                         </div>
@@ -764,7 +865,7 @@ export function Tables() {
                         </div>
                         <Input
                           value={item.notes}
-                          onChange={(event) => updateLine(item.lineId, { notes: event.target.value })}
+                          onChange={event => updateLine(item.lineId, { notes: event.target.value })}
                           maxLength={300}
                           placeholder="Nota para cocina (ej. sin cebolla)"
                           aria-label={`Nota para cocina de ${item.name}`}
@@ -798,7 +899,11 @@ export function Tables() {
                     disabled={cart.length === 0 || savingOrder}
                     className="flex-1 bg-primary hover:bg-primary-hover"
                   >
-                    {savingOrder ? 'Guardando...' : cart.some((i) => i.sendToKitchen) ? 'Enviar a Cocina' : 'Agregar a Cuenta'}
+                    {savingOrder
+                      ? 'Guardando...'
+                      : cart.some(i => i.sendToKitchen)
+                        ? 'Enviar a Cocina'
+                        : 'Agregar a Cuenta'}
                   </Button>
                 </div>
               </Card>
@@ -817,17 +922,37 @@ export function Tables() {
           <form onSubmit={submitForm} className="space-y-4">
             <div className="grid gap-2">
               <Label htmlFor="table-number">Número de mesa</Label>
-              <Input id="table-number" type="number" min={1} value={tableNumber} onChange={(event) => setTableNumber(event.target.value)} required />
+              <Input
+                id="table-number"
+                type="number"
+                min={1}
+                value={tableNumber}
+                onChange={event => setTableNumber(event.target.value)}
+                required
+              />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="table-zone">
                 Zona <span className="text-muted-foreground">(opcional)</span>
               </Label>
-              <Input id="table-zone" value={zone} onChange={(event) => setZone(event.target.value)} placeholder="Salón, terraza, barra…" />
+              <Input
+                id="table-zone"
+                value={zone}
+                onChange={event => setZone(event.target.value)}
+                placeholder="Salón, terraza, barra…"
+              />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="table-capacity">Capacidad</Label>
-              <Input id="table-capacity" type="number" min={1} max={50} value={capacity} onChange={(event) => setCapacity(event.target.value)} required />
+              <Input
+                id="table-capacity"
+                type="number"
+                min={1}
+                max={50}
+                value={capacity}
+                onChange={event => setCapacity(event.target.value)}
+                required
+              />
             </div>
             <Button type="submit" className="w-full" disabled={savingTable}>
               {savingTable ? 'Guardando…' : editing ? 'Guardar cambios' : 'Crear mesa'}
@@ -838,7 +963,15 @@ export function Tables() {
             <div className="rounded-xl border border-border/60 p-3">
               <p className="text-xs font-semibold text-muted-foreground">Creación rápida de varias mesas</p>
               <div className="mt-2 flex items-center gap-2">
-                <Input type="number" min={1} max={50} value={bulkCount} onChange={(event) => setBulkCount(event.target.value)} className="h-9" aria-label="Cantidad de mesas" />
+                <Input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={bulkCount}
+                  onChange={event => setBulkCount(event.target.value)}
+                  className="h-9"
+                  aria-label="Cantidad de mesas"
+                />
                 <Button variant="outline" onClick={() => void bulkCreate()} disabled={savingTable}>
                   Crear mesas
                 </Button>
@@ -851,7 +984,11 @@ export function Tables() {
               <Button variant="outline" className="flex-1" onClick={() => void toggleStatus(editing)}>
                 {editing.status === 'active' ? 'Poner fuera de servicio' : 'Habilitar mesa'}
               </Button>
-              <Button variant="destructive" className="flex-1" onClick={() => (confirmDelete ? void removeTable(editing) : setConfirmDelete(true))}>
+              <Button
+                variant="destructive"
+                className="flex-1"
+                onClick={() => (confirmDelete ? void removeTable(editing) : setConfirmDelete(true))}
+              >
                 <Trash2 className="h-4 w-4" />
                 {confirmDelete ? 'Confirmar eliminación' : 'Eliminar'}
               </Button>
@@ -859,7 +996,37 @@ export function Tables() {
           )}
         </DialogContent>
       </Dialog>
-      <Dialog open={!!checkoutView} onOpenChange={open => { if (!open && !closingId) setCheckoutView(null); }}><DialogContent className="max-h-[90dvh] overflow-y-auto"><DialogHeader><DialogTitle>Cobrar mesa {checkoutView?.table.number}</DialogTitle><DialogDescription>Registra el pago completo de la mesa con uno o varios medios.</DialogDescription></DialogHeader><p className="font-semibold">Total con impuestos: {money(checkoutTotal)}</p><PaymentFields total={checkoutTotal} values={checkoutPayments} onChange={setCheckoutPayments} disabled={!!closingId} />{checkoutView && localStorage.getItem(`table_checkout_payload:${user?.businessId}:${user?.id}:${checkoutView.table.id}`) && <p className="text-sm">Hay un cobro por confirmar. Se reintentará con los importes guardados.</p>}<Button className="min-h-11" disabled={!!closingId || !checkoutView} onClick={() => checkoutView && void closeTable(checkoutView)}>{closingId ? 'Confirmando…' : 'Confirmar cobro'}</Button></DialogContent></Dialog>
+      <Dialog
+        open={!!checkoutView}
+        onOpenChange={open => {
+          if (!open && !closingId) setCheckoutView(null);
+        }}
+      >
+        <DialogContent className="max-h-[90dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Cobrar mesa {checkoutView?.table.number}</DialogTitle>
+            <DialogDescription>Registra el pago completo de la mesa con uno o varios medios.</DialogDescription>
+          </DialogHeader>
+          <p className="font-semibold">Total con impuestos: {money(checkoutTotal)}</p>
+          <PaymentFields
+            total={checkoutTotal}
+            values={checkoutPayments}
+            onChange={setCheckoutPayments}
+            disabled={!!closingId}
+          />
+          {checkoutView &&
+            localStorage.getItem(`table_checkout_payload:${user?.businessId}:${user?.id}:${checkoutView.table.id}`) && (
+              <p className="text-sm">Hay un cobro por confirmar. Se reintentará con los importes guardados.</p>
+            )}
+          <Button
+            className="min-h-11"
+            disabled={!!closingId || !checkoutView}
+            onClick={() => checkoutView && void closeTable(checkoutView)}
+          >
+            {closingId ? 'Confirmando…' : 'Confirmar cobro'}
+          </Button>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }
