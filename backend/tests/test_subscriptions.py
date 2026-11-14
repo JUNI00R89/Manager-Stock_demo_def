@@ -108,6 +108,15 @@ def check_monthly_renew_and_duplicates(world: World) -> None:
     assert close_to(world.current(owner)["expiresAt"], expiry + timedelta(days=30)), "a rejected duplicate must not change the expiry"
     _, other_business = world.new_owner("otro@subs.local")
     assert world.platform(other_business, action="renew", planId="business", paymentReference="MP-0202").status_code == 409
+    # Same reference typed differently (case, spaces) is still the same payment.
+    assert world.platform(business, action="renew", paymentReference="mp 0202").status_code == 409
+
+    # Renewing while a plan-change request is pending would silently drop the request.
+    world.request(owner, "business")
+    blocked = world.platform(business, action="renew", paymentReference="MP-0203")
+    assert blocked.status_code == 409, blocked.text
+    assert world.current(owner)["pendingPlan"]["id"] == "business", "the pending request survives"
+    assert world.platform(business, action="cancel_request").status_code == 200
 
     listed = {item["businessId"]: item for item in world.client.get("/api/platform/subscriptions", headers=world.sa).json()}
     assert listed[business]["lastPayment"]["paymentReference"] == "MP-0202"

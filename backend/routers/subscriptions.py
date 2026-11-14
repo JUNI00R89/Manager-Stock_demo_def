@@ -119,6 +119,8 @@ def platform_update_subscription(business_id: str, payload: PlatformSubscription
                 action = "subscription_payment_manually_verified"
                 details = {**result, "verificationMode": "manual_by_superadmin"}
             elif payload.action == "renew":
+                if row["status"] == "pending_payment" and row["pending_plan_id"]:
+                    raise HTTPException(409, "Hay una solicitud de cambio de plan pendiente: confírmala o cancélala antes de renovar.")
                 plan_id = _plan_to_renew(conn, business_id, row, payload.planId)
                 result = apply_verified_payment(conn, business_id, plan_id, payload.paymentReference or "", identity["id"])
                 action = "subscription_renewed"
