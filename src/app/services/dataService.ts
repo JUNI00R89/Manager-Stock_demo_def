@@ -4,6 +4,14 @@ import { desktop, isDesktopMode } from './desktop';
 export type SaleStatus = 'completed' | 'pending' | 'cancelled';
 export type PaymentMethod = 'cash' | 'card' | 'digital' | 'split' | 'transfer';
 export type PaymentPartMethod = 'cash' | 'card' | 'digital' | 'transfer';
+/** Result of reading a product spreadsheet; `row` is the spreadsheet row number (header = 1). */
+export type ImportReport = {
+  toCreate: { row: number; sku: string; name: string; category: string }[];
+  skipped: { row: number; sku: string; name: string; archived?: boolean }[];
+  errors: { row: number; message: string }[];
+  newCategories: string[];
+  created: number;
+};
 export interface PaymentPartRecord { method: PaymentPartMethod; amount: number; }
 export interface CashSessionRecord { openedByUserId?: string; id: string; openedBy: string; openingAmount: number; closingAmount?: number | null; expectedAmount?: number | null; difference?: number | null; status: 'open' | 'closed'; openedAt: string; closedAt?: string | null; }
 
@@ -1057,12 +1065,23 @@ export const dataService = {
     } catch (error) {
       if (!canFallbackToLocal(error)) throw error;
       const db = readLocal();
+      // Offline there is no server to generate the code, so an empty SKU gets a local unique one.
+      if (!payload.sku.trim()) payload.sku = uniqueId('PRD');
       if (db.products.some(p => p.sku.toLowerCase() === payload.sku.trim().toLowerCase())) throw new Error('Ya existe un producto con ese SKU.');
       const created: Product = { ...payload, id: input.id || uniqueId('PRD') };
       db.products.push(created);
       if (created.stock > 0) db.movements.unshift({ id: uniqueId('MOV'), productId: created.id, productName: created.name, movementType: 'opening', quantityDelta: created.stock, stockBefore: 0, stockAfter: created.stock, note: 'Existencias iniciales del producto', createdAt: new Date().toISOString() });
       writeLocal(db); return created;
     }
+  },
+  getProductImportTemplate(): Promise<{ fileName: string; dataUrl: string }> {
+    return api('/products/import/template');
+  },
+  previewProductImport(fileName: string, dataUrl: string): Promise<ImportReport> {
+    return api<ImportReport>('/products/import/preview', { method: 'POST', body: JSON.stringify({ fileName, dataUrl }) });
+  },
+  importProducts(fileName: string, dataUrl: string): Promise<ImportReport> {
+    return api<ImportReport>('/products/import', { method: 'POST', body: JSON.stringify({ fileName, dataUrl }) });
   },
   uploadProductImage(id: string, dataUrl: string): Promise<Product> {
     return api<Product>(`/products/${encodeURIComponent(id)}/image`, { method: 'PUT', body: JSON.stringify({ dataUrl }) });

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import unicodedata
 
@@ -62,3 +63,46 @@ def product_out(row: sqlite3.Row) -> dict:
         "trackLots": bool(row["track_lots"]) if "track_lots" in keys else False,
         "defaultLocationId": row["default_location_id"] if "default_location_id" in keys else None,
     }
+
+
+def insert_product(conn: sqlite3.Connection, payload, product_id: str, image: str = "") -> None:
+    """Inserts a validated product plus its opening stock movement; the caller owns the transaction."""
+    from backend.core.context import current_business_id
+    from backend.core.db import audit
+    from backend.services.inventory import get_or_create_lot, insert_movement
+
+    conn.execute(
+        """INSERT INTO products (id,business_id,name,sku,category,price,cost,stock,min_stock,description,image,product_type,unit,
+           supplier_id,barcode,track_lots,default_location_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (product_id, current_business_id(), payload.name.strip(), payload.sku, payload.category.strip(), payload.price,
+         payload.cost, payload.stock, payload.minStock, payload.description.strip(), image,
+         payload.productType, payload.unit, payload.supplierId, payload.barcode.strip(), 1 if payload.trackLots else 0,
+         payload.defaultLocationId),
+    )
+    if payload.stock > 0:
+        lot_id = None
+        if payload.trackLots:
+            lot_id = get_or_create_lot(conn, conn.execute("SELECT * FROM products WHERE id=?", (product_id,)).fetchone(), f"INICIAL-{product_id[-6:]}", None, payload.cost, payload.defaultLocationId)
+            conn.execute("UPDATE product_lots SET quantity=? WHERE id=?", (payload.stock, lot_id))
+        insert_movement(
+            conn, product_id=product_id, movement_type="opening", quantity_delta=payload.stock,
+            stock_before=0, stock_after=payload.stock, note="Existencias iniciales del producto",
+            unit_cost=payload.cost, lot_id=lot_id, location_id=payload.defaultLocationId,
+        )
+    audit(conn, "create", "product", product_id, {"sku": payload.sku})
+
+
+def sku_prefix(category: str) -> str:
+    """First 3 letters of the category, without accents: "Lácteos" -> "LAC"; no letters -> "PRD"."""
+    letters = "".join(ch for ch in unicodedata.normalize("NFD", category) if ch.isascii() and ch.isalpha())
+    return letters[:3].upper() or "PRD"
+
+
+def next_sku(conn: sqlite3.Connection, business_id: str, category: str, reserved: frozenset[str] | set[str] = frozenset()) -> str:
+    """Next free code for the category, after the highest existing number (typed or generated)."""
+    prefix = sku_prefix(category)
+    pattern = re.compile(rf"^{prefix}-(\d{{1,9}})$")  # absurd typed numbers are ignored, so codes stay short
+    existing = [row["sku"] for row in conn.execute("SELECT sku FROM products WHERE business_id=? AND sku LIKE ?", (business_id, f"{prefix}-%"))]
+    numbers = [int(match.group(1)) for sku in [*existing, *reserved] if (match := pattern.match(sku))]
+    return f"{prefix}-{max(numbers, default=0) + 1:04d}"

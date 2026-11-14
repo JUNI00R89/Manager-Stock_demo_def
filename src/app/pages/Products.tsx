@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { AlertTriangle, Boxes, Edit3, History, Package, Plus, Search, Trash2 } from 'lucide-react';
+import { AlertTriangle, Boxes, Edit3, FileSpreadsheet, History, Package, Plus, Search, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { toastError } from '../utils/notifications';
 import { Layout } from '../components/Layout';
 import { ConfirmActionDialog } from '../components/ConfirmActionDialog';
+import { ImportProductsDialog } from '../components/ImportProductsDialog';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -29,6 +30,7 @@ export function Products() {
   const [selectedCategory, setSelectedCategory] = useState('Todas');
   const [loading, setLoading] = useState(true);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const load = async () => {
     try { setProducts(await dataService.getProducts()); }
@@ -63,8 +65,12 @@ export function Products() {
     <div className="mx-auto max-w-7xl space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div><p className="text-sm font-semibold uppercase tracking-[.16em] text-orange-600">Catálogo e inventario</p><h1 className="mt-1 text-3xl font-bold tracking-tight text-foreground">Productos</h1><p className="mt-1 text-muted-foreground">Controla tus productos, existencias y precios desde un solo lugar.</p></div>
-        {canCreateProduct && <Button onClick={() => navigate('/products/new')} className="h-11 bg-orange-600 text-white shadow-sm hover:bg-orange-700"><Plus className="mr-2 h-4 w-4"/>Nuevo producto</Button>}
+        {canCreateProduct && <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setImportOpen(true)} className="h-11"><FileSpreadsheet className="mr-2 h-4 w-4"/>Importar desde Excel</Button>
+          <Button onClick={() => navigate('/products/new')} className="h-11 bg-orange-600 text-white shadow-sm hover:bg-orange-700"><Plus className="mr-2 h-4 w-4"/>Nuevo producto</Button>
+        </div>}
       </div>
+      {canCreateProduct && <ImportProductsDialog open={importOpen} onOpenChange={setImportOpen} onImported={() => void load()} />}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
         <Card className="min-w-0 rounded-2xl border-border/70 p-5 shadow-sm"><div className="flex items-center justify-between gap-2"><span className="text-sm text-muted-foreground">Productos activos</span><Package className="h-5 w-5 shrink-0 text-orange-600"/></div><p className="mt-3 text-3xl font-bold">{products.length}</p><p className="mt-1 text-xs text-muted-foreground">Referencias en el catálogo</p></Card>

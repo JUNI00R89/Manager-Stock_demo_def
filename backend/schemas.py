@@ -29,7 +29,7 @@ class PlatformCreateUserPayload(BaseModel):
 
 class ProductPayload(BaseModel):
     name: str = Field(min_length=2, max_length=120)
-    sku: str = Field(min_length=2, max_length=60)
+    sku: str = Field(default="", max_length=60)  # empty: the server generates one
     category: str = Field(min_length=2, max_length=80)
     price: float = Field(ge=0)
     stock: float = Field(ge=0)
@@ -47,7 +47,10 @@ class ProductPayload(BaseModel):
     @field_validator("sku")
     @classmethod
     def normalize_sku(cls, value: str):
-        return value.strip().upper()
+        value = value.strip().upper()
+        if len(value) == 1:
+            raise ValueError("El código debe tener entre 2 y 60 caracteres.")
+        return value
 
     @field_validator("name", "category", "unit")
     @classmethod
@@ -65,6 +68,12 @@ class ProductPayload(BaseModel):
 class ProductImagePayload(BaseModel):
     # ~500 KB of image once base64-decoded, plus the data-URL header.
     dataUrl: str = Field(min_length=20, max_length=700_000)
+
+
+class ProductImportPayload(BaseModel):
+    fileName: str = Field(min_length=5, max_length=200)
+    # A little over 2 MB once base64-decoded, so the 2 MB check in the service gives the friendly message.
+    dataUrl: str = Field(min_length=20, max_length=2_900_000)
 
 
 class ProductCategoryPayload(BaseModel):

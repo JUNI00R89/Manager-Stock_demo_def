@@ -43,6 +43,8 @@ ROUTE_PERMISSIONS: tuple[tuple[str, str, str], ...] = (
     ("/api/services/professionals*", "services.view", "services.manage"),
     ("/api/services/appointments*", "services.view", "services.manage"),
     ("/api/products", "catalog.view", "catalog.create"),
+    ("/api/products/import/template", "catalog.view", "catalog.view"),
+    ("/api/products/import*", "catalog.create", "catalog.create"),
     ("/api/products/*", "catalog.view", "catalog.edit"),
     ("/api/suppliers", "suppliers.view", "suppliers.manage"),
     ("/api/suppliers/*", "suppliers.view", "suppliers.manage"),
