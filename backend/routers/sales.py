@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Query
 from backend.core.config import CURRENCY, DEFAULT_TAX_RATE
 from backend.core.context import current_business_id, current_identity
 from backend.core.security import has_permission
-from backend.core.db import audit, connection
+from backend.core.db import audit, connection, colombia_now_iso
 from backend.schemas import PaymentPartPayload, SaleItemPayload, SalePayload
 from backend.services.inventory import allows_negative_stock, consume_product_stock, recipe_ingredient_usage, recipe_unit_cost, reverse_movements, validate_product_quantity
 from backend.services.sales import get_sale, get_sales
@@ -227,7 +227,7 @@ def create_sale(payload: SalePayload):
             raise HTTPException(422, "La suma de los métodos de pago debe coincidir con el total de la venta.")
         if not payment_parts and payload.paymentMethod != "split":
             payment_parts = [PaymentPartPayload(method=payload.paymentMethod if payload.paymentMethod != "split" else "cash", amount=total)]
-        now = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+        now = colombia_now_iso()
         sale_id = f"VTA-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
         conn.execute(
             """INSERT INTO sales (id,business_id,idempotency_key,customer,payment_method,currency,subtotal,line_discount,global_discount,tax_rate,tax,total,status,created_by,cash_session_id,created_at)
