@@ -89,6 +89,16 @@ def run() -> None:
         stolen = client.post("/api/sales", headers=seller, json={**sale, "cashSessionId": seller_session})
         assert stolen.status_code == 409 and first.json()["id"] not in stolen.text, stolen.text
 
+        # 4. A sale from a closed till cannot be cancelled: its cash already left in that till's count.
+        till = client.post("/api/cash/sessions", headers=owner, json={"openingAmount": 0}).json()["id"]
+        old_sale = client.post("/api/sales", headers=owner, json={"idempotencyKey": "rev-venta-turno", "items": [{"productId": product["id"], "quantity": 1}], "paymentMethod": "cash", "cashSessionId": till}).json()
+        assert client.post(f"/api/cash/sessions/{till}/close", headers=owner, json={"closingAmount": 22000}).json()["status"] == "closed"
+        late = client.post(f"/api/sales/{old_sale['id']}/cancel", headers=owner)
+        assert late.status_code == 409 and "devoluci" in late.json()["detail"], late.text
+        same_till = client.post("/api/cash/sessions", headers=owner, json={"openingAmount": 0}).json()["id"]
+        fresh = client.post("/api/sales", headers=owner, json={"idempotencyKey": "rev-venta-turno-2", "items": [{"productId": product["id"], "quantity": 1}], "paymentMethod": "cash", "cashSessionId": same_till}).json()
+        assert client.post(f"/api/sales/{fresh['id']}/cancel", headers=owner).status_code == 200, "an open till can still cancel"
+
     print("OK: stock edits need inventory.adjust, appointment charges need services+cash, sale keys are bound to content and user.")
     TEMP.cleanup()
 

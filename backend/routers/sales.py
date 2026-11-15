@@ -314,6 +314,9 @@ def cancel_sale(sale_id: str):
         if sale["status"] == "cancelled":
             conn.commit()
             return get_sale(conn, sale_id)
+        if sale["cash_session_id"] and conn.execute("SELECT 1 FROM cash_sessions WHERE id=? AND status='closed'", (sale["cash_session_id"],)).fetchone():
+            # Its money is already in a closed till count; giving it back must go through the current till.
+            raise HTTPException(409, "La venta pertenece a un turno de caja cerrado. Registra una devolución desde el turno actual.")
         if conn.execute("SELECT 1 FROM service_sale_lines WHERE sale_id=?", (sale_id,)).fetchone():
             raise HTTPException(409, "La cita tiene un cobro vinculado. Registra una devolución desde su comprobante.")
         if conn.execute("SELECT 1 FROM sale_returns WHERE sale_id=?", (sale_id,)).fetchone():
