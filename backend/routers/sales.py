@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import json
+
 import sqlite3
 import uuid
 from datetime import datetime, timezone
@@ -68,8 +71,13 @@ def sale_detail(sale_id: str):
 def create_sale(payload: SalePayload):
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        existing = conn.execute("SELECT id FROM sales WHERE business_id=? AND idempotency_key=?", (current_business_id(), payload.idempotencyKey)).fetchone()
+        # Fingerprint of the request as sent, before the server fills customer or cash session.
+        fingerprint = hashlib.sha256(json.dumps(payload.model_dump(), sort_keys=True, default=str).encode()).hexdigest()
+        existing = conn.execute("SELECT id,created_by,request_hash FROM sales WHERE business_id=? AND idempotency_key=?", (current_business_id(), payload.idempotencyKey)).fetchone()
         if existing:
+            # A retry is the same user sending the same content; anything else must not receive that sale.
+            if existing["created_by"] != current_identity()["id"] or (existing["request_hash"] and existing["request_hash"] != fingerprint):
+                raise HTTPException(409, "La clave de cobro pertenece a otra operación.")
             linked = conn.execute("SELECT appointment_id FROM service_sale_lines WHERE sale_id=?", (existing["id"],)).fetchone()
             if (linked["appointment_id"] if linked else None) != payload.appointmentId:
                 raise HTTPException(409, "La clave de cobro pertenece a otra operación.")
@@ -78,9 +86,18 @@ def create_sale(payload: SalePayload):
         if payload.appointmentId and payload.appointmentIds:
             raise HTTPException(422, "Usa un solo flujo de cobro de citas por operación.")
         appointment = None
-        if payload.appointmentId:
+        if payload.appointmentId or payload.appointmentIds:
+            # Both appointment flows charge the same thing, so they share permissions and the services module check.
             if not has_permission("services.manage") or not has_permission("cash.manage"):
                 raise HTTPException(403, "Necesitas permisos de servicios y caja para cobrar una cita.")
+            settings_row = conn.execute("SELECT settings_json FROM businesses WHERE id=?", (current_business_id(),)).fetchone()
+            try:
+                services_on = bool(json.loads(settings_row["settings_json"] or "{}").get("features", {}).get("services")) if settings_row else False
+            except (ValueError, AttributeError):
+                services_on = False
+            if not services_on:
+                raise HTTPException(403, "El módulo de servicios no está activo en este negocio.")
+        if payload.appointmentId:
             appointment = conn.execute("SELECT * FROM service_appointments WHERE id=? AND business_id=?", (payload.appointmentId, current_business_id())).fetchone()
             if not appointment:
                 raise HTTPException(404, "Cita no encontrada.")
@@ -230,10 +247,10 @@ def create_sale(payload: SalePayload):
         now = colombia_now_iso()
         sale_id = f"VTA-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
         conn.execute(
-            """INSERT INTO sales (id,business_id,idempotency_key,customer,payment_method,currency,subtotal,line_discount,global_discount,tax_rate,tax,total,status,created_by,cash_session_id,created_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            """INSERT INTO sales (id,business_id,idempotency_key,customer,payment_method,currency,subtotal,line_discount,global_discount,tax_rate,tax,total,status,created_by,cash_session_id,created_at,request_hash)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (sale_id, current_business_id(), payload.idempotencyKey, payload.customer.strip() or "Cliente general", payload.paymentMethod,
-             sale_currency, subtotal, line_discount, global_discount, sale_tax_rate, tax, total, payload.status, current_identity()["id"], payload.cashSessionId, now),
+             sale_currency, subtotal, line_discount, global_discount, sale_tax_rate, tax, total, payload.status, current_identity()["id"], payload.cashSessionId, now, fingerprint),
         )
         if appointment:
             conn.execute("INSERT INTO service_sale_lines VALUES (?,?,?,?,?,?)", (sale_id, appointment["id"], appointment["service_id"], appointment["service_name_snapshot"], appointment["price_snapshot"], appointment["price_snapshot"]))
