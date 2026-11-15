@@ -1,8 +1,22 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import {
-  X, Keyboard, Zap, CameraOff, RotateCcw, Camera, Loader2, ShieldAlert, Lock,
-  Package, ShoppingCart, PackagePlus, ClipboardList, AlertTriangle,
-  CheckCircle2, Search, Barcode as BarcodeIcon
+  X,
+  Keyboard,
+  Zap,
+  CameraOff,
+  RotateCcw,
+  Camera,
+  Loader2,
+  ShieldAlert,
+  Lock,
+  Package,
+  ShoppingCart,
+  PackagePlus,
+  ClipboardList,
+  AlertTriangle,
+  CheckCircle2,
+  Search,
+  Barcode as BarcodeIcon,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -44,7 +58,18 @@ interface BarcodeScannerProps {
 // 1) Si el navegador trae BarcodeDetector (Chrome/Edge en Android y otros) se usa: es rápido y no descarga nada.
 // 2) Si no, se carga ZXing desde internet solo cuando hace falta (no requiere instalar nada).
 
-const NATIVE_FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'code_93', 'itf', 'codabar', 'qr_code'];
+const NATIVE_FORMATS = [
+  'ean_13',
+  'ean_8',
+  'upc_a',
+  'upc_e',
+  'code_128',
+  'code_39',
+  'code_93',
+  'itf',
+  'codabar',
+  'qr_code',
+];
 const ZXING_URLS = [
   'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js',
   'https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js',
@@ -62,25 +87,38 @@ function loadZXing(): Promise<any> {
       s.src = ZXING_URLS[i];
       s.async = true;
       s.onload = () => (w.ZXing ? resolve(w.ZXing) : reject(new Error('zxing-missing')));
-      s.onerror = () => { s.remove(); tryLoad(i + 1).then(resolve, reject); };
+      s.onerror = () => {
+        s.remove();
+        tryLoad(i + 1).then(resolve, reject);
+      };
       document.head.appendChild(s);
     });
-  zxingPromise = tryLoad(0).catch(e => { zxingPromise = null; throw e; });
+  zxingPromise = tryLoad(0).catch(e => {
+    zxingPromise = null;
+    throw e;
+  });
   return zxingPromise;
 }
 
 function makeZxingDecoder(Z: any) {
   const hints = new Map();
   hints.set(Z.DecodeHintType.POSSIBLE_FORMATS, [
-    Z.BarcodeFormat.EAN_13, Z.BarcodeFormat.EAN_8, Z.BarcodeFormat.UPC_A, Z.BarcodeFormat.UPC_E,
-    Z.BarcodeFormat.CODE_128, Z.BarcodeFormat.CODE_39, Z.BarcodeFormat.ITF, Z.BarcodeFormat.QR_CODE,
+    Z.BarcodeFormat.EAN_13,
+    Z.BarcodeFormat.EAN_8,
+    Z.BarcodeFormat.UPC_A,
+    Z.BarcodeFormat.UPC_E,
+    Z.BarcodeFormat.CODE_128,
+    Z.BarcodeFormat.CODE_39,
+    Z.BarcodeFormat.ITF,
+    Z.BarcodeFormat.QR_CODE,
   ]);
   hints.set(Z.DecodeHintType.TRY_HARDER, true);
   const reader = new Z.MultiFormatReader();
   reader.setHints(hints);
   const canvas = document.createElement('canvas');
   return (video: HTMLVideoElement): string | null => {
-    const w = video.videoWidth, h = video.videoHeight;
+    const w = video.videoWidth,
+      h = video.videoHeight;
     if (!w || !h) return null;
     canvas.width = w;
     canvas.height = h;
@@ -108,8 +146,13 @@ function beep() {
     o.connect(g);
     g.connect(ctx.destination);
     o.start();
-    setTimeout(() => { o.stop(); ctx.close(); }, 90);
-  } catch { /* sin audio */ }
+    setTimeout(() => {
+      o.stop();
+      ctx.close();
+    }, 90);
+  } catch {
+    /* sin audio */
+  }
 }
 
 // ─── Pantalla de ayuda de cámara (a nivel de módulo: no se recrea en cada render) ───
@@ -127,21 +170,36 @@ function CamOverlay({ cam, detail, onAllow, onRetry, onType }: CamOverlayProps) 
 
   if (cam === 'checking' || cam === 'starting') {
     return (
-      <div className="absolute inset-0 bg-gray-950 flex flex-col items-center justify-center gap-3 text-center p-6" role="status">
+      <div
+        className="absolute inset-0 bg-gray-950 flex flex-col items-center justify-center gap-3 text-center p-6"
+        role="status"
+      >
         <Loader2 className="animate-spin text-orange-400" size={36} />
-        <p className="text-white font-medium">{cam === 'starting' ? 'Abriendo la cámara…' : 'Preparando el escáner…'}</p>
-        {cam === 'starting' && <p className="text-gray-400 text-sm max-w-xs">Si el navegador pregunta, elige "Permitir".</p>}
+        <p className="text-white font-medium">
+          {cam === 'starting' ? 'Abriendo la cámara…' : 'Preparando el escáner…'}
+        </p>
+        {cam === 'starting' && (
+          <p className="text-gray-400 text-sm max-w-xs">Si el navegador pregunta, elige "Permitir".</p>
+        )}
       </div>
     );
   }
 
-  const content: Record<Exclude<CamStatus, 'live' | 'checking' | 'starting'>, {
-    icon: React.ReactNode; title: string; body: React.ReactNode; primary?: { label: string; run: () => void };
-  }> = {
+  const content: Record<
+    Exclude<CamStatus, 'live' | 'checking' | 'starting'>,
+    {
+      icon: React.ReactNode;
+      title: string;
+      body: React.ReactNode;
+      primary?: { label: string; run: () => void };
+    }
+  > = {
     ask: {
       icon: <Camera className="text-orange-400" size={52} />,
       title: 'Usa la cámara para escanear',
-      body: <>Solo se usa para leer códigos de barras. No se guarda ninguna imagen. El navegador te va a pedir permiso.</>,
+      body: (
+        <>Solo se usa para leer códigos de barras. No se guarda ninguna imagen. El navegador te va a pedir permiso.</>
+      ),
       primary: { label: 'Permitir cámara', run: onAllow },
     },
     blocked: {
@@ -152,12 +210,18 @@ function CamOverlay({ cam, detail, onAllow, onRetry, onType }: CamOverlayProps) 
           <p className="text-center">El navegador no deja usar la cámara en este sitio. Para activarla:</p>
           <ol className="list-decimal list-inside space-y-1.5 text-gray-300">
             <li>Toca el candado (o el ícono de cámara) junto a la dirección.</li>
-            <li>En <span className="text-white font-medium">Cámara</span>, elige <span className="text-white font-medium">Permitir</span>.</li>
-            <li>Vuelve aquí y toca <span className="text-white font-medium">Reintentar</span>.</li>
+            <li>
+              En <span className="text-white font-medium">Cámara</span>, elige{' '}
+              <span className="text-white font-medium">Permitir</span>.
+            </li>
+            <li>
+              Vuelve aquí y toca <span className="text-white font-medium">Reintentar</span>.
+            </li>
           </ol>
           <p className="text-xs text-gray-500 flex gap-2">
             <ShieldAlert size={14} className="flex-shrink-0 mt-0.5" />
-            Si ya la habías permitido, en Windows revisa Configuración, Privacidad y seguridad, Cámara, y activa el acceso para aplicaciones de escritorio.
+            Si ya la habías permitido, en Windows revisa Configuración, Privacidad y seguridad, Cámara, y activa el
+            acceso para aplicaciones de escritorio.
           </p>
         </div>
       ),
@@ -166,19 +230,35 @@ function CamOverlay({ cam, detail, onAllow, onRetry, onType }: CamOverlayProps) 
     busy: {
       icon: <CameraOff className="text-amber-400" size={52} />,
       title: 'La cámara está en uso',
-      body: <>Otra aplicación o pestaña (Zoom, Teams, otra ventana del navegador) la está usando. Ciérrala y toca Reintentar. El permiso no es el problema.</>,
+      body: (
+        <>
+          Otra aplicación o pestaña (Zoom, Teams, otra ventana del navegador) la está usando. Ciérrala y toca
+          Reintentar. El permiso no es el problema.
+        </>
+      ),
       primary: { label: 'Reintentar', run: onRetry },
     },
     nocamera: {
       icon: <CameraOff className="text-gray-400" size={52} />,
       title: 'No encontramos una cámara',
-      body: <>Este equipo no tiene cámara disponible. Puedes usar un lector USB o Bluetooth (funciona solo) o escribir el código.</>,
+      body: (
+        <>
+          Este equipo no tiene cámara disponible. Puedes usar un lector USB o Bluetooth (funciona solo) o escribir el
+          código.
+        </>
+      ),
       primary: { label: 'Buscar de nuevo', run: onRetry },
     },
     insecure: {
       icon: <ShieldAlert className="text-amber-400" size={52} />,
       title: 'La cámara necesita una conexión segura',
-      body: <>Los navegadores solo dejan usar la cámara en <span className="text-white font-medium">https</span> o en <span className="text-white font-medium">localhost</span>. Abre la app desde una de esas direcciones, o escribe el código.</>,
+      body: (
+        <>
+          Los navegadores solo dejan usar la cámara en <span className="text-white font-medium">https</span> o en{' '}
+          <span className="text-white font-medium">localhost</span>. Abre la app desde una de esas direcciones, o
+          escribe el código.
+        </>
+      ),
     },
     error: {
       icon: <AlertTriangle className="text-red-400" size={52} />,
@@ -198,7 +278,9 @@ function CamOverlay({ cam, detail, onAllow, onRetry, onType }: CamOverlayProps) 
       aria-labelledby="cam-title"
     >
       <div className="mb-4">{c.icon}</div>
-      <h3 id="cam-title" className="text-white text-xl font-bold mb-3">{c.title}</h3>
+      <h3 id="cam-title" className="text-white text-xl font-bold mb-3">
+        {c.title}
+      </h3>
       <div className="text-gray-400 text-sm mb-6 max-w-sm leading-relaxed">{c.body}</div>
       <div className="flex flex-col sm:flex-row gap-2 w-full max-w-sm">
         {c.primary && (
@@ -206,7 +288,11 @@ function CamOverlay({ cam, detail, onAllow, onRetry, onType }: CamOverlayProps) 
             {c.primary.label}
           </Button>
         )}
-        <Button onClick={onType} variant="outline" className="flex-1 h-12 border-gray-600 bg-transparent text-gray-200 hover:bg-gray-800 hover:text-white">
+        <Button
+          onClick={onType}
+          variant="outline"
+          className="flex-1 h-12 border-gray-600 bg-transparent text-gray-200 hover:bg-gray-800 hover:text-white"
+        >
           <Keyboard size={16} className="mr-2" />
           Escribir código
         </Button>
@@ -255,41 +341,51 @@ export function BarcodeScanner({
   const camRef = useRef(cam);
   camRef.current = cam;
 
-  const processCode = useCallback((code: string) => {
-    const trimmed = code.trim();
-    if (!trimmed) return;
+  const processCode = useCallback(
+    (code: string) => {
+      const trimmed = code.trim();
+      if (!trimmed) return;
 
-    const now = Date.now();
-    // Modo continuo: evita lecturas repetidas muy seguidas
-    if (mode === 'continuous' && now - lastScanRef.current < 1500) return;
-    lastScanRef.current = now;
+      const now = Date.now();
+      // Modo continuo: evita lecturas repetidas muy seguidas
+      if (mode === 'continuous' && now - lastScanRef.current < 1500) return;
+      lastScanRef.current = now;
 
-    setScannedCode(trimmed);
-    // Solo productos reales del negocio: nunca el catálogo demo, que vendería productos inexistentes.
-    const product = products.find(p => p.barcode === trimmed || p.sku?.toLowerCase() === trimmed.toLowerCase() || p.codigosBarras?.includes(trimmed));
-    beep();
-    try { navigator.vibrate?.(60); } catch { /* sin vibración */ }
-
-    if (product) {
-      setDetectedProduct(product);
-      setScannerState('detected');
-
-      if (mode === 'continuous' && context === 'pos') {
-        onSell?.(product);
-        toast.success(`${product.name} añadido`, { description: money(product.price), duration: 1500 });
-        setTimeout(() => {
-          setScannerState('scanning');
-          setDetectedProduct(null);
-          setScannedCode('');
-        }, 1200);
+      setScannedCode(trimmed);
+      // Solo productos reales del negocio: nunca el catálogo demo, que vendería productos inexistentes.
+      const product = products.find(
+        p =>
+          p.barcode === trimmed || p.sku?.toLowerCase() === trimmed.toLowerCase() || p.codigosBarras?.includes(trimmed),
+      );
+      beep();
+      try {
+        navigator.vibrate?.(60);
+      } catch {
+        /* sin vibración */
       }
-    } else {
-      setDetectedProduct(null);
-      setScannerState('not_found');
-    }
 
-    onScan?.(trimmed, product);
-  }, [mode, context, onScan, onSell, products]);
+      if (product) {
+        setDetectedProduct(product);
+        setScannerState('detected');
+
+        if (mode === 'continuous' && context === 'pos') {
+          onSell?.(product);
+          toast.success(`${product.name} añadido`, { description: money(product.price), duration: 1500 });
+          setTimeout(() => {
+            setScannerState('scanning');
+            setDetectedProduct(null);
+            setScannedCode('');
+          }, 1200);
+        }
+      } else {
+        setDetectedProduct(null);
+        setScannerState('not_found');
+      }
+
+      onScan?.(trimmed, product);
+    },
+    [mode, context, onScan, onSell, products],
+  );
 
   const processRef = useRef(processCode);
   processRef.current = processCode;
@@ -303,66 +399,75 @@ export function BarcodeScanner({
     setTorchSupported(false);
   }, []);
 
-  const openCamera = useCallback(async (facing: 'environment' | 'user') => {
-    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
-      setCam('insecure');
-      return;
-    }
-    const myId = ++openIdRef.current;
-    stopStream();
-    setCam('starting');
-    setCamDetail('');
-
-    try {
-      let stream: MediaStream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } },
-          audio: false,
-        });
-      } catch (e: any) {
-        // Si la cámara no soporta esas restricciones, probamos sin ellas
-        if (e?.name === 'OverconstrainedError' || e?.name === 'ConstraintNotSatisfiedError') {
-          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        } else {
-          throw e;
-        }
-      }
-
-      // Llegó tarde (se cerró el escáner o se pidió otro intento): se libera de inmediato
-      if (myId !== openIdRef.current) {
-        stream.getTracks().forEach(t => t.stop());
+  const openCamera = useCallback(
+    async (facing: 'environment' | 'user') => {
+      if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+        setCam('insecure');
         return;
       }
+      const myId = ++openIdRef.current;
+      stopStream();
+      setCam('starting');
+      setCamDetail('');
 
-      streamRef.current = stream;
-      const video = videoRef.current;
-      if (video) {
-        video.srcObject = stream;
-        await video.play().catch(() => { /* autoplay lo resuelve */ });
+      try {
+        let stream: MediaStream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } },
+            audio: false,
+          });
+        } catch (e: any) {
+          // Si la cámara no soporta esas restricciones, probamos sin ellas
+          if (e?.name === 'OverconstrainedError' || e?.name === 'ConstraintNotSatisfiedError') {
+            stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+          } else {
+            throw e;
+          }
+        }
+
+        // Llegó tarde (se cerró el escáner o se pidió otro intento): se libera de inmediato
+        if (myId !== openIdRef.current) {
+          stream.getTracks().forEach(t => t.stop());
+          return;
+        }
+
+        streamRef.current = stream;
+        const video = videoRef.current;
+        if (video) {
+          video.srcObject = stream;
+          await video.play().catch(() => {
+            /* autoplay lo resuelve */
+          });
+        }
+        const track = stream.getVideoTracks()[0];
+        try {
+          setTorchSupported(!!(track?.getCapabilities?.() as any)?.torch);
+        } catch {
+          setTorchSupported(false);
+        }
+        setCam('live');
+      } catch (e: any) {
+        if (myId !== openIdRef.current) return;
+        const name: string = e?.name ?? '';
+        const message: string = e?.message ?? '';
+        if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+          // Cerrar el aviso sin elegir también llega como NotAllowedError: no es un bloqueo real
+          setCam(/dismiss/i.test(message) ? 'ask' : 'blocked');
+        } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+          setCam('nocamera');
+        } else if (name === 'NotReadableError' || name === 'TrackStartError' || name === 'AbortError') {
+          setCam('busy');
+        } else if (name === 'SecurityError') {
+          setCam('insecure');
+        } else {
+          setCam('error');
+          setCamDetail(message || name);
+        }
       }
-      const track = stream.getVideoTracks()[0];
-      try { setTorchSupported(!!(track?.getCapabilities?.() as any)?.torch); } catch { setTorchSupported(false); }
-      setCam('live');
-    } catch (e: any) {
-      if (myId !== openIdRef.current) return;
-      const name: string = e?.name ?? '';
-      const message: string = e?.message ?? '';
-      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
-        // Cerrar el aviso sin elegir también llega como NotAllowedError: no es un bloqueo real
-        setCam(/dismiss/i.test(message) ? 'ask' : 'blocked');
-      } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
-        setCam('nocamera');
-      } else if (name === 'NotReadableError' || name === 'TrackStartError' || name === 'AbortError') {
-        setCam('busy');
-      } else if (name === 'SecurityError') {
-        setCam('insecure');
-      } else {
-        setCam('error');
-        setCamDetail(message || name);
-      }
-    }
-  }, [stopStream]);
+    },
+    [stopStream],
+  );
 
   // Al montar: si el permiso ya está dado se abre sola; si no, se pregunta con un botón
   useEffect(() => {
@@ -420,7 +525,9 @@ export function BarcodeScanner({
             if (!dead) setEngine('native');
             return;
           }
-        } catch { /* se usa ZXing */ }
+        } catch {
+          /* se usa ZXing */
+        }
       }
       try {
         const Z = await loadZXing();
@@ -430,7 +537,9 @@ export function BarcodeScanner({
         if (!dead) setEngine('none');
       }
     })();
-    return () => { dead = true; };
+    return () => {
+      dead = true;
+    };
   }, []);
 
   // Bucle de lectura: solo mientras la cámara está viva y se está escaneando
@@ -460,34 +569,50 @@ export function BarcodeScanner({
             processRef.current(code);
           }
         }
-      } catch { /* cuadro sin código */ } finally {
+      } catch {
+        /* cuadro sin código */
+      } finally {
         busy = false;
       }
     };
 
     const id = setInterval(tick, 220);
-    return () => { stopped = true; clearInterval(id); };
+    return () => {
+      stopped = true;
+      clearInterval(id);
+    };
   }, [cam, scannerState, engine]);
 
   // ── Lector USB / Bluetooth (emula teclado) ─────────────────────────────────
 
-  const handleHiddenKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      const code = keyboardBufferRef.current;
-      keyboardBufferRef.current = '';
-      if (code.length > 3) processCode(code);
-      return;
-    }
-    if (keyboardTimerRef.current) clearTimeout(keyboardTimerRef.current);
-    keyboardBufferRef.current += e.key.length === 1 ? e.key : '';
-    // los lectores escriben muy rápido; si hay pausa larga se descarta
-    keyboardTimerRef.current = setTimeout(() => { keyboardBufferRef.current = ''; }, 100);
-  }, [processCode]);
+  const handleHiddenKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+        const code = keyboardBufferRef.current;
+        keyboardBufferRef.current = '';
+        if (code.length > 3) processCode(code);
+        return;
+      }
+      if (keyboardTimerRef.current) clearTimeout(keyboardTimerRef.current);
+      keyboardBufferRef.current += e.key.length === 1 ? e.key : '';
+      // los lectores escriben muy rápido; si hay pausa larga se descarta
+      keyboardTimerRef.current = setTimeout(() => {
+        keyboardBufferRef.current = '';
+      }, 100);
+    },
+    [processCode],
+  );
 
   useEffect(() => {
     const keepFocus = (e: MouseEvent) => {
       const t = e.target as HTMLElement | null;
-      if (scannerState === 'scanning' && hiddenInputRef.current && t !== hiddenInputRef.current && t !== typingInputRef.current && !t?.closest('button')) {
+      if (
+        scannerState === 'scanning' &&
+        hiddenInputRef.current &&
+        t !== hiddenInputRef.current &&
+        t !== typingInputRef.current &&
+        !t?.closest('button')
+      ) {
         hiddenInputRef.current.focus();
       }
     };
@@ -502,7 +627,9 @@ export function BarcodeScanner({
 
   // Esc cierra el escáner
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
@@ -611,11 +738,17 @@ export function BarcodeScanner({
           <div className="absolute bottom-6 left-0 right-0 flex flex-col items-center gap-2 pointer-events-none px-4">
             <div className="bg-black/65 px-4 py-2 rounded-full text-sm text-white flex items-center gap-2">
               {engine === 'loading' ? (
-                <><Loader2 size={16} className="animate-spin text-orange-400" /> Preparando el lector…</>
+                <>
+                  <Loader2 size={16} className="animate-spin text-orange-400" /> Preparando el lector…
+                </>
               ) : engine === 'none' ? (
-                <><AlertTriangle size={16} className="text-amber-400" /> Lector automático no disponible</>
+                <>
+                  <AlertTriangle size={16} className="text-amber-400" /> Lector automático no disponible
+                </>
               ) : (
-                <><BarcodeIcon size={16} className="text-orange-400" /> Apunta al código de barras</>
+                <>
+                  <BarcodeIcon size={16} className="text-orange-400" /> Apunta al código de barras
+                </>
               )}
             </div>
             {engine === 'none' && (
@@ -661,7 +794,10 @@ export function BarcodeScanner({
                 </Button>
                 {!live && cam !== 'checking' && cam !== 'starting' && (
                   <button
-                    onClick={() => { setScannerState('scanning'); if (cam === 'ask') openCamera(facingMode); }}
+                    onClick={() => {
+                      setScannerState('scanning');
+                      if (cam === 'ask') openCamera(facingMode);
+                    }}
                     className="w-full text-center text-sm text-orange-400 hover:text-orange-300 py-1"
                   >
                     Volver a la cámara
@@ -673,7 +809,10 @@ export function BarcodeScanner({
         </AnimatePresence>
 
         {/* Controles superiores */}
-        <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 pb-2" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))' }}>
+        <div
+          className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 pb-2"
+          style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))' }}
+        >
           <button
             onClick={onClose}
             aria-label="Cerrar escáner"
@@ -739,7 +878,11 @@ export function BarcodeScanner({
                   <h3 className="text-white font-bold">Producto no encontrado</h3>
                   <p className="text-gray-400 text-sm mt-1 font-mono break-all">{scannedCode}</p>
                   <div className="flex gap-2 mt-4">
-                    <Button onClick={handleReset} variant="outline" className="flex-1 border-gray-600 bg-transparent text-gray-300 hover:bg-gray-800 hover:text-white">
+                    <Button
+                      onClick={handleReset}
+                      variant="outline"
+                      className="flex-1 border-gray-600 bg-transparent text-gray-300 hover:bg-gray-800 hover:text-white"
+                    >
                       Escanear otro
                     </Button>
                     <Button
@@ -798,7 +941,14 @@ export function BarcodeScanner({
               <div className="grid grid-cols-3 gap-2">
                 {(context === 'pos' || !context) && (
                   <Button
-                    onClick={() => { onSell?.(detectedProduct); if (mode === 'single') { onClose(); } else { handleReset(); } }}
+                    onClick={() => {
+                      onSell?.(detectedProduct);
+                      if (mode === 'single') {
+                        onClose();
+                      } else {
+                        handleReset();
+                      }
+                    }}
                     className="bg-green-600 hover:bg-green-700 text-white flex flex-col h-16 gap-1"
                   >
                     <ShoppingCart size={18} />
@@ -807,7 +957,10 @@ export function BarcodeScanner({
                 )}
                 {(context === 'receive' || context === 'pos') && (
                   <Button
-                    onClick={() => { onReceive?.(detectedProduct); handleReset(); }}
+                    onClick={() => {
+                      onReceive?.(detectedProduct);
+                      handleReset();
+                    }}
                     className="bg-blue-600 hover:bg-blue-700 text-white flex flex-col h-16 gap-1"
                   >
                     <PackagePlus size={18} />
@@ -815,7 +968,10 @@ export function BarcodeScanner({
                   </Button>
                 )}
                 <Button
-                  onClick={() => { onCount?.(detectedProduct); handleReset(); }}
+                  onClick={() => {
+                    onCount?.(detectedProduct);
+                    handleReset();
+                  }}
                   variant="outline"
                   className="border-gray-600 bg-transparent text-gray-300 hover:bg-gray-800 hover:text-white flex flex-col h-16 gap-1"
                 >
@@ -824,7 +980,10 @@ export function BarcodeScanner({
                 </Button>
               </div>
 
-              <button onClick={handleReset} className="w-full mt-3 text-center text-xs text-gray-400 hover:text-gray-200 py-2">
+              <button
+                onClick={handleReset}
+                className="w-full mt-3 text-center text-xs text-gray-400 hover:text-gray-200 py-2"
+              >
                 Escanear otro código
               </button>
             </motion.div>
@@ -833,7 +992,9 @@ export function BarcodeScanner({
           {scannerState === 'scanning' && (
             <motion.div key="scanning" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-5 text-center">
               <p className="text-gray-300 text-sm">
-                {live ? 'Apunta la cámara al código de barras o usa un lector USB/Bluetooth' : 'También puedes usar un lector USB/Bluetooth o escribir el código'}
+                {live
+                  ? 'Apunta la cámara al código de barras o usa un lector USB/Bluetooth'
+                  : 'También puedes usar un lector USB/Bluetooth o escribir el código'}
               </p>
               <p className="text-gray-500 text-xs mt-1">El lector USB funciona automáticamente: solo escanea</p>
             </motion.div>

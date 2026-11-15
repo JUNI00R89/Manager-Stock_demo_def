@@ -2,12 +2,37 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Store, UtensilsCrossed, Hotel, Warehouse, Scissors,
-  ChevronRight, ChevronLeft, Check, Sandwich, Building2, ShoppingBag, Bike,
-  Armchair, Pizza, Soup, Beef, CookingPot, Pencil, ClipboardList, Wallet,
-  Package, type LucideIcon
+  Store,
+  UtensilsCrossed,
+  Hotel,
+  Warehouse,
+  Scissors,
+  ChevronRight,
+  ChevronLeft,
+  Check,
+  Sandwich,
+  Building2,
+  ShoppingBag,
+  Bike,
+  Armchair,
+  Pizza,
+  Soup,
+  Beef,
+  CookingPot,
+  Pencil,
+  ClipboardList,
+  Wallet,
+  Package,
+  type LucideIcon,
 } from 'lucide-react';
-import { useBusiness, DEFAULT_CONFIGS, DEFAULT_BUSINESS_THEMES, type BusinessType, type BusinessConfig, type FoodBusinessConfig } from '../context/BusinessContext';
+import {
+  useBusiness,
+  DEFAULT_CONFIGS,
+  DEFAULT_BUSINESS_THEMES,
+  type BusinessType,
+  type BusinessConfig,
+  type FoodBusinessConfig,
+} from '../context/BusinessContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card } from '../components/ui/card';
@@ -68,28 +93,28 @@ const BUSINESS_TYPES = [
 // ─── Food sub-wizard data ─────────────────────────────────────────────────────
 
 const SERVICE_MODES = [
-  { id: 'mostrador',   label: 'Mostrador',     icon: Store, desc: 'Atención directa al cliente' },
-  { id: 'para_llevar', label: 'Para llevar',   icon: ShoppingBag, desc: 'El cliente recoge y se va' },
-  { id: 'domicilio',   label: 'A domicilio',   icon: Bike, desc: 'Despacho a la puerta' },
-  { id: 'mesas',       label: 'Mesas en local', icon: Armchair, desc: 'Clientes que comen aquí' },
+  { id: 'mostrador', label: 'Mostrador', icon: Store, desc: 'Atención directa al cliente' },
+  { id: 'para_llevar', label: 'Para llevar', icon: ShoppingBag, desc: 'El cliente recoge y se va' },
+  { id: 'domicilio', label: 'A domicilio', icon: Bike, desc: 'Despacho a la puerta' },
+  { id: 'mesas', label: 'Mesas en local', icon: Armchair, desc: 'Clientes que comen aquí' },
 ];
 
 const FOOD_TYPES = [
-  { id: 'hamburguesas', label: 'Hamburguesas',  icon: Sandwich },
-  { id: 'salchipapas',  label: 'Salchipapas',   icon: CookingPot },
-  { id: 'empanadas',    label: 'Empanadas',      icon: Soup },
+  { id: 'hamburguesas', label: 'Hamburguesas', icon: Sandwich },
+  { id: 'salchipapas', label: 'Salchipapas', icon: CookingPot },
+  { id: 'empanadas', label: 'Empanadas', icon: Soup },
   { id: 'pollo_asados', label: 'Pollo / Asados', icon: Beef },
-  { id: 'casera',       label: 'Comida casera',  icon: CookingPot },
-  { id: 'variadas',     label: 'Variadas',       icon: Pizza },
-  { id: 'otro',         label: 'Otro',           icon: Pencil, custom: true },
+  { id: 'casera', label: 'Comida casera', icon: CookingPot },
+  { id: 'variadas', label: 'Variadas', icon: Pizza },
+  { id: 'otro', label: 'Otro', icon: Pencil, custom: true },
 ];
 
 const MODULE_OPTIONS = [
-  { id: 'menu',        label: 'Productos / Menú',       icon: ClipboardList, desc: 'Tu carta digital' },
-  { id: 'pedidos',     label: 'Pedidos / Preparación',  icon: ClipboardList, desc: 'Control de comandas y cocina' },
-  { id: 'caja',        label: 'Caja / Ventas',          icon: Wallet, desc: 'Cobrar, tickets, cierre' },
-  { id: 'inventario',  label: 'Inventario',             icon: Package, desc: 'Existencias de productos preparados o envasados' },
-  { id: 'mesas',       label: 'Mesas',                  icon: Armchair, desc: 'Mapa de mesas y comandas' },
+  { id: 'menu', label: 'Productos / Menú', icon: ClipboardList, desc: 'Tu carta digital' },
+  { id: 'pedidos', label: 'Pedidos / Preparación', icon: ClipboardList, desc: 'Control de comandas y cocina' },
+  { id: 'caja', label: 'Caja / Ventas', icon: Wallet, desc: 'Cobrar, tickets, cierre' },
+  { id: 'inventario', label: 'Inventario', icon: Package, desc: 'Existencias de productos preparados o envasados' },
+  { id: 'mesas', label: 'Mesas', icon: Armchair, desc: 'Mapa de mesas y comandas' },
   // 'domicilios' se ofrecerá cuando exista su pantalla; activarlo no mostraba nada.
 ];
 
@@ -118,9 +143,10 @@ function ChipSelect({ options, selected, onChange, customValue = '', onCustomCha
               type="button"
               onClick={() => toggle(opt.id)}
               className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-medium transition-all
-                ${active
-                  ? 'border-orange-500 bg-orange-50 dark:bg-orange-950/50 text-orange-700 dark:text-orange-300 ring-1 ring-orange-500/50'
-                  : 'border-border bg-background text-foreground hover:border-orange-300 hover:bg-orange-50/50 dark:hover:bg-orange-950/20'
+                ${
+                  active
+                    ? 'border-orange-500 bg-orange-50 dark:bg-orange-950/50 text-orange-700 dark:text-orange-300 ring-1 ring-orange-500/50'
+                    : 'border-border bg-background text-foreground hover:border-orange-300 hover:bg-orange-50/50 dark:hover:bg-orange-950/20'
                 }`}
             >
               <opt.icon size={16} className={active ? 'text-[var(--brand-primary)]' : 'text-muted-foreground'} />
@@ -151,9 +177,9 @@ export function BusinessSetup() {
   const isReconfiguring = new URLSearchParams(window.location.search).get('reconfigure') === '1';
 
   // When reconfiguring, reuse existing values so users only change what they intend to change.
-  const knownFoodTypeIds = FOOD_TYPES.map((food) => food.id);
+  const knownFoodTypeIds = FOOD_TYPES.map(food => food.id);
   const existingFoodTypes = existingConfig?.foodConfig?.foodTypes ?? [];
-  const existingCustomFood = existingFoodTypes.find((food) => !knownFoodTypeIds.includes(food));
+  const existingCustomFood = existingFoodTypes.find(food => !knownFoodTypeIds.includes(food));
 
   // Wizard step: 0 = type, 1 = food config (only restaurant), 2 = name
   const [step, setStep] = useState(0);
@@ -162,9 +188,13 @@ export function BusinessSetup() {
 
   // Food sub-wizard state
   const [serviceModes, setServiceModes] = useState<string[]>(existingConfig?.foodConfig?.serviceModes ?? []);
-  const [foodTypes, setFoodTypes] = useState<string[]>(existingFoodTypes.filter((food) => knownFoodTypeIds.includes(food)).concat(existingCustomFood ? ['otro'] : []));
+  const [foodTypes, setFoodTypes] = useState<string[]>(
+    existingFoodTypes.filter(food => knownFoodTypeIds.includes(food)).concat(existingCustomFood ? ['otro'] : []),
+  );
   const [customFood, setCustomFood] = useState(existingCustomFood ?? '');
-  const [activeModules, setActiveModules] = useState<string[]>(existingConfig?.foodConfig?.activeModules ?? ['menu', 'caja', 'inventario']);
+  const [activeModules, setActiveModules] = useState<string[]>(
+    existingConfig?.foodConfig?.activeModules ?? ['menu', 'caja', 'inventario'],
+  );
   const [savingConfig, setSavingConfig] = useState(false);
 
   const isFood = selectedType === 'restaurant';
@@ -189,7 +219,7 @@ export function BusinessSetup() {
   const handleContinueFood = () => {
     const hasCatalog = activeModules.includes('menu') || activeModules.includes('inventario');
     const requiresCatalog = activeModules.includes('caja') || activeModules.includes('pedidos');
-    const hasCoreModule = activeModules.some((module) => ['menu', 'inventario', 'caja', 'pedidos'].includes(module));
+    const hasCoreModule = activeModules.some(module => ['menu', 'inventario', 'caja', 'pedidos'].includes(module));
     if (serviceModes.length === 0 || foodTypes.length === 0 || activeModules.length === 0) return;
     if (!hasCoreModule || (requiresCatalog && !hasCatalog)) return;
     if (foodTypes.includes('otro') && !customFood.trim()) return;
@@ -214,9 +244,10 @@ export function BusinessSetup() {
         inventory: activeModules.includes('inventario'),
       };
 
-      const resolvedFoodTypes = foodTypes.includes('otro') && customFood.trim()
-        ? [...foodTypes.filter(f => f !== 'otro'), customFood.trim()]
-        : foodTypes;
+      const resolvedFoodTypes =
+        foodTypes.includes('otro') && customFood.trim()
+          ? [...foodTypes.filter(f => f !== 'otro'), customFood.trim()]
+          : foodTypes;
 
       foodConfig = {
         serviceModes,
@@ -249,7 +280,13 @@ export function BusinessSetup() {
   // ── Step 0: Type selection ────────────────────────────────────────────────
 
   const StepType = () => (
-    <motion.div key="step-type" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="space-y-4">
+    <motion.div
+      key="step-type"
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: 20 }}
+      className="space-y-4"
+    >
       <div>
         <h2 className="text-xl font-bold text-foreground">¿Qué tipo de negocio tienes?</h2>
         <p className="text-sm text-muted-foreground mt-1">Elige el que mejor describe tu actividad</p>
@@ -264,14 +301,19 @@ export function BusinessSetup() {
               onClick={() => handleSelectType(biz.type)}
               className={`w-full flex items-center gap-4 p-4 rounded-2xl border border-border bg-card hover:border-orange-400 hover:shadow-sm transition-all text-left group`}
             >
-              <div className={`w-12 h-12 rounded-xl ${biz.bg} flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform`}>
+              <div
+                className={`w-12 h-12 rounded-xl ${biz.bg} flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform`}
+              >
                 <Icon size={22} className={biz.color} />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-foreground text-sm">{biz.label}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">{biz.desc}</p>
               </div>
-              <ChevronRight size={18} className="text-muted-foreground flex-shrink-0 group-hover:text-orange-500 transition-colors" />
+              <ChevronRight
+                size={18}
+                className="text-muted-foreground flex-shrink-0 group-hover:text-orange-500 transition-colors"
+              />
             </button>
           );
         })}
@@ -289,12 +331,23 @@ export function BusinessSetup() {
   const StepFoodConfig = () => {
     const hasCatalog = activeModules.includes('menu') || activeModules.includes('inventario');
     const requiresCatalog = activeModules.includes('caja') || activeModules.includes('pedidos');
-    const hasCoreModule = activeModules.some((module) => ['menu', 'inventario', 'caja', 'pedidos'].includes(module));
-    const canContinue = serviceModes.length > 0 && foodTypes.length > 0 && activeModules.length > 0
-      && hasCoreModule && (!requiresCatalog || hasCatalog) && (!foodTypes.includes('otro') || Boolean(customFood.trim()));
+    const hasCoreModule = activeModules.some(module => ['menu', 'inventario', 'caja', 'pedidos'].includes(module));
+    const canContinue =
+      serviceModes.length > 0 &&
+      foodTypes.length > 0 &&
+      activeModules.length > 0 &&
+      hasCoreModule &&
+      (!requiresCatalog || hasCatalog) &&
+      (!foodTypes.includes('otro') || Boolean(customFood.trim()));
 
     return (
-      <motion.div key="step-food" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
+      <motion.div
+        key="step-food"
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -20 }}
+        className="space-y-6"
+      >
         <div>
           <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
             <Sandwich size={22} className="text-orange-500" /> Cuéntanos de tu negocio
@@ -309,9 +362,7 @@ export function BusinessSetup() {
             <p className="text-xs text-muted-foreground">Podés seleccionar varias</p>
           </div>
           <ChipSelect options={SERVICE_MODES} selected={serviceModes} onChange={setServiceModes} />
-          {serviceModes.length === 0 && (
-            <p className="text-xs text-red-500">Seleccioná al menos una modalidad</p>
-          )}
+          {serviceModes.length === 0 && <p className="text-xs text-red-500">Seleccioná al menos una modalidad</p>}
         </div>
 
         {/* Q2 */}
@@ -327,9 +378,7 @@ export function BusinessSetup() {
             customValue={customFood}
             onCustomChange={setCustomFood}
           />
-          {foodTypes.length === 0 && (
-            <p className="text-xs text-red-500">Seleccioná al menos uno.</p>
-          )}
+          {foodTypes.length === 0 && <p className="text-xs text-red-500">Seleccioná al menos uno.</p>}
           {foodTypes.includes('otro') && !customFood.trim() && (
             <p className="text-xs text-red-500">Escribe el tipo de comida personalizado.</p>
           )}
@@ -350,18 +399,25 @@ export function BusinessSetup() {
                 <button
                   key={mod.id}
                   type="button"
-                  onClick={() => setActiveModules(prev =>
-                    prev.includes(mod.id) ? prev.filter(m => m !== mod.id) : [...prev, mod.id]
-                  )}
+                  onClick={() =>
+                    setActiveModules(prev =>
+                      prev.includes(mod.id) ? prev.filter(m => m !== mod.id) : [...prev, mod.id],
+                    )
+                  }
                   className={`flex items-start gap-2 p-3 rounded-xl border text-left text-sm transition-all
-                    ${active
-                      ? 'border-orange-500 bg-orange-50 dark:bg-orange-950/50 ring-1 ring-orange-500/40'
-                      : 'border-border bg-background hover:border-orange-300'
+                    ${
+                      active
+                        ? 'border-orange-500 bg-orange-50 dark:bg-orange-950/50 ring-1 ring-orange-500/40'
+                        : 'border-border bg-background hover:border-orange-300'
                     }`}
                 >
-                <mod.icon size={18} className={active ? 'text-[var(--brand-primary)]' : 'text-muted-foreground'} />
+                  <mod.icon size={18} className={active ? 'text-[var(--brand-primary)]' : 'text-muted-foreground'} />
                   <div className="min-w-0">
-                    <p className={`font-medium leading-tight ${active ? 'text-orange-700 dark:text-orange-300' : 'text-foreground'}`}>{mod.label}</p>
+                    <p
+                      className={`font-medium leading-tight ${active ? 'text-orange-700 dark:text-orange-300' : 'text-foreground'}`}
+                    >
+                      {mod.label}
+                    </p>
                     <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{mod.desc}</p>
                     {suggested && !active && (
                       <p className="text-[10px] text-orange-500 mt-0.5 font-medium">Sugerido ↑</p>
@@ -373,8 +429,14 @@ export function BusinessSetup() {
           </div>
         </div>
 
-        {!hasCoreModule && <p className="text-xs text-red-500">Activa al menos un módulo principal: Menú, Pedidos, Caja o Inventario.</p>}
-        {requiresCatalog && !hasCatalog && <p className="text-xs text-red-500">Para usar Caja o Pedidos, activa Menú o Inventario para poder seleccionar productos.</p>}
+        {!hasCoreModule && (
+          <p className="text-xs text-red-500">Activa al menos un módulo principal: Menú, Pedidos, Caja o Inventario.</p>
+        )}
+        {requiresCatalog && !hasCatalog && (
+          <p className="text-xs text-red-500">
+            Para usar Caja o Pedidos, activa Menú o Inventario para poder seleccionar productos.
+          </p>
+        )}
 
         <div className="flex gap-3">
           <Button variant="outline" onClick={handleBack} className="flex-1">
@@ -399,12 +461,16 @@ export function BusinessSetup() {
     const Icon = typeInfo?.icon ?? Building2;
 
     // Summary chips for food businesses
-    const summaryChips = isFood ? [
-      ...serviceModes.map(m => SERVICE_MODES.find(s => s.id === m)?.label ?? m),
-    ] : [];
+    const summaryChips = isFood ? [...serviceModes.map(m => SERVICE_MODES.find(s => s.id === m)?.label ?? m)] : [];
 
     return (
-      <motion.div key="step-name" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
+      <motion.div
+        key="step-name"
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -20 }}
+        className="space-y-6"
+      >
         <div>
           <h2 className="text-xl font-bold text-foreground">¡Ya casi está!</h2>
           <p className="text-sm text-muted-foreground mt-1">Poné el nombre de tu negocio para empezar</p>
@@ -418,13 +484,18 @@ export function BusinessSetup() {
                 <Icon size={20} className={typeInfo.color} />
               </div>
               <div>
-                <p className="font-semibold text-foreground text-sm">{isFood ? 'Negocio de comidas' : typeInfo.label}</p>
+                <p className="font-semibold text-foreground text-sm">
+                  {isFood ? 'Negocio de comidas' : typeInfo.label}
+                </p>
                 {isFood && foodTypes.length > 0 && (
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {foodTypes.slice(0, 3).map(f => {
-                      const ft = FOOD_TYPES.find(t => t.id === f);
-                      return ft ? ft.label : f;
-                    }).join(' · ')}
+                    {foodTypes
+                      .slice(0, 3)
+                      .map(f => {
+                        const ft = FOOD_TYPES.find(t => t.id === f);
+                        return ft ? ft.label : f;
+                      })
+                      .join(' · ')}
                     {foodTypes.length > 3 ? ` +${foodTypes.length - 3}` : ''}
                   </p>
                 )}
@@ -433,7 +504,10 @@ export function BusinessSetup() {
             {isFood && summaryChips.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {summaryChips.map(c => (
-                  <span key={c} className="text-[10px] px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-950/50 text-orange-700 dark:text-orange-300 font-medium">
+                  <span
+                    key={c}
+                    className="text-[10px] px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-950/50 text-orange-700 dark:text-orange-300 font-medium"
+                  >
                     {c}
                   </span>
                 ))}
@@ -453,7 +527,9 @@ export function BusinessSetup() {
         <div className="space-y-2">
           <label className="text-sm font-semibold text-foreground">Nombre del negocio</label>
           <Input
-            placeholder={isFood ? 'Ej: Burguer Don Pepe, La Fondue, Antojo Express...' : 'Ej: Mi Tienda, Bodega Central...'}
+            placeholder={
+              isFood ? 'Ej: Burguer Don Pepe, La Fondue, Antojo Express...' : 'Ej: Mi Tienda, Bodega Central...'
+            }
             value={businessName}
             onChange={e => setBusinessName(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && businessName.trim() && handleFinish()}
@@ -501,7 +577,9 @@ export function BusinessSetup() {
         {step > 0 && (
           <div className="mb-6">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-muted-foreground">Paso {step} de {totalSteps}</span>
+              <span className="text-xs text-muted-foreground">
+                Paso {step} de {totalSteps}
+              </span>
               <span className="text-xs text-orange-500 font-medium">{Math.round((step / totalSteps) * 100)}%</span>
             </div>
             <div className="h-1.5 rounded-full bg-muted overflow-hidden">

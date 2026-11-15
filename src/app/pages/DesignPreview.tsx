@@ -1,8 +1,19 @@
 import { useState } from 'react';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import {
-  ArrowUpRight, Banknote, CalendarDays, CreditCard, Download, Filter, Package,
-  Plus, Receipt, Smartphone, Store, Truck, Utensils,
+  ArrowUpRight,
+  Banknote,
+  CalendarDays,
+  CreditCard,
+  Download,
+  Filter,
+  Package,
+  Plus,
+  Receipt,
+  Smartphone,
+  Store,
+  Truck,
+  Utensils,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Layout } from '../components/Layout';
@@ -28,11 +39,46 @@ const revenueData = [
 ];
 
 const recentSales = [
-  { id: 'VTA-1048', time: '14:32', customer: 'Mesa 4 · Almuerzo', detail: '2 × Bowl de pollo · Tarjeta', amount: 78600, status: 'Completada' },
-  { id: 'VTA-1047', time: '14:18', customer: 'Mostrador', detail: 'Hamburguesa doble + Limonada · Efectivo', amount: 44900, status: 'Completada' },
-  { id: 'VTA-1046', time: '13:55', customer: 'Domicilio · Cra. 12 #45-18', detail: '2 × Wrap de pollo · Transferencia', amount: 62800, status: 'Completada' },
-  { id: 'VTA-1045', time: '13:41', customer: 'Mesa 2 · Almuerzo', detail: 'Bowl de pollo + Café · Tarjeta', amount: 39200, status: 'Completada' },
-  { id: 'VTA-1044', time: '13:20', customer: 'Mostrador', detail: '3 × Limonada · Efectivo', amount: 27000, status: 'Pendiente' },
+  {
+    id: 'VTA-1048',
+    time: '14:32',
+    customer: 'Mesa 4 · Almuerzo',
+    detail: '2 × Bowl de pollo · Tarjeta',
+    amount: 78600,
+    status: 'Completada',
+  },
+  {
+    id: 'VTA-1047',
+    time: '14:18',
+    customer: 'Mostrador',
+    detail: 'Hamburguesa doble + Limonada · Efectivo',
+    amount: 44900,
+    status: 'Completada',
+  },
+  {
+    id: 'VTA-1046',
+    time: '13:55',
+    customer: 'Domicilio · Cra. 12 #45-18',
+    detail: '2 × Wrap de pollo · Transferencia',
+    amount: 62800,
+    status: 'Completada',
+  },
+  {
+    id: 'VTA-1045',
+    time: '13:41',
+    customer: 'Mesa 2 · Almuerzo',
+    detail: 'Bowl de pollo + Café · Tarjeta',
+    amount: 39200,
+    status: 'Completada',
+  },
+  {
+    id: 'VTA-1044',
+    time: '13:20',
+    customer: 'Mostrador',
+    detail: '3 × Limonada · Efectivo',
+    amount: 27000,
+    status: 'Pendiente',
+  },
 ];
 
 const paymentMethods = [
@@ -77,12 +123,15 @@ export function DesignPreview() {
           <div>
             <p className="dash-eyebrow">Módulo de ventas</p>
             <h1 className="dash-title">Ventas</h1>
-            <p className="dash-subtitle">
-              Historial y comportamiento de las transacciones.
-            </p>
+            <p className="dash-subtitle">Historial y comportamiento de las transacciones.</p>
           </div>
           <div className="dash-actions">
-            <Button variant="outline" size="sm" className="dash-action" onClick={() => toast.info('Vista previa: exportación simulada.')}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="dash-action"
+              onClick={() => toast.info('Vista previa: exportación simulada.')}
+            >
               <Download className="mr-2 h-3.5 w-3.5" />
               Exportar
             </Button>
@@ -106,9 +155,7 @@ export function DesignPreview() {
           <div className="dash-hero-body">
             <div>
               <p className="dash-hero-label">Ingresos del periodo</p>
-              <p className="dash-hero-value">
-                {money(4090000)}
-              </p>
+              <p className="dash-hero-value">{money(4090000)}</p>
               <p className="dash-hero-note">
                 Sábado 7 fue el día con más ingresos
                 <span className="dash-hero-up">
@@ -120,16 +167,12 @@ export function DesignPreview() {
             <div className="dash-hero-metrics">
               <div className="dash-hero-metric">
                 <p className="dash-hero-metric-label">Ticket promedio</p>
-                <p className="dash-hero-metric-value">
-                  {money(31953)}
-                </p>
+                <p className="dash-hero-metric-value">{money(31953)}</p>
                 <p className="dash-hero-metric-note">Por venta completada</p>
               </div>
               <div className="dash-hero-metric">
                 <p className="dash-hero-metric-label">Ventas</p>
-                <p className="dash-hero-metric-value">
-                  128
-                </p>
+                <p className="dash-hero-metric-value">128</p>
                 <p className="dash-hero-metric-note">Transacciones del periodo</p>
               </div>
               <div className="dash-hero-metric">
@@ -162,14 +205,43 @@ export function DesignPreview() {
                       <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0.02} />
                     </linearGradient>
                   </defs>
-                  <XAxis dataKey="day" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" tickLine={false} axisLine={false} tickMargin={10} />
-                  <YAxis tick={{ fontSize: 10 }} stroke="var(--muted-foreground)" tickLine={false} axisLine={false} width={52} tickFormatter={compactMoney} />
+                  <XAxis
+                    dataKey="day"
+                    tick={{ fontSize: 11 }}
+                    stroke="var(--muted-foreground)"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={10}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10 }}
+                    stroke="var(--muted-foreground)"
+                    tickLine={false}
+                    axisLine={false}
+                    width={52}
+                    tickFormatter={compactMoney}
+                  />
                   <Tooltip
                     formatter={(value: number, name: string) => [money(value), name]}
-                    contentStyle={{ borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--card-foreground)', fontSize: 12 }}
+                    contentStyle={{
+                      borderRadius: 6,
+                      border: '1px solid var(--border)',
+                      background: 'var(--card)',
+                      color: 'var(--card-foreground)',
+                      fontSize: 12,
+                    }}
                     cursor={{ stroke: 'var(--border)', strokeWidth: 1 }}
                   />
-                  <Area type="monotone" dataKey="ingresos" name="Ingresos" stroke="var(--chart-1)" strokeWidth={2} fill="url(#preview-revenue-fill)" dot={false} activeDot={{ r: 4, strokeWidth: 2, stroke: 'var(--card)' }} />
+                  <Area
+                    type="monotone"
+                    dataKey="ingresos"
+                    name="Ingresos"
+                    stroke="var(--chart-1)"
+                    strokeWidth={2}
+                    fill="url(#preview-revenue-fill)"
+                    dot={false}
+                    activeDot={{ r: 4, strokeWidth: 2, stroke: 'var(--card)' }}
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -191,7 +263,9 @@ export function DesignPreview() {
                   onClick={() => setPeriod(item.id)}
                   className={`dash-rail-item ${period === item.id ? 'is-active' : ''}`}
                 >
-                  <span className="dash-rail-icon"><item.icon className="h-3.5 w-3.5" /></span>
+                  <span className="dash-rail-icon">
+                    <item.icon className="h-3.5 w-3.5" />
+                  </span>
                   <span className="min-w-0 flex-1">
                     <span className="dash-rail-label">{item.label}</span>
                     <span className="dash-rail-desc">{item.description}</span>
@@ -210,7 +284,9 @@ export function DesignPreview() {
                   onClick={() => setChannel(item.id)}
                   className={`dash-rail-item ${channel === item.id ? 'is-active' : ''}`}
                 >
-                  <span className="dash-rail-icon"><item.icon className="h-3.5 w-3.5" /></span>
+                  <span className="dash-rail-icon">
+                    <item.icon className="h-3.5 w-3.5" />
+                  </span>
                   <span className="min-w-0 flex-1">
                     <span className="dash-rail-label">{item.label}</span>
                     <span className="dash-rail-desc">{item.description}</span>
@@ -242,7 +318,11 @@ export function DesignPreview() {
             <div className="dash-ledger-column">
               <div className="dash-ledger-subhead">
                 <h3 className="dash-ledger-title">Últimas ventas</h3>
-                <button type="button" onClick={() => toast.info('Vista previa: historial completo simulado.')} className="dash-ledger-link">
+                <button
+                  type="button"
+                  onClick={() => toast.info('Vista previa: historial completo simulado.')}
+                  className="dash-ledger-link"
+                >
                   Ver todas <ArrowUpRight className="h-3 w-3" />
                 </button>
               </div>
@@ -252,7 +332,9 @@ export function DesignPreview() {
                     <span className="dash-ledger-time">{sale.time}</span>
                     <span className="min-w-0 flex-1">
                       <span className="dash-ledger-primary">{sale.customer}</span>
-                      <span className="dash-ledger-meta">{sale.id} · {sale.detail}</span>
+                      <span className="dash-ledger-meta">
+                        {sale.id} · {sale.detail}
+                      </span>
                     </span>
                     <span className="shrink-0 text-right">
                       <span className="dash-ledger-amount">{money(sale.amount)}</span>

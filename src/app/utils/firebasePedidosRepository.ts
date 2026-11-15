@@ -1,20 +1,6 @@
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  onSnapshot,
-  orderBy,
-  query,
-} from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import type {
-  CrearPedidoInput,
-  EmpleadoRef,
-  Pedido,
-  PedidoEstado,
-  PedidosRepository,
-} from './restaurantTypes';
+import type { CrearPedidoInput, EmpleadoRef, Pedido, PedidoEstado, PedidosRepository } from './restaurantTypes';
 import { PedidoConflictoError } from './restaurantTypes';
 import { firebaseDb, firebaseFunctions, ensureFirebaseSignedIn } from './firebaseClient';
 
@@ -96,7 +82,7 @@ class FirebasePedidosRepository implements PedidosRepository {
     await ensureFirebaseSignedIn();
     const q = query(collection(firebaseDb, `businesses/${negocioId}/orders`), orderBy('creadoEn', 'asc'));
     const snap = await getDocs(q);
-    return snap.docs.map((d) => docToPedido(d as never, negocioId));
+    return snap.docs.map(d => docToPedido(d as never, negocioId));
   }
 
   suscribirse(negocioId: string, listener: (pedidos: Pedido[]) => void): () => void {
@@ -108,15 +94,15 @@ class FirebasePedidosRepository implements PedidosRepository {
         const q = query(collection(firebaseDb, `businesses/${negocioId}/orders`), orderBy('creadoEn', 'asc'));
         const unsub = onSnapshot(
           q,
-          (snap) => {
+          snap => {
             if (!active) return;
-            listener(snap.docs.map((d) => docToPedido(d as never, negocioId)));
+            listener(snap.docs.map(d => docToPedido(d as never, negocioId)));
           },
-          (error) => console.error('[firebase] orders listener', error),
+          error => console.error('[firebase] orders listener', error),
         );
         unsubscribe = unsub;
       })
-      .catch((error) => console.error('[firebase] sign-in', error));
+      .catch(error => console.error('[firebase] sign-in', error));
     return () => {
       active = false;
       unsubscribe();
@@ -179,12 +165,7 @@ class FirebasePedidosRepository implements PedidosRepository {
     }
   }
 
-  async entregarPedido(
-    pedidoId: string,
-    negocioId: string,
-    empleado: EmpleadoRef,
-    ventaId?: string,
-  ): Promise<Pedido> {
+  async entregarPedido(pedidoId: string, negocioId: string, empleado: EmpleadoRef, ventaId?: string): Promise<Pedido> {
     await ensureFirebaseSignedIn();
     const fn = httpsCallable(firebaseFunctions, 'entregarPedido');
     try {
@@ -200,12 +181,7 @@ class FirebasePedidosRepository implements PedidosRepository {
     }
   }
 
-  async cancelarPedido(
-    pedidoId: string,
-    negocioId: string,
-    empleado: EmpleadoRef,
-    motivo: string,
-  ): Promise<Pedido> {
+  async cancelarPedido(pedidoId: string, negocioId: string, empleado: EmpleadoRef, motivo: string): Promise<Pedido> {
     await ensureFirebaseSignedIn();
     const fn = httpsCallable(firebaseFunctions, 'cancelarPedido');
     try {

@@ -1,9 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app';
-import {
-  getAuth,
-  connectAuthEmulator,
-  signInWithEmailAndPassword,
-} from 'firebase/auth';
+import { getAuth, connectAuthEmulator, signInWithEmailAndPassword } from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 
@@ -43,11 +39,7 @@ export async function ensureFirebaseSignedIn(): Promise<ReturnType<typeof getAut
   if (firebaseAuth.currentUser) return firebaseAuth.currentUser;
   if (import.meta.env.VITE_USE_FIREBASE_EMULATORS !== 'true') return null;
   try {
-    const cred = await signInWithEmailAndPassword(
-      firebaseAuth,
-      'owner.comidas@managerstock.test',
-      'ComidasDemo2026!',
-    );
+    const cred = await signInWithEmailAndPassword(firebaseAuth, 'owner.comidas@managerstock.test', 'ComidasDemo2026!');
     return cred.user;
   } catch (error) {
     console.error('[firebase] auto sign-in failed', error);

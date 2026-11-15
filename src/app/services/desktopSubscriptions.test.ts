@@ -9,7 +9,15 @@ const BUSINESS = { id: 'business', name: 'Negocio', priceCOP: 79900, maxUsers: 1
 const FREE = { id: 'free', name: 'Gratis', priceCOP: 0, maxUsers: 1, maxProducts: 100 } as const;
 
 function save(record: Partial<BusinessSubscriptionRecord>) {
-  const base: BusinessSubscriptionRecord = { businessId: 'NEG-1', plan: { ...FREE }, status: 'active', pendingPlan: null, startedAt: null, expiresAt: null, updatedAt: null };
+  const base: BusinessSubscriptionRecord = {
+    businessId: 'NEG-1',
+    plan: { ...FREE },
+    status: 'active',
+    pendingPlan: null,
+    startedAt: null,
+    expiresAt: null,
+    updatedAt: null,
+  };
   localStorage.setItem(KEY, JSON.stringify({ ...base, ...record }));
 }
 
@@ -34,7 +42,12 @@ describe('suscripciones en modo escritorio', () => {
   });
 
   it('si vence con una renovación pendiente pasa a Gratis y conserva la solicitud', async () => {
-    save({ plan: { ...BUSINESS }, status: 'pending_payment', pendingPlan: { ...BUSINESS }, expiresAt: new Date(Date.now() - DAY).toISOString() });
+    save({
+      plan: { ...BUSINESS },
+      status: 'pending_payment',
+      pendingPlan: { ...BUSINESS },
+      expiresAt: new Date(Date.now() - DAY).toISOString(),
+    });
     const lapsed = await desktop.platform.updateSubscription('NEG-1', 'confirm_payment', 'MP-3');
     expect(lapsed.plan.id).toBe('business');
     expect(near(lapsed.expiresAt, Date.now() + 30 * DAY)).toBe(true);

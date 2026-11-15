@@ -1,5 +1,7 @@
 import { lazy, Suspense } from 'react';
-const CountReviews = lazy(() => import('./pages/warehouse/CountReviews').then(module => ({ default: module.CountReviews })));
+const CountReviews = lazy(() =>
+  import('./pages/warehouse/CountReviews').then(module => ({ default: module.CountReviews })),
+);
 const HotelToday = lazy(() => import('./pages/hotel/Today').then(module => ({ default: module.HotelToday })));
 const Customers = lazy(() => import('./pages/Customers').then(module => ({ default: module.Customers })));
 const Billing = lazy(() => import('./pages/Billing').then(module => ({ default: module.Billing })));
@@ -26,44 +28,102 @@ const Tables = lazy(() => import('./pages/restaurant/Tables').then(module => ({ 
 const Kitchen = lazy(() => import('./pages/restaurant/Kitchen').then(module => ({ default: module.Kitchen })));
 const Waiter = lazy(() => import('./pages/restaurant/Waiter').then(module => ({ default: module.Waiter })));
 const Orders = lazy(() => import('./pages/restaurant/Orders').then(module => ({ default: module.Orders })));
-const RestaurantCatalog = lazy(() => import('./pages/restaurant/Catalog').then(module => ({ default: module.Catalog })));
-const RestaurantSettingsPage = lazy(() => import('./pages/restaurant/Settings').then(module => ({ default: module.RestaurantSettingsPage })));
+const RestaurantCatalog = lazy(() =>
+  import('./pages/restaurant/Catalog').then(module => ({ default: module.Catalog })),
+);
+const RestaurantSettingsPage = lazy(() =>
+  import('./pages/restaurant/Settings').then(module => ({ default: module.RestaurantSettingsPage })),
+);
 const HotelIncome = lazy(() => import('./pages/hotel/Income').then(module => ({ default: module.HotelIncome })));
 const Rooms = lazy(() => import('./pages/hotel/Rooms').then(module => ({ default: module.Rooms })));
-const Availability = lazy(() => import('./pages/hotel/Availability').then(module => ({ default: module.Availability })));
-const Housekeeping = lazy(() => import('./pages/hotel/Housekeeping').then(module => ({ default: module.Housekeeping })));
+const Availability = lazy(() =>
+  import('./pages/hotel/Availability').then(module => ({ default: module.Availability })),
+);
+const Housekeeping = lazy(() =>
+  import('./pages/hotel/Housekeeping').then(module => ({ default: module.Housekeeping })),
+);
 const Locations = lazy(() => import('./pages/warehouse/Locations').then(module => ({ default: module.Locations })));
-const WarehouseOverview = lazy(() => import('./pages/warehouse/Overview').then(module => ({ default: module.WarehouseOverview })));
-const WarehouseEntries = lazy(() => import('./pages/warehouse/Entries').then(module => ({ default: module.WarehouseEntries })));
-const WarehouseExits = lazy(() => import('./pages/warehouse/Exits').then(module => ({ default: module.WarehouseExits })));
-const WarehouseAdjustments = lazy(() => import('./pages/warehouse/Adjustments').then(module => ({ default: module.WarehouseAdjustments })));
+const WarehouseOverview = lazy(() =>
+  import('./pages/warehouse/Overview').then(module => ({ default: module.WarehouseOverview })),
+);
+const WarehouseEntries = lazy(() =>
+  import('./pages/warehouse/Entries').then(module => ({ default: module.WarehouseEntries })),
+);
+const WarehouseExits = lazy(() =>
+  import('./pages/warehouse/Exits').then(module => ({ default: module.WarehouseExits })),
+);
+const WarehouseAdjustments = lazy(() =>
+  import('./pages/warehouse/Adjustments').then(module => ({ default: module.WarehouseAdjustments })),
+);
 const WarehouseLots = lazy(() => import('./pages/warehouse/Lots').then(module => ({ default: module.WarehouseLots })));
-const WarehousePurchaseOrders = lazy(() => import('./pages/warehouse/PurchaseOrders').then(module => ({ default: module.WarehousePurchaseOrders })));
-const WarehouseTransfers = lazy(() => import('./pages/warehouse/Transfers').then(module => ({ default: module.WarehouseTransfers })));
-const WarehouseReports = lazy(() => import('./pages/warehouse/Reports').then(module => ({ default: module.WarehouseReports })));
-const WarehouseSettings = lazy(() => import('./pages/warehouse/Settings').then(module => ({ default: module.WarehouseSettings })));
+const WarehousePurchaseOrders = lazy(() =>
+  import('./pages/warehouse/PurchaseOrders').then(module => ({ default: module.WarehousePurchaseOrders })),
+);
+const WarehouseTransfers = lazy(() =>
+  import('./pages/warehouse/Transfers').then(module => ({ default: module.WarehouseTransfers })),
+);
+const WarehouseReports = lazy(() =>
+  import('./pages/warehouse/Reports').then(module => ({ default: module.WarehouseReports })),
+);
+const WarehouseSettings = lazy(() =>
+  import('./pages/warehouse/Settings').then(module => ({ default: module.WarehouseSettings })),
+);
 const Recipes = lazy(() => import('./pages/restaurant/Recipes').then(module => ({ default: module.Recipes })));
-const Appointments = lazy(() => import('./pages/services/Appointments').then(module => ({ default: module.Appointments })));
+const Appointments = lazy(() =>
+  import('./pages/services/Appointments').then(module => ({ default: module.Appointments })),
+);
 const Services = lazy(() => import('./pages/services/Services').then(module => ({ default: module.Services })));
 const Movements = lazy(() => import('./pages/inventory/Movements').then(module => ({ default: module.Movements })));
 const UsersRoles = lazy(() => import('./pages/UsersRoles').then(module => ({ default: module.UsersRoles })));
 const Reports = lazy(() => import('./pages/Reports').then(module => ({ default: module.Reports })));
 const ActivityLog = lazy(() => import('./pages/ActivityLog').then(module => ({ default: module.ActivityLog })));
 const PlatformAdmin = lazy(() => import('./pages/PlatformAdmin').then(module => ({ default: module.PlatformAdmin })));
-const SuspendedBusiness = lazy(() => import('./pages/SuspendedBusiness').then(module => ({ default: module.SuspendedBusiness })));
+const SuspendedBusiness = lazy(() =>
+  import('./pages/SuspendedBusiness').then(module => ({ default: module.SuspendedBusiness })),
+);
 const LandingPage = lazy(() => import('./pages/LandingPage').then(module => ({ default: module.LandingPage })));
 const Downloads = lazy(() => import('./pages/Downloads').then(module => ({ default: module.Downloads })));
 const DesignPreview = lazy(() => import('./pages/DesignPreview').then(module => ({ default: module.DesignPreview })));
 import { AppShell } from './components/AppShell';
 
 function Waiting() {
-  return <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">Verificando sesión y configuración…</div>;
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
+      Verificando sesión y configuración…
+    </div>
+  );
 }
 function AccessDenied() {
-  return <div className="flex min-h-screen items-center justify-center bg-background p-6"><div className="max-w-md rounded-2xl border border-border bg-card p-8 text-center shadow-sm"><h1 className="text-2xl font-bold">Acceso denegado</h1><p className="mt-2 text-sm text-muted-foreground">Tu rol no tiene permiso para abrir esta sección. Si necesitas acceso, contacta al propietario del negocio.</p><a className="mt-5 inline-flex rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white" href="/dashboard">Volver al panel</a></div></div>;
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background p-6">
+      <div className="max-w-md rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
+        <h1 className="text-2xl font-bold">Acceso denegado</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Tu rol no tiene permiso para abrir esta sección. Si necesitas acceso, contacta al propietario del negocio.
+        </p>
+        <a
+          className="mt-5 inline-flex rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white"
+          href="/dashboard"
+        >
+          Volver al panel
+        </a>
+      </div>
+    </div>
+  );
 }
 function NotFound() {
-  return <div className="flex min-h-screen items-center justify-center bg-background p-6"><div className="text-center"><p className="text-sm font-semibold tracking-widest text-orange-600">ERROR 404</p><h1 className="mt-2 text-3xl font-bold">Página no encontrada</h1><p className="mt-2 text-muted-foreground">La ruta no existe o fue movida.</p><a className="mt-5 inline-flex rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white" href="/">Ir al inicio</a></div></div>;
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background p-6">
+      <div className="text-center">
+        <p className="text-sm font-semibold tracking-widest text-orange-600">ERROR 404</p>
+        <h1 className="mt-2 text-3xl font-bold">Página no encontrada</h1>
+        <p className="mt-2 text-muted-foreground">La ruta no existe o fue movida.</p>
+        <a className="mt-5 inline-flex rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white" href="/">
+          Ir al inicio
+        </a>
+      </div>
+    </div>
+  );
 }
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -72,16 +132,19 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   if (loading || (user && user.role !== 'superadmin' && businessLoading)) return <Waiting />;
   if (!user) return <Navigate to="/login" replace />;
-  if (user.role === 'superadmin') return location.pathname === '/platform' ? <>{children}</> : <Navigate to="/platform" replace />;
+  if (user.role === 'superadmin')
+    return location.pathname === '/platform' ? <>{children}</> : <Navigate to="/platform" replace />;
   // Suspended owners must render the suspension/support screen even though the
   // business config endpoint is intentionally unavailable while the account is suspended.
   if (user.businessActive === false) {
     if (location.pathname === '/suspended') return <>{children}</>;
     return <Navigate to="/suspended" replace />;
   }
-  if (location.pathname === '/suspended') return <Navigate to={isConfigured ? '/dashboard' : '/business-setup'} replace />;
+  if (location.pathname === '/suspended')
+    return <Navigate to={isConfigured ? '/dashboard' : '/business-setup'} replace />;
   if (location.pathname !== '/business-setup' && !isConfigured) return <Navigate to="/business-setup" replace />;
-  if (!canAccessPath(location.pathname, user.role, config, user.customRoleId ? (user.permissions ?? []) : undefined)) return <AccessDenied />;
+  if (!canAccessPath(location.pathname, user.role, config, user.customRoleId ? (user.permissions ?? []) : undefined))
+    return <AccessDenied />;
   return <>{children}</>;
 }
 
@@ -104,7 +167,13 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
   const { isConfigured, isLoading } = useBusiness();
   if (loading || (user && user.role !== 'superadmin' && isLoading)) return <Waiting />;
   if (user?.role === 'superadmin') return <Navigate to="/platform" replace />;
-  if (user) return <Navigate to={user.businessActive === false ? '/suspended' : isConfigured ? '/dashboard' : '/business-setup'} replace />;
+  if (user)
+    return (
+      <Navigate
+        to={user.businessActive === false ? '/suspended' : isConfigured ? '/dashboard' : '/business-setup'}
+        replace
+      />
+    );
   return <>{children}</>;
 }
 const protect = (element: React.ReactNode) => <ProtectedRoute>{element}</ProtectedRoute>;
@@ -112,23 +181,81 @@ const protect = (element: React.ReactNode) => <ProtectedRoute>{element}</Protect
 function RouteErrorFallback() {
   const error = useRouteError();
   const navigate = useNavigate();
-  const message = import.meta.env.DEV && error instanceof Error ? error.message : 'Ocurrió un error al cargar esta pantalla. Puedes volver a intentarlo o regresar al panel.';
-  return <main className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground"><section className="w-full max-w-lg rounded-2xl border border-border bg-card p-8 text-center shadow-xl"><div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-rose-50 text-rose-700"><span className="text-xl font-bold">!</span></div><p className="mt-4 text-xs font-semibold uppercase tracking-[.18em] text-rose-700">Error de aplicación</p><h1 className="mt-2 text-2xl font-bold">No se pudo mostrar esta pantalla</h1><p className="mt-3 text-sm leading-6 text-muted-foreground">{message}</p><div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row"><button type="button" onClick={() => window.location.reload()} className="rounded-xl bg-[var(--brand-primary)] px-4 py-3 text-sm font-semibold text-white">Intentar nuevamente</button><button type="button" onClick={() => navigate('/dashboard')} className="rounded-xl border border-border px-4 py-3 text-sm font-semibold">Volver al panel</button></div></section></main>;
+  const message =
+    import.meta.env.DEV && error instanceof Error
+      ? error.message
+      : 'Ocurrió un error al cargar esta pantalla. Puedes volver a intentarlo o regresar al panel.';
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
+      <section className="w-full max-w-lg rounded-2xl border border-border bg-card p-8 text-center shadow-xl">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-rose-50 text-rose-700">
+          <span className="text-xl font-bold">!</span>
+        </div>
+        <p className="mt-4 text-xs font-semibold uppercase tracking-[.18em] text-rose-700">Error de aplicación</p>
+        <h1 className="mt-2 text-2xl font-bold">No se pudo mostrar esta pantalla</h1>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">{message}</p>
+        <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="rounded-xl bg-[var(--brand-primary)] px-4 py-3 text-sm font-semibold text-white"
+          >
+            Intentar nuevamente
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard')}
+            className="rounded-xl border border-border px-4 py-3 text-sm font-semibold"
+          >
+            Volver al panel
+          </button>
+        </div>
+      </section>
+    </main>
+  );
 }
 
-const loadingPage = <div role="status" className="p-8 text-muted-foreground">Cargando pantalla…</div>;
-const appRoute = (path: string, element: React.ReactNode) => ({ path, element: <Suspense fallback={loadingPage}>{element}</Suspense>, errorElement: <RouteErrorFallback /> });
+const loadingPage = (
+  <div role="status" className="p-8 text-muted-foreground">
+    Cargando pantalla…
+  </div>
+);
+const appRoute = (path: string, element: React.ReactNode) => ({
+  path,
+  element: <Suspense fallback={loadingPage}>{element}</Suspense>,
+  errorElement: <RouteErrorFallback />,
+});
 
 // El marco (sidebar, header, barra inferior) vive en una ruta sin path que
 // persiste durante toda la sesión: cada página sigue montando su propio <Layout>,
 // que dentro de ese shell es transparente. Las URLs, los permisos y la lógica de
 // cada pantalla son exactamente los mismos; solo cambia dónde se monta el marco.
 export const router = createBrowserRouter([
-  appRoute('/', <PublicRoute><LandingPage /></PublicRoute>),
+  appRoute(
+    '/',
+    <PublicRoute>
+      <LandingPage />
+    </PublicRoute>,
+  ),
   appRoute('/descargas', <Downloads />),
-  appRoute('/login', <PublicRoute><Login /></PublicRoute>),
-  appRoute('/register', <PublicRoute><Register /></PublicRoute>),
-  appRoute('/business-setup', <BusinessSetupRoute><BusinessSetup /></BusinessSetupRoute>),
+  appRoute(
+    '/login',
+    <PublicRoute>
+      <Login />
+    </PublicRoute>,
+  ),
+  appRoute(
+    '/register',
+    <PublicRoute>
+      <Register />
+    </PublicRoute>,
+  ),
+  appRoute(
+    '/business-setup',
+    <BusinessSetupRoute>
+      <BusinessSetup />
+    </BusinessSetupRoute>,
+  ),
   appRoute('/suspended', protect(<SuspendedBusiness />)),
   appRoute('/platform', protect(<PlatformAdmin />)),
   {

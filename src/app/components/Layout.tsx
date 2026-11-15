@@ -4,12 +4,45 @@ import { useAuth } from '../context/AuthContext';
 import { useBusiness, DEFAULT_BUSINESS_THEMES, applyTheme } from '../context/BusinessContext';
 import { useTheme } from '../context/ThemeContext';
 import {
-  LayoutDashboard, Package, ShoppingCart, CreditCard, LogOut, Bell, Database, Barcode,
-  Truck, Store, UtensilsCrossed, Bed, MapPin, Settings, Users, Moon,
-  Sun, ChevronLeft, ChevronRight, Menu, X,
-  ChefHat, CalendarDays, Building2, MoreHorizontal, Warehouse,
-  Building, TrendingUp, FileBarChart, Scissors, ClipboardList, BookOpen,
-  ArrowDownToLine, ArrowUpFromLine, AlertTriangle, Scale, ClipboardCheck, ArrowLeftRight, Boxes
+  LayoutDashboard,
+  Package,
+  ShoppingCart,
+  CreditCard,
+  LogOut,
+  Bell,
+  Database,
+  Barcode,
+  Truck,
+  Store,
+  UtensilsCrossed,
+  Bed,
+  MapPin,
+  Settings,
+  Users,
+  Moon,
+  Sun,
+  ChevronLeft,
+  ChevronRight,
+  Menu,
+  X,
+  ChefHat,
+  CalendarDays,
+  Building2,
+  MoreHorizontal,
+  Warehouse,
+  Building,
+  TrendingUp,
+  FileBarChart,
+  Scissors,
+  ClipboardList,
+  BookOpen,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  AlertTriangle,
+  Scale,
+  ClipboardCheck,
+  ArrowLeftRight,
+  Boxes,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -61,14 +94,15 @@ function LayoutShell({ children }: LayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
-    localStorage.getItem('sidebarCollapsed') === 'true'
-  );
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('sidebarCollapsed') === 'true');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   // Indicador que se desliza hasta el ítem activo de la sidebar.
-  const [sidebarIndicator, setSidebarIndicator] = useState<{ from: { top: number; height: number } | null; to: { top: number; height: number } } | null>(null);
+  const [sidebarIndicator, setSidebarIndicator] = useState<{
+    from: { top: number; height: number } | null;
+    to: { top: number; height: number };
+  } | null>(null);
   // Varias entradas de la lista pueden compartir ruta (p. ej. "Pedidos /
   // Preparación" y "Domicilios" abren el mismo módulo). El resaltado y el
   // indicador siguen a la última pulsada para que cada enlace responda a su clic.
@@ -107,7 +141,10 @@ function LayoutShell({ children }: LayoutProps) {
     };
     void refreshDataStatus();
     const timer = window.setInterval(() => void refreshDataStatus(), 20000);
-    return () => { active = false; window.clearInterval(timer); };
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
   }, [config?.features.inventory]);
 
   useEffect(() => {
@@ -246,7 +283,12 @@ function LayoutShell({ children }: LayoutProps) {
 
     const foodMenuEnabled = config?.type === 'restaurant' && (config.foodConfig?.activeModules ?? []).includes('menu');
     if (config?.features.inventory || foodMenuEnabled) {
-      items.push({ path: '/products', icon: Package, label: foodMenuEnabled ? 'Menú / Productos' : 'Productos', group: 'inventario' });
+      items.push({
+        path: '/products',
+        icon: Package,
+        label: foodMenuEnabled ? 'Menú / Productos' : 'Productos',
+        group: 'inventario',
+      });
     }
     if (config?.features.inventory) {
       items.push({ path: '/suppliers', icon: Truck, label: 'Proveedores', group: 'inventario' });
@@ -265,8 +307,16 @@ function LayoutShell({ children }: LayoutProps) {
   };
 
   const navItems = getNavItems().filter(item => {
-    const hasRoutePermission = canAccessPath(item.path, user?.role, config, user?.customRoleId ? (user.permissions ?? []) : undefined);
-    const hasAlertSourcePermission = item.path !== '/notifications' || !user?.customRoleId || Boolean(user.permissions?.some(permission => ['catalog.view', 'sales.view'].includes(permission)));
+    const hasRoutePermission = canAccessPath(
+      item.path,
+      user?.role,
+      config,
+      user?.customRoleId ? (user.permissions ?? []) : undefined,
+    );
+    const hasAlertSourcePermission =
+      item.path !== '/notifications' ||
+      !user?.customRoleId ||
+      Boolean(user.permissions?.some(permission => ['catalog.view', 'sales.view'].includes(permission)));
     return hasRoutePermission && hasAlertSourcePermission;
   });
 
@@ -283,17 +333,32 @@ function LayoutShell({ children }: LayoutProps) {
     }
     const type: NavItem[] = [];
     if (config?.features.pos) type.push({ path: '/pos', icon: Store, label: 'POS', group: 'ventas' });
-    if (config?.features.tables) type.push({ path: '/restaurant/tables', icon: UtensilsCrossed, label: 'Mesas', group: 'tipo' });
-    if (config?.type === 'hotel' && (config.features.rooms || config.features.reservations)) type.push({ path: '/hotel/rooms', icon: Bed, label: 'Hab.', group: 'tipo' });
-    if (config?.type === 'services' && (config.features.services || config.features.reservations)) type.push({ path: '/services', icon: Scissors, label: 'Servicios', group: 'tipo' });
+    if (config?.features.tables)
+      type.push({ path: '/restaurant/tables', icon: UtensilsCrossed, label: 'Mesas', group: 'tipo' });
+    if (config?.type === 'hotel' && (config.features.rooms || config.features.reservations))
+      type.push({ path: '/hotel/rooms', icon: Bed, label: 'Hab.', group: 'tipo' });
+    if (config?.type === 'services' && (config.features.services || config.features.reservations))
+      type.push({ path: '/services', icon: Scissors, label: 'Servicios', group: 'tipo' });
     const foodMenuEnabled = false;
-    if (config?.features.inventory || foodMenuEnabled) type.push({ path: '/products', icon: Package, label: foodMenuEnabled ? 'Menú' : 'Productos', group: 'inventario' });
+    if (config?.features.inventory || foodMenuEnabled)
+      type.push({
+        path: '/products',
+        icon: Package,
+        label: foodMenuEnabled ? 'Menú' : 'Productos',
+        group: 'inventario',
+      });
 
     const second: NavItem[] = config?.features.pos
       ? [{ path: '/sales', icon: TrendingUp, label: 'Ventas', group: 'ventas' }]
       : [{ path: '/notifications', icon: Bell, label: 'Alertas', badge: lowStockCount, group: 'sistema' }];
 
-    const notif: NavItem = { path: '/notifications', icon: Bell, label: 'Alertas', badge: lowStockCount, group: 'sistema' };
+    const notif: NavItem = {
+      path: '/notifications',
+      icon: Bell,
+      label: 'Alertas',
+      badge: lowStockCount,
+      group: 'sistema',
+    };
     const more: NavItem = { path: '__more__', icon: MoreHorizontal, label: 'Más', group: 'sistema' };
 
     // Sin dedupe, con el POS desactivado entraba dos veces "Alertas"
@@ -309,8 +374,16 @@ function LayoutShell({ children }: LayoutProps) {
 
   const mobileBottomItems = getMobileBottomItems().filter(item => {
     if (item.path === '__more__') return true;
-    const hasRoutePermission = canAccessPath(item.path, user?.role, config, user?.customRoleId ? (user.permissions ?? []) : undefined);
-    const hasAlertSourcePermission = item.path !== '/notifications' || !user?.customRoleId || Boolean(user.permissions?.some(permission => ['catalog.view', 'sales.view'].includes(permission)));
+    const hasRoutePermission = canAccessPath(
+      item.path,
+      user?.role,
+      config,
+      user?.customRoleId ? (user.permissions ?? []) : undefined,
+    );
+    const hasAlertSourcePermission =
+      item.path !== '/notifications' ||
+      !user?.customRoleId ||
+      Boolean(user.permissions?.some(permission => ['catalog.view', 'sales.view'].includes(permission)));
     return hasRoutePermission && hasAlertSourcePermission;
   });
 
@@ -320,11 +393,16 @@ function LayoutShell({ children }: LayoutProps) {
   const groupLabels: Record<string, string> = {
     general: 'General',
     ventas: 'Ventas',
-    tipo: config?.type === 'restaurant'
+    tipo:
+      config?.type === 'restaurant'
         ? 'Negocio de comidas'
-        : config?.type === 'hotel' ? 'Hotel'
-        : config?.type === 'services' ? 'Servicios'
-        : config?.type === 'warehouse' ? 'Almacén' : 'Módulo',
+        : config?.type === 'hotel'
+          ? 'Hotel'
+          : config?.type === 'services'
+            ? 'Servicios'
+            : config?.type === 'warehouse'
+              ? 'Almacén'
+              : 'Módulo',
     inventario: 'Inventario',
     sistema: 'Sistema',
   };
@@ -397,9 +475,9 @@ function LayoutShell({ children }: LayoutProps) {
       const to = { top: measuredRect.top - navRect.top + nav.scrollTop, height: measuredRect.height };
       const from = lastSidebarIndicator;
       lastSidebarIndicator = to;
-      setSidebarIndicator(previous => (
-        previous && previous.to.top === to.top && previous.to.height === to.height ? previous : { from, to }
-      ));
+      setSidebarIndicator(previous =>
+        previous && previous.to.top === to.top && previous.to.height === to.height ? previous : { from, to },
+      );
     };
     // activeNavLabel entra como dependencia: al pulsar un segundo enlace de la
     // misma ruta (Domicilios sobre Pedidos) la URL no cambia, pero el ítem
@@ -453,13 +531,18 @@ function LayoutShell({ children }: LayoutProps) {
       <div className="flex flex-col h-full py-4">
         {/* Logo */}
         <div className={`flex items-center gap-3 px-4 py-2 mb-4 ${collapsed ? 'justify-center' : ''}`}>
-          <div className="app-brand-mark w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-white" style={{ background: 'linear-gradient(135deg, #FF5A1F, #FF3D00)' }}>
+          <div
+            className="app-brand-mark w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-white"
+            style={{ background: 'linear-gradient(135deg, #FF5A1F, #FF3D00)' }}
+          >
             <Warehouse className="text-white" size={20} />
           </div>
           {!collapsed && (
             <div className="overflow-hidden">
               <p className="font-bold text-sm text-sidebar-foreground leading-tight">Manager Stock Pro</p>
-              <p className="text-xs text-sidebar-foreground/60 truncate">{config ? (config.foodConfig?.displayLabel ?? BUSINESS_LABELS[config.type]) : 'Sistema'}</p>
+              <p className="text-xs text-sidebar-foreground/60 truncate">
+                {config ? (config.foodConfig?.displayLabel ?? BUSINESS_LABELS[config.type]) : 'Sistema'}
+              </p>
             </div>
           )}
         </div>
@@ -486,52 +569,53 @@ function LayoutShell({ children }: LayoutProps) {
                     {groupLabels[group]}
                   </p>
                 )}
-                {gi > 0 && collapsed && (
-                  <div className="h-px bg-sidebar-border my-1 mx-2" />
-                )}
-                {navItems.filter(i => i.group === group).map(item => {
-                  const Icon = item.icon;
-                  const active = isActiveNavItem(item);
-                  return (
-                    <Link
-                      key={`${item.path}|${item.label}`}
-                      to={item.path}
-                      onClick={() => {
-                        setActiveNavLabel(item.label);
-                        // Cierra el drawer incluso cuando el enlace comparte
-                        // ruta con otro (Pedidos / Domicilios): la URL no cambia,
-                        // pero el menú móvil debe desaparecer al elegir.
-                        setMobileSidebarOpen(false);
-                        setShowMoreMenu(false);
-                      }}
-                      title={collapsed ? item.label : undefined}
-                      data-sidebar-active={active && withIndicator ? 'true' : undefined}
-                      data-mobile-nav-active={active ? 'true' : undefined}
-                      style={active ? { color: 'var(--nav-active-fg)' } : undefined}
-                      className={`
+                {gi > 0 && collapsed && <div className="h-px bg-sidebar-border my-1 mx-2" />}
+                {navItems
+                  .filter(i => i.group === group)
+                  .map(item => {
+                    const Icon = item.icon;
+                    const active = isActiveNavItem(item);
+                    return (
+                      <Link
+                        key={`${item.path}|${item.label}`}
+                        to={item.path}
+                        onClick={() => {
+                          setActiveNavLabel(item.label);
+                          // Cierra el drawer incluso cuando el enlace comparte
+                          // ruta con otro (Pedidos / Domicilios): la URL no cambia,
+                          // pero el menú móvil debe desaparecer al elegir.
+                          setMobileSidebarOpen(false);
+                          setShowMoreMenu(false);
+                        }}
+                        title={collapsed ? item.label : undefined}
+                        data-sidebar-active={active && withIndicator ? 'true' : undefined}
+                        data-mobile-nav-active={active ? 'true' : undefined}
+                        style={active ? { color: 'var(--nav-active-fg)' } : undefined}
+                        className={`
                         flex items-center gap-3 rounded-xl text-sm font-medium transition-colors duration-200 group relative
-                        ${active
-                          ? 'font-semibold'
-                          : 'text-sidebar-foreground/65 hover:text-sidebar-foreground hover:bg-sidebar-accent'
+                        ${
+                          active
+                            ? 'font-semibold'
+                            : 'text-sidebar-foreground/65 hover:text-sidebar-foreground hover:bg-sidebar-accent'
                         }
                         ${collapsed ? 'min-h-[40px] justify-center px-0' : 'min-h-[44px] px-3'}
                       `}
-                    >
-                      <Icon size={22} className="flex-shrink-0 relative z-10" />
-                      {!collapsed && <span className="flex-1 relative z-10">{item.label}</span>}
-                      {!collapsed && item.badge && item.badge > 0 ? (
-                        <span className="pop-in bg-red-500 text-white text-[10px] h-5 min-w-5 flex items-center justify-center px-1 rounded-full relative z-10">
-                          {item.badge}
-                        </span>
-                      ) : null}
-                      {collapsed && item.badge && item.badge > 0 ? (
-                        <span className="pop-in absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center relative z-10">
-                          {item.badge}
-                        </span>
-                      ) : null}
-                    </Link>
-                  );
-                })}
+                      >
+                        <Icon size={22} className="flex-shrink-0 relative z-10" />
+                        {!collapsed && <span className="flex-1 relative z-10">{item.label}</span>}
+                        {!collapsed && item.badge && item.badge > 0 ? (
+                          <span className="pop-in bg-red-500 text-white text-[10px] h-5 min-w-5 flex items-center justify-center px-1 rounded-full relative z-10">
+                            {item.badge}
+                          </span>
+                        ) : null}
+                        {collapsed && item.badge && item.badge > 0 ? (
+                          <span className="pop-in absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center relative z-10">
+                            {item.badge}
+                          </span>
+                        ) : null}
+                      </Link>
+                    );
+                  })}
               </div>
             ))}
           </div>
@@ -585,13 +669,15 @@ function LayoutShell({ children }: LayoutProps) {
             >
               <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                 <span className="font-bold text-sm text-foreground">Menú</span>
-                <button onClick={() => setMobileSidebarOpen(false)} aria-label="Cerrar menú" className="p-2 rounded-lg hover:bg-accent">
+                <button
+                  onClick={() => setMobileSidebarOpen(false)}
+                  aria-label="Cerrar menú"
+                  className="p-2 rounded-lg hover:bg-accent"
+                >
                   <X size={18} />
                 </button>
               </div>
-              <div className="flex-1 overflow-hidden">
-                {SidebarContent({ collapsed: false })}
-              </div>
+              <div className="flex-1 overflow-hidden">{SidebarContent({ collapsed: false })}</div>
             </motion.aside>
           </>
         )}
@@ -627,9 +713,24 @@ function LayoutShell({ children }: LayoutProps) {
             </p>
           </div>
 
-          <div title={isDesktopMode() ? 'Aplicación de escritorio: los datos demo se guardan en este equipo.' : databaseConnected ? 'Las operaciones del servidor se guardan en SQLite.' : 'No hay conexión con la API. Las operaciones que requieren el servidor pueden fallar; no continúes ventas hasta recuperar la conexión.'} className={`hidden sm:flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-semibold ${databaseConnected ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : 'bg-amber-500/10 text-amber-700 dark:text-amber-400'}`}>
+          <div
+            title={
+              isDesktopMode()
+                ? 'Aplicación de escritorio: los datos demo se guardan en este equipo.'
+                : databaseConnected
+                  ? 'Las operaciones del servidor se guardan en SQLite.'
+                  : 'No hay conexión con la API. Las operaciones que requieren el servidor pueden fallar; no continúes ventas hasta recuperar la conexión.'
+            }
+            className={`hidden sm:flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-semibold ${databaseConnected ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : 'bg-amber-500/10 text-amber-700 dark:text-amber-400'}`}
+          >
             <Database size={13} />
-            {databaseConnected === null ? 'Verificando datos…' : databaseConnected ? 'Base de datos conectada' : isDesktopMode() ? 'Modo escritorio local' : 'Modo local de prueba'}
+            {databaseConnected === null
+              ? 'Verificando datos…'
+              : databaseConnected
+                ? 'Base de datos conectada'
+                : isDesktopMode()
+                  ? 'Modo escritorio local'
+                  : 'Modo local de prueba'}
           </div>
 
           {/* Empresa selector (desktop) */}
@@ -640,102 +741,114 @@ function LayoutShell({ children }: LayoutProps) {
 
           {/* Foto del dueño (solo interfaz). */}
           {/* Appearance controls are business-wide and therefore owner-only. */}
-          {user?.role === 'owner' && <button
-            onClick={handleThemeToggle}
-            className="p-2 rounded-full hover:bg-accent text-muted-foreground transition-colors"
-            title={isDark ? 'Modo claro' : 'Modo oscuro'}
-            aria-label={isDark ? 'Activar tema claro' : 'Activar tema oscuro'}
-          >
-            {isDark ? <Sun size={18} className="text-amber-300" /> : <Moon size={18} />}
-          </button>}
+          {user?.role === 'owner' && (
+            <button
+              onClick={handleThemeToggle}
+              className="p-2 rounded-full hover:bg-accent text-muted-foreground transition-colors"
+              title={isDark ? 'Modo claro' : 'Modo oscuro'}
+              aria-label={isDark ? 'Activar tema claro' : 'Activar tema oscuro'}
+            >
+              {isDark ? <Sun size={18} className="text-amber-300" /> : <Moon size={18} />}
+            </button>
+          )}
 
           {/* POS shortcut is visible only if the current role is authorized. */}
-          {canAccessPath('/pos', user?.role, config, user?.customRoleId ? (user.permissions ?? []) : undefined) && <button
-            onClick={() => navigate('/pos')}
-            className="p-2 rounded-full hover:bg-accent text-muted-foreground hover:text-primary transition-colors"
-            title="Abrir punto de venta"
-            aria-label="Abrir punto de venta"
-          >
-            <Barcode size={18} />
-          </button>}
+          {canAccessPath('/pos', user?.role, config, user?.customRoleId ? (user.permissions ?? []) : undefined) && (
+            <button
+              onClick={() => navigate('/pos')}
+              className="p-2 rounded-full hover:bg-accent text-muted-foreground hover:text-primary transition-colors"
+              title="Abrir punto de venta"
+              aria-label="Abrir punto de venta"
+            >
+              <Barcode size={18} />
+            </button>
+          )}
 
           {/* Notifications are only displayed when the role can open the alert center. */}
-          {navItems.some(item => item.path === '/notifications') && <button
-            onClick={() => navigate('/notifications')}
-            className="relative p-2 rounded-full hover:bg-accent text-muted-foreground transition-colors"
-            aria-label="Abrir notificaciones"
-          >
-            <Bell size={18} />
-            {lowStockCount > 0 && (
-              <span className="pop-in absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center font-bold">
-                {lowStockCount}
-              </span>
-            )}
-          </button>}
+          {navItems.some(item => item.path === '/notifications') && (
+            <button
+              onClick={() => navigate('/notifications')}
+              className="relative p-2 rounded-full hover:bg-accent text-muted-foreground transition-colors"
+              aria-label="Abrir notificaciones"
+            >
+              <Bell size={18} />
+              {lowStockCount > 0 && (
+                <span className="pop-in absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center font-bold">
+                  {lowStockCount}
+                </span>
+              )}
+            </button>
+          )}
         </header>
 
         {/* Content: cada pantalla se monta al navegar y sus tarjetas/bloques entran animados */}
         <main ref={mainRef} className="flex-1 overflow-y-auto">
-          <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 ${hideGlobalMobileNav ? 'pb-0' : 'pb-24'} lg:pb-6`}>{children}</div>
+          <div
+            className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 ${hideGlobalMobileNav ? 'pb-0' : 'pb-24'} lg:pb-6`}
+          >
+            {children}
+          </div>
         </main>
       </div>
 
       {/* ── Mobile bottom tab bar ── */}
       {!hideGlobalMobileNav && (
-      <nav className="app-mobile-nav lg:hidden fixed bottom-0 left-0 right-0 z-30 pb-safe">
-        <div className="relative flex">
-          {/* Indicador compartido: se desliza hasta la pestaña activa. */}
-          {activeMobileIndex >= 0 && (
-            <motion.span
-              aria-hidden="true"
-              className="pointer-events-none absolute top-0 h-0.5 w-8 -translate-x-1/2 rounded-b-full bg-primary"
-              initial={{ left: `${(((lastBottomIndicatorIndex ?? activeMobileIndex) + 0.5) / mobileBottomItems.length) * 100}%` }}
-              animate={{ left: `${((activeMobileIndex + 0.5) / mobileBottomItems.length) * 100}%` }}
-              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            />
-          )}
-          {mobileBottomItems.map(item => {
-            const Icon = item.icon;
-            const isMore = item.path === '__more__';
-            const active = !isMore && isActive(item.path);
+        <nav className="app-mobile-nav lg:hidden fixed bottom-0 left-0 right-0 z-30 pb-safe">
+          <div className="relative flex">
+            {/* Indicador compartido: se desliza hasta la pestaña activa. */}
+            {activeMobileIndex >= 0 && (
+              <motion.span
+                aria-hidden="true"
+                className="pointer-events-none absolute top-0 h-0.5 w-8 -translate-x-1/2 rounded-b-full bg-primary"
+                initial={{
+                  left: `${(((lastBottomIndicatorIndex ?? activeMobileIndex) + 0.5) / mobileBottomItems.length) * 100}%`,
+                }}
+                animate={{ left: `${((activeMobileIndex + 0.5) / mobileBottomItems.length) * 100}%` }}
+                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              />
+            )}
+            {mobileBottomItems.map(item => {
+              const Icon = item.icon;
+              const isMore = item.path === '__more__';
+              const active = !isMore && isActive(item.path);
 
-            if (isMore) {
+              if (isMore) {
+                return (
+                  <button
+                    key="more"
+                    onClick={() => setShowMoreMenu(m => !m)}
+                    aria-label="Más opciones"
+                    aria-expanded={showMoreMenu}
+                    className={`flex-1 flex flex-col items-center justify-center py-2 min-h-[56px] text-muted-foreground`}
+                  >
+                    <MoreHorizontal size={22} />
+                    <span className="text-[10px] mt-0.5">Más</span>
+                  </button>
+                );
+              }
+
               return (
-                <button
-                  key="more"
-                  onClick={() => setShowMoreMenu(m => !m)}
-                  aria-label="Más opciones"
-                  aria-expanded={showMoreMenu}
-                  className={`flex-1 flex flex-col items-center justify-center py-2 min-h-[56px] text-muted-foreground`}
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={`flex-1 flex flex-col items-center justify-center py-2 min-h-[56px] transition-colors relative ${
+                    active ? 'text-primary' : 'text-muted-foreground'
+                  }`}
                 >
-                  <MoreHorizontal size={22} />
-                  <span className="text-[10px] mt-0.5">Más</span>
-                </button>
+                  <div className="relative">
+                    <Icon size={22} />
+                    {item.badge && item.badge > 0 ? (
+                      <span className="pop-in absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center">
+                        {item.badge}
+                      </span>
+                    ) : null}
+                  </div>
+                  <span className="text-[10px] mt-0.5 font-medium">{item.label}</span>
+                </Link>
               );
-            }
-
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`flex-1 flex flex-col items-center justify-center py-2 min-h-[56px] transition-colors relative ${
-                  active ? 'text-primary' : 'text-muted-foreground'
-                }`}
-              >
-                <div className="relative">
-                  <Icon size={22} />
-                  {item.badge && item.badge > 0 ? (
-                    <span className="pop-in absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center">
-                      {item.badge}
-                    </span>
-                  ) : null}
-                </div>
-                <span className="text-[10px] mt-0.5 font-medium">{item.label}</span>
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
+            })}
+          </div>
+        </nav>
       )}
 
       {/* Mobile "Más" drawer */}
@@ -761,29 +874,49 @@ function LayoutShell({ children }: LayoutProps) {
             >
               <div className="p-4">
                 <div className="w-10 h-1 bg-border rounded-full mx-auto mb-4" />
-                <p className="text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wider">Más opciones</p>
+                <p className="text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wider">
+                  Más opciones
+                </p>
                 <div className="grid grid-cols-3 gap-3">
-                  {navItems.filter(i => !mobileBottomItems.some(m => m.path === i.path) && i.path !== '__more__').map(item => {
-                    const Icon = item.icon;
-                    return (
-                      <Link
-                        key={`${item.path}|${item.label}`}
-                        to={item.path}
-                        onClick={() => { setActiveNavLabel(item.label); setShowMoreMenu(false); }}
-                        className="flex flex-col items-center gap-1 p-3 rounded-3xl bg-accent hover:bg-accent transition-colors"
-                      >
-                        <Icon size={20} className={isActiveNavItem(item) ? 'text-primary' : 'text-muted-foreground'} />
-                        <span className="text-[10px] text-center text-foreground font-medium leading-tight">{item.label}</span>
-                      </Link>
-                    );
-                  })}
+                  {navItems
+                    .filter(i => !mobileBottomItems.some(m => m.path === i.path) && i.path !== '__more__')
+                    .map(item => {
+                      const Icon = item.icon;
+                      return (
+                        <Link
+                          key={`${item.path}|${item.label}`}
+                          to={item.path}
+                          onClick={() => {
+                            setActiveNavLabel(item.label);
+                            setShowMoreMenu(false);
+                          }}
+                          className="flex flex-col items-center gap-1 p-3 rounded-3xl bg-accent hover:bg-accent transition-colors"
+                        >
+                          <Icon
+                            size={20}
+                            className={isActiveNavItem(item) ? 'text-primary' : 'text-muted-foreground'}
+                          />
+                          <span className="text-[10px] text-center text-foreground font-medium leading-tight">
+                            {item.label}
+                          </span>
+                        </Link>
+                      );
+                    })}
                 </div>
                 <div className="mt-4 flex gap-2">
-                  {user?.role === 'owner' && <button onClick={handleThemeToggle} className="flex-1 flex items-center justify-center gap-2 p-3 rounded-3xl bg-accent text-sm text-muted-foreground">
-                    {isDark ? <Sun size={16} className="text-amber-300" /> : <Moon size={16} />}
-                    <span>{isDark ? 'Modo claro' : 'Modo oscuro'}</span>
-                  </button>}
-                  <button onClick={handleLogout} className="flex-1 flex items-center justify-center gap-2 p-3 rounded-3xl bg-destructive/10 text-sm text-red-600">
+                  {user?.role === 'owner' && (
+                    <button
+                      onClick={handleThemeToggle}
+                      className="flex-1 flex items-center justify-center gap-2 p-3 rounded-3xl bg-accent text-sm text-muted-foreground"
+                    >
+                      {isDark ? <Sun size={16} className="text-amber-300" /> : <Moon size={16} />}
+                      <span>{isDark ? 'Modo claro' : 'Modo oscuro'}</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={handleLogout}
+                    className="flex-1 flex items-center justify-center gap-2 p-3 rounded-3xl bg-destructive/10 text-sm text-red-600"
+                  >
                     <LogOut size={16} />
                     <span>Salir</span>
                   </button>

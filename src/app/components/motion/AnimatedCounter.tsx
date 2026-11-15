@@ -21,13 +21,7 @@ const EASE_COUNT: [number, number, number, number] = [0.16, 1, 0.3, 1];
  * los datos— anima desde el valor que se está mostrando hasta el nuevo, nunca
  * desde cero. Con prefers-reduced-motion muestra el valor final de inmediato.
  */
-export function AnimatedCounter({
-  value,
-  format,
-  duration = 1.2,
-  delay = 0,
-  className,
-}: AnimatedCounterProps) {
+export function AnimatedCounter({ value, format, duration = 1.2, delay = 0, className }: AnimatedCounterProps) {
   const target = Number.isFinite(value) ? value : 0;
   const reduceMotion = useReducedMotion();
   // Último valor pintado: es el punto de partida de la siguiente cuenta.

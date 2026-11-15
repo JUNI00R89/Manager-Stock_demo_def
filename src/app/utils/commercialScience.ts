@@ -48,7 +48,16 @@ export function salesWindowStats(sales: SaleRecord[], windowDays = 30): SalesWin
     if (sale.status !== 'completed') continue;
     const key = colombiaDateKey(new Date(sale.date));
     if (key < cutoffKey) continue;
-    const retained = (sale.items ?? []).map(item => ({ ...item, quantity: Math.max(0, item.quantity - returnedUnits(sale, item)), subtotal: item.quantity > 0 ? item.subtotal * Math.max(0, item.quantity - returnedUnits(sale, item)) / item.quantity : 0 })).filter(item => item.quantity > 0);
+    const retained = (sale.items ?? [])
+      .map(item => ({
+        ...item,
+        quantity: Math.max(0, item.quantity - returnedUnits(sale, item)),
+        subtotal:
+          item.quantity > 0
+            ? (item.subtotal * Math.max(0, item.quantity - returnedUnits(sale, item))) / item.quantity
+            : 0,
+      }))
+      .filter(item => item.quantity > 0);
     if (!retained.length) continue;
     baskets += 1;
     const dayIndex = Math.floor((Date.parse(`${key}T00:00:00Z`) - cutoffTime) / DAY_MS);
@@ -136,12 +145,14 @@ const AFFINITY: Record<CategoryGroup, Partial<Record<CategoryGroup, number>>> = 
 const STOP_WORDS = new Set(['de', 'con', 'para', 'por', 'la', 'el', 'los', 'las', 'y', 'al', 'en', 'x']);
 
 function headWord(name: string): string {
-  return name
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .split(/\s+/)
-    .find(word => word.length > 2 && !STOP_WORDS.has(word)) ?? '';
+  return (
+    name
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .split(/\s+/)
+      .find(word => word.length > 2 && !STOP_WORDS.has(word)) ?? ''
+  );
 }
 
 function isSubstitute(anchor: Product, candidate: Product): boolean {
@@ -172,7 +183,10 @@ export interface ComboPlan {
 function comboAvailability(parts: Product[]): { maxCombos: number; limiting: string } {
   if (!parts.length) return { maxCombos: 0, limiting: '—' };
   const limiting = parts.reduce((worst, product) => (product.stock < worst.stock ? product : worst), parts[0]);
-  return { maxCombos: Math.max(0, Math.floor(Math.min(...parts.map(product => product.stock)))), limiting: limiting.name };
+  return {
+    maxCombos: Math.max(0, Math.floor(Math.min(...parts.map(product => product.stock)))),
+    limiting: limiting.name,
+  };
 }
 
 export function buildComboPlan(
@@ -198,8 +212,10 @@ export function buildComboPlan(
       const lift = anchorCount && partnerCount ? (together * stats.baskets) / (anchorCount * partnerCount) : 0;
       const hasHistory = together >= 3;
       const historyScore = hasHistory ? confidence * lift * 4 : 0;
-      const affinity = AFFINITY[groupOf(`${anchor.category} ${anchor.name}`)]?.[groupOf(`${candidate.category} ${candidate.name}`)] ?? 0.2;
-      const popularity = Math.min(0.3, (stats.units.get(candidate.id) ?? 0) / maxUnits * 0.3);
+      const affinity =
+        AFFINITY[groupOf(`${anchor.category} ${anchor.name}`)]?.[groupOf(`${candidate.category} ${candidate.name}`)] ??
+        0.2;
+      const popularity = Math.min(0.3, ((stats.units.get(candidate.id) ?? 0) / maxUnits) * 0.3);
       const { maxCombos, limiting } = comboAvailability([anchor, candidate]);
       return {
         partner: candidate,
@@ -211,7 +227,12 @@ export function buildComboPlan(
         maxCombos,
         limiting,
         revenue: maxCombos * (anchor.price + candidate.price),
-        margin: maxCombos * (anchor.price - (anchor.cost ?? anchor.price * 0.5) + candidate.price - (candidate.cost ?? candidate.price * 0.5)),
+        margin:
+          maxCombos *
+          (anchor.price -
+            (anchor.cost ?? anchor.price * 0.5) +
+            candidate.price -
+            (candidate.cost ?? candidate.price * 0.5)),
       };
     })
     .filter(offer => offer.score > 0.2)
@@ -230,27 +251,36 @@ export function buildComboPlan(
       .sort(byAvailability)[0];
     const coldDrinkPattern = /gaseosa|limonada|jugo|malteada|cerveza|vino|refresco/;
     const coldDrink = candidates
-      .filter(offer => groupOf(`${offer.partner.category} ${offer.partner.name}`) === 'drink' && coldDrinkPattern.test(offer.partner.name.toLowerCase()))
+      .filter(
+        offer =>
+          groupOf(`${offer.partner.category} ${offer.partner.name}`) === 'drink' &&
+          coldDrinkPattern.test(offer.partner.name.toLowerCase()),
+      )
       .sort(byAvailability)[0];
-    const anyDrink = coldDrink ?? candidates
-      .filter(offer => groupOf(`${offer.partner.category} ${offer.partner.name}`) === 'drink')
-      .sort(byAvailability)[0];
+    const anyDrink =
+      coldDrink ??
+      candidates
+        .filter(offer => groupOf(`${offer.partner.category} ${offer.partner.name}`) === 'drink')
+        .sort(byAvailability)[0];
     trioPartners = [side, anyDrink].filter((offer): offer is ComboOffer => Boolean(offer)).map(offer => offer.partner);
   }
 
-  const trio = trioPartners.length === 2
-    ? (() => {
-        const parts = [anchor, ...trioPartners];
-        const { maxCombos, limiting } = comboAvailability(parts);
-        return {
-          partners: trioPartners,
-          maxCombos,
-          limiting,
-          revenue: maxCombos * parts.reduce((total, product) => total + product.price, 0),
-          margin: maxCombos * parts.reduce((total, product) => total + product.price - (product.cost ?? product.price * 0.5), 0),
-        };
-      })()
-    : null;
+  const trio =
+    trioPartners.length === 2
+      ? (() => {
+          const parts = [anchor, ...trioPartners];
+          const { maxCombos, limiting } = comboAvailability(parts);
+          return {
+            partners: trioPartners,
+            maxCombos,
+            limiting,
+            revenue: maxCombos * parts.reduce((total, product) => total + product.price, 0),
+            margin:
+              maxCombos *
+              parts.reduce((total, product) => total + product.price - (product.cost ?? product.price * 0.5), 0),
+          };
+        })()
+      : null;
 
   // El trío puede incluir un producto que no está en el top 5 por afinidad;
   // se agrega a la tabla para que la recomendación sea trazable.
@@ -262,7 +292,13 @@ export function buildComboPlan(
     }
   }
 
-  return { anchor, anchorUnits: stats.units.get(anchor.id) ?? 0, anchorBaskets: anchorCount, offers: displayOffers, trio };
+  return {
+    anchor,
+    anchorUnits: stats.units.get(anchor.id) ?? 0,
+    anchorBaskets: anchorCount,
+    offers: displayOffers,
+    trio,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -362,9 +398,7 @@ export function analyzeInventoryScience(products: Product[], sales: SaleRecord[]
   }
   const paretoShare = rows.slice(0, paretoCount).reduce((total, row) => total + row.share, 0);
 
-  const mostVariable = rows
-    .filter(row => row.revenue > 0)
-    .sort((a, b) => b.cv - a.cv)[0] ?? null;
+  const mostVariable = rows.filter(row => row.revenue > 0).sort((a, b) => b.cv - a.cv)[0] ?? null;
 
   const rules: PairRule[] = [];
   stats.pairs.forEach((together, key) => {
@@ -374,7 +408,11 @@ export function analyzeInventoryScience(products: Product[], sales: SaleRecord[]
     const partnerCount = stats.singles.get(partnerId) ?? 0;
     if (!anchorCount || !partnerCount) return;
     rules.push({
-      anchorId, partnerId, together, anchorCount, partnerCount,
+      anchorId,
+      partnerId,
+      together,
+      anchorCount,
+      partnerCount,
       support: stats.baskets ? together / stats.baskets : 0,
       confidence: together / anchorCount,
       lift: (together * stats.baskets) / (anchorCount * partnerCount),

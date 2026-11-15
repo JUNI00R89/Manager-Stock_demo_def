@@ -19,7 +19,7 @@ export interface RestaurantCatalogProduct extends Product {
 const catalogStore = createScopedLocalStore<CatalogOverrides>(
   'manager_stock_restaurant_catalog_v1_',
   () => ({}),
-  (value) => {
+  value => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
     const result: CatalogOverrides = {};
     Object.entries(value as Record<string, unknown>).forEach(([productId, entry]) => {
@@ -34,7 +34,8 @@ const catalogStore = createScopedLocalStore<CatalogOverrides>(
   },
 );
 
-const DIRECT_SALE_PATTERN = /\b(bebida|bebidas|gaseosa|agua|jugo|jugos|caf[eé]|cerveza|cervezas|vino|vinos|licor|licores|c[oó]ctel|coctel|refresco|refrescos|soda|malteada|limonada|t[eé]|drink|beverage)\b/i;
+const DIRECT_SALE_PATTERN =
+  /\b(bebida|bebidas|gaseosa|agua|jugo|jugos|caf[eé]|cerveza|cervezas|vino|vinos|licor|licores|c[oó]ctel|coctel|refresco|refrescos|soda|malteada|limonada|t[eé]|drink|beverage)\b/i;
 
 export function defaultDirectSale(product: Pick<Product, 'name' | 'category'>): boolean {
   return DIRECT_SALE_PATTERN.test(`${product.category} ${product.name}`);
@@ -47,13 +48,13 @@ export function isMenuProduct(product: Product): boolean {
 export function useCatalogOverrides(scope: string) {
   const overrides = useScopedLocalStore(catalogStore, scope);
   const setActive = (productId: string, active: boolean) => {
-    catalogStore.update(scope, (current) => ({
+    catalogStore.update(scope, current => ({
       ...current,
       [productId]: { ...current[productId], active },
     }));
   };
   const setDirectSale = (productId: string, directSale: boolean) => {
-    catalogStore.update(scope, (current) => ({
+    catalogStore.update(scope, current => ({
       ...current,
       [productId]: { ...current[productId], directSale },
     }));
@@ -68,41 +69,45 @@ export function useRestaurantCatalog(scope: string) {
   const [error, setError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
 
-  const refresh = useCallback(() => setReloadToken((value) => value + 1), []);
+  const refresh = useCallback(() => setReloadToken(value => value + 1), []);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
     setError(null);
-    dataService.getProducts()
-      .then((rows) => {
+    dataService
+      .getProducts()
+      .then(rows => {
         if (!active) return;
         setProducts(Array.isArray(rows) ? rows : []);
       })
-      .catch((reason) => {
+      .catch(reason => {
         if (!active) return;
         setError(reason instanceof Error ? reason.message : 'No se pudo cargar el menú.');
       })
       .finally(() => {
         if (active) setLoading(false);
       });
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [reloadToken]);
 
-  const catalog = useMemo<RestaurantCatalogProduct[]>(() => products.map((product) => {
-    const override = overrides[product.id] ?? {};
-    return {
-      ...product,
-      isSaleItem: isMenuProduct(product),
-      active: override.active ?? true,
-      directSale: override.directSale ?? (isMenuProduct(product) ? defaultDirectSale(product) : false),
-    };
-  }), [products, overrides]);
-
-  const activeMenu = useMemo(
-    () => catalog.filter((product) => product.isSaleItem && product.active),
-    [catalog],
+  const catalog = useMemo<RestaurantCatalogProduct[]>(
+    () =>
+      products.map(product => {
+        const override = overrides[product.id] ?? {};
+        return {
+          ...product,
+          isSaleItem: isMenuProduct(product),
+          active: override.active ?? true,
+          directSale: override.directSale ?? (isMenuProduct(product) ? defaultDirectSale(product) : false),
+        };
+      }),
+    [products, overrides],
   );
+
+  const activeMenu = useMemo(() => catalog.filter(product => product.isSaleItem && product.active), [catalog]);
 
   return {
     products: catalog,

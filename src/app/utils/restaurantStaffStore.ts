@@ -27,10 +27,10 @@ const EMPTY_STATE: RestaurantStaffState = {
 };
 
 function normalizeStaff(value: unknown): RestaurantStaffState {
-  const input = value && typeof value === 'object' ? value as Partial<RestaurantStaffState> : {};
+  const input = value && typeof value === 'object' ? (value as Partial<RestaurantStaffState>) : {};
   const staff: RestaurantStaff[] = [];
   if (Array.isArray(input.staff)) {
-    input.staff.forEach((candidate) => {
+    input.staff.forEach(candidate => {
       if (!candidate || typeof candidate !== 'object') return;
       const item = candidate as Partial<RestaurantStaff>;
       if (!item.id || !item.name || !item.role) return;
@@ -49,10 +49,10 @@ function normalizeStaff(value: unknown): RestaurantStaffState {
     cocina: input.activeByRole?.cocina ?? null,
     admin: input.activeByRole?.admin ?? null,
   };
-  (['mesero', 'cocina', 'admin'] as EmpleadoRol[]).forEach((role) => {
-    const selected = staff.find((item) => item.id === activeByRole[role] && item.active);
+  (['mesero', 'cocina', 'admin'] as EmpleadoRol[]).forEach(role => {
+    const selected = staff.find(item => item.id === activeByRole[role] && item.active);
     if (!selected) {
-      const fallback = staff.find((item) => item.role === role && item.active);
+      const fallback = staff.find(item => item.role === role && item.active);
       activeByRole[role] = fallback?.id ?? null;
     }
   });
@@ -92,13 +92,15 @@ export function useRestaurantStaff(scope: string, currentUserName: string) {
   }, [scope, currentUserName]);
 
   const getActive = (role: EmpleadoRol): RestaurantStaff | null => {
-    const selected = state.staff.find((item) => item.id === state.activeByRole[role] && item.active && item.role === role);
+    const selected = state.staff.find(
+      item => item.id === state.activeByRole[role] && item.active && item.role === role,
+    );
     if (selected) return selected;
-    return state.staff.find((item) => item.role === role && item.active) ?? null;
+    return state.staff.find(item => item.role === role && item.active) ?? null;
   };
 
   const setActive = (role: EmpleadoRol, staffId: string) => {
-    staffStore.update(scope, (current) => ({
+    staffStore.update(scope, current => ({
       ...current,
       activeByRole: { ...current.activeByRole, [role]: staffId },
     }));
@@ -112,7 +114,7 @@ export function useRestaurantStaff(scope: string, currentUserName: string) {
       active: true,
       pin: input.pin?.trim() || undefined,
     };
-    staffStore.update(scope, (current) => ({
+    staffStore.update(scope, current => ({
       staff: [...current.staff, item],
       activeByRole: {
         ...current.activeByRole,
@@ -123,14 +125,14 @@ export function useRestaurantStaff(scope: string, currentUserName: string) {
   };
 
   const updateStaff = (staffId: string, patch: Partial<Pick<RestaurantStaff, 'name' | 'role' | 'active' | 'pin'>>) => {
-    staffStore.update(scope, (current) => {
-      const nextStaff = current.staff.map((item) => {
+    staffStore.update(scope, current => {
+      const nextStaff = current.staff.map(item => {
         if (item.id !== staffId) return item;
         return {
           ...item,
           ...patch,
           name: patch.name !== undefined ? patch.name.trim() : item.name,
-          pin: patch.pin !== undefined ? (patch.pin.trim() || undefined) : item.pin,
+          pin: patch.pin !== undefined ? patch.pin.trim() || undefined : item.pin,
         };
       });
       return normalizeStaff({ ...current, staff: nextStaff });
@@ -138,10 +140,12 @@ export function useRestaurantStaff(scope: string, currentUserName: string) {
   };
 
   const removeStaff = (staffId: string) => {
-    staffStore.update(scope, (current) => normalizeStaff({
-      ...current,
-      staff: current.staff.filter((item) => item.id !== staffId),
-    }));
+    staffStore.update(scope, current =>
+      normalizeStaff({
+        ...current,
+        staff: current.staff.filter(item => item.id !== staffId),
+      }),
+    );
   };
 
   const toEmployee = (staff: RestaurantStaff): EmpleadoRef => ({

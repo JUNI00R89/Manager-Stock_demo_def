@@ -36,7 +36,17 @@ export interface BusinessConfig {
   name: string;
   currency: string;
   taxRate: number;
-  features: { inventory: boolean; pos: boolean; reservations: boolean; tables: boolean; rooms: boolean; warehouse: boolean; services: boolean; delivery: boolean; productImages?: boolean };
+  features: {
+    inventory: boolean;
+    pos: boolean;
+    reservations: boolean;
+    tables: boolean;
+    rooms: boolean;
+    warehouse: boolean;
+    services: boolean;
+    delivery: boolean;
+    productImages?: boolean;
+  };
   foodConfig?: FoodBusinessConfig;
   theme?: BusinessTheme;
   inventoryConfig?: InventoryConfig;
@@ -53,11 +63,81 @@ interface BusinessContextType {
 const BusinessContext = createContext<BusinessContextType | undefined>(undefined);
 
 export const DEFAULT_CONFIGS: Record<BusinessType, Omit<BusinessConfig, 'name'>> = {
-  retail: { type: 'retail', currency: 'COP', taxRate: 0.19, features: { inventory: true, pos: true, reservations: false, tables: false, rooms: false, warehouse: false, services: false, delivery: false } },
-  restaurant: { type: 'restaurant', currency: 'COP', taxRate: 0.19, features: { inventory: true, pos: true, reservations: false, tables: false, rooms: false, warehouse: false, services: false, delivery: false } },
-  hotel: { type: 'hotel', currency: 'COP', taxRate: 0.19, features: { inventory: true, pos: true, reservations: true, tables: false, rooms: true, warehouse: false, services: false, delivery: false } },
-  warehouse: { type: 'warehouse', currency: 'COP', taxRate: 0.19, features: { inventory: true, pos: false, reservations: false, tables: false, rooms: false, warehouse: true, services: false, delivery: false } },
-  services: { type: 'services', currency: 'COP', taxRate: 0.19, features: { inventory: false, pos: true, reservations: true, tables: false, rooms: false, warehouse: false, services: true, delivery: false } },
+  retail: {
+    type: 'retail',
+    currency: 'COP',
+    taxRate: 0.19,
+    features: {
+      inventory: true,
+      pos: true,
+      reservations: false,
+      tables: false,
+      rooms: false,
+      warehouse: false,
+      services: false,
+      delivery: false,
+    },
+  },
+  restaurant: {
+    type: 'restaurant',
+    currency: 'COP',
+    taxRate: 0.19,
+    features: {
+      inventory: true,
+      pos: true,
+      reservations: false,
+      tables: false,
+      rooms: false,
+      warehouse: false,
+      services: false,
+      delivery: false,
+    },
+  },
+  hotel: {
+    type: 'hotel',
+    currency: 'COP',
+    taxRate: 0.19,
+    features: {
+      inventory: true,
+      pos: true,
+      reservations: true,
+      tables: false,
+      rooms: true,
+      warehouse: false,
+      services: false,
+      delivery: false,
+    },
+  },
+  warehouse: {
+    type: 'warehouse',
+    currency: 'COP',
+    taxRate: 0.19,
+    features: {
+      inventory: true,
+      pos: false,
+      reservations: false,
+      tables: false,
+      rooms: false,
+      warehouse: true,
+      services: false,
+      delivery: false,
+    },
+  },
+  services: {
+    type: 'services',
+    currency: 'COP',
+    taxRate: 0.19,
+    features: {
+      inventory: false,
+      pos: true,
+      reservations: true,
+      tables: false,
+      rooms: false,
+      warehouse: false,
+      services: true,
+      delivery: false,
+    },
+  },
 };
 
 /**
@@ -103,7 +183,13 @@ const LIGHT_SURFACE_WEIGHT = 0.6;
 function parseHexColor(value: string): [number, number, number] | null {
   const hex = value.trim().replace(/^#/, '');
   if (!/^[0-9a-f]{3}$|^[0-9a-f]{6}$/i.test(hex)) return null;
-  const normalized = hex.length === 3 ? hex.split('').map(char => char + char).join('') : hex;
+  const normalized =
+    hex.length === 3
+      ? hex
+          .split('')
+          .map(char => char + char)
+          .join('')
+      : hex;
   return [0, 2, 4].map(index => parseInt(normalized.slice(index, index + 2), 16)) as [number, number, number];
 }
 
@@ -116,8 +202,9 @@ function mixHexColor(base: string, tint: [number, number, number], tintWeight: n
 
 /** Colores efectivos que la interfaz pinta para el tema indicado. */
 export function resolveThemeColors(theme: BusinessTheme) {
-  const background = theme.mode === 'dark' ? (theme.darkBackground || '#080B10') : (theme.lightBackground || theme.background);
-  const surface = theme.mode === 'dark' ? (theme.darkSurface || '#11161E') : (theme.lightSurface || theme.surface);
+  const background =
+    theme.mode === 'dark' ? theme.darkBackground || '#080B10' : theme.lightBackground || theme.background;
+  const surface = theme.mode === 'dark' ? theme.darkSurface || '#11161E' : theme.lightSurface || theme.surface;
   if (theme.mode === 'dark') return { background, surface };
   return {
     background: mixHexColor(background, LIGHT_CANVAS_TINT, LIGHT_CANVAS_WEIGHT),
@@ -151,16 +238,32 @@ function normalizeConfig(value: unknown): BusinessConfig | null {
   // (`customized: false`) se aplica la paleta por defecto vigente conservando su
   // preferencia claro/oscuro. Si los personalizó, se respeta su paleta guardada.
   const theme = config.theme
-    ? (config.theme.customized
-        ? { ...defaults, ...config.theme }
-        : { ...defaults, mode: config.theme.mode ?? defaults.mode })
+    ? config.theme.customized
+      ? { ...defaults, ...config.theme }
+      : { ...defaults, mode: config.theme.mode ?? defaults.mode }
     : { ...defaults };
-  const normalized: BusinessConfig = { ...DEFAULT_CONFIGS[config.type], ...config, theme, currency: 'COP', taxRate: Number.isFinite(config.taxRate) ? config.taxRate : 0.19 };
+  const normalized: BusinessConfig = {
+    ...DEFAULT_CONFIGS[config.type],
+    ...config,
+    theme,
+    currency: 'COP',
+    taxRate: Number.isFinite(config.taxRate) ? config.taxRate : 0.19,
+  };
   normalized.inventoryConfig = {
-    allowNegativeStock: false, expiryAlertDays: 30, lowStockAlerts: true, defaultLocationId: null,
+    allowNegativeStock: false,
+    expiryAlertDays: 30,
+    lowStockAlerts: true,
+    defaultLocationId: null,
     ...(config.inventoryConfig || {}),
   };
-  if (normalized.type === 'restaurant') normalized.foodConfig = { serviceModes: [], foodTypes: [], activeModules: ['menu', 'caja', 'inventario'], ...normalized.foodConfig, displayLabel: 'Negocio de comidas' };
+  if (normalized.type === 'restaurant')
+    normalized.foodConfig = {
+      serviceModes: [],
+      foodTypes: [],
+      activeModules: ['menu', 'caja', 'inventario'],
+      ...normalized.foodConfig,
+      displayLabel: 'Negocio de comidas',
+    };
   return normalized;
 }
 
@@ -179,7 +282,19 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
       applyTheme(config.theme);
       setTheme(config.theme.mode);
     }
-  }, [config?.theme?.primary, config?.theme?.secondary, config?.theme?.accent, config?.theme?.background, config?.theme?.surface, config?.theme?.lightBackground, config?.theme?.lightSurface, config?.theme?.darkBackground, config?.theme?.darkSurface, config?.theme?.mode, setTheme]);
+  }, [
+    config?.theme?.primary,
+    config?.theme?.secondary,
+    config?.theme?.accent,
+    config?.theme?.background,
+    config?.theme?.surface,
+    config?.theme?.lightBackground,
+    config?.theme?.lightSurface,
+    config?.theme?.darkBackground,
+    config?.theme?.darkSurface,
+    config?.theme?.mode,
+    setTheme,
+  ]);
 
   useEffect(() => {
     let active = true;
@@ -193,7 +308,7 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
       return;
     }
     getBusinessConfig<BusinessConfig>()
-      .then((remote) => {
+      .then(remote => {
         if (!active) return;
         const normalized = normalizeConfig(remote);
         setConfigState(normalized);
@@ -203,8 +318,12 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
       .catch(() => {
         if (active) setConfigState(null);
       })
-      .finally(() => { if (active) setLoadedUserId(user.id); });
-    return () => { active = false; };
+      .finally(() => {
+        if (active) setLoadedUserId(user.id);
+      });
+    return () => {
+      active = false;
+    };
   }, [user?.id, user?.role]);
 
   const setConfig = async (nextConfig: BusinessConfig | null) => {
@@ -223,7 +342,21 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
   };
 
   const isFoodBusiness = config?.type === 'restaurant';
-  return <BusinessContext.Provider value={{ config, setConfig, isConfigured: !!config, isLoading, isFoodBusiness, hasDelivery: config?.features.delivery ?? false, hasTables: config?.features.tables ?? false }}>{children}</BusinessContext.Provider>;
+  return (
+    <BusinessContext.Provider
+      value={{
+        config,
+        setConfig,
+        isConfigured: !!config,
+        isLoading,
+        isFoodBusiness,
+        hasDelivery: config?.features.delivery ?? false,
+        hasTables: config?.features.tables ?? false,
+      }}
+    >
+      {children}
+    </BusinessContext.Provider>
+  );
 }
 export function useBusiness() {
   const context = useContext(BusinessContext);

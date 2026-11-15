@@ -24,7 +24,7 @@ export function StaffSwitcher({ scope, role, currentUserName, className = '' }: 
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
 
-  const options = staff.filter((item) => item.role === role && item.active);
+  const options = staff.filter(item => item.role === role && item.active);
 
   const close = () => {
     setOpen(false);
@@ -68,13 +68,26 @@ export function StaffSwitcher({ scope, role, currentUserName, className = '' }: 
           {active ? getInitials(active.name) : <UserRound size={16} />}
         </span>
         <span className="min-w-0">
-          <span className="block max-w-[9rem] truncate text-sm font-semibold leading-tight">{active?.name ?? 'Sin usuario'}</span>
-          <span className="block text-[11px] font-medium leading-tight text-muted-foreground">{RESTAURANT_ROLE_LABELS[role]}</span>
+          <span className="block max-w-[9rem] truncate text-sm font-semibold leading-tight">
+            {active?.name ?? 'Sin usuario'}
+          </span>
+          <span className="block text-[11px] font-medium leading-tight text-muted-foreground">
+            {RESTAURANT_ROLE_LABELS[role]}
+          </span>
         </span>
-        <ChevronDown size={16} className="shrink-0 text-muted-foreground transition-transform group-hover:translate-y-0.5" />
+        <ChevronDown
+          size={16}
+          className="shrink-0 text-muted-foreground transition-transform group-hover:translate-y-0.5"
+        />
       </button>
 
-      <Dialog open={open} onOpenChange={(next) => { if (!next) close(); else setOpen(true); }}>
+      <Dialog
+        open={open}
+        onOpenChange={next => {
+          if (!next) close();
+          else setOpen(true);
+        }}
+      >
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Usuario activo</DialogTitle>
@@ -95,15 +108,29 @@ export function StaffSwitcher({ scope, role, currentUserName, className = '' }: 
                   autoComplete="one-time-code"
                   value={pin}
                   maxLength={8}
-                  onChange={(event) => { setPin(event.target.value.replace(/\D/g, '')); setError(''); }}
-                  onKeyDown={(event) => { if (event.key === 'Enter') confirmPin(); }}
+                  onChange={event => {
+                    setPin(event.target.value.replace(/\D/g, ''));
+                    setError('');
+                  }}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter') confirmPin();
+                  }}
                   className="mt-3 h-12 text-center text-xl tracking-[0.4em]"
                   aria-label={`PIN de ${pinTarget.name}`}
                 />
                 {error && <p className="mt-2 text-sm font-medium text-destructive">{error}</p>}
               </div>
               <div className="flex gap-2">
-                <Button type="button" variant="outline" className="h-11 flex-1" onClick={() => { setPinTarget(null); setPin(''); setError(''); }}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 flex-1"
+                  onClick={() => {
+                    setPinTarget(null);
+                    setPin('');
+                    setError('');
+                  }}
+                >
                   Volver
                 </Button>
                 <Button type="button" className="h-11 flex-1" onClick={confirmPin} disabled={!pin.trim()}>
@@ -118,7 +145,7 @@ export function StaffSwitcher({ scope, role, currentUserName, className = '' }: 
                   No hay usuarios activos con el rol {RESTAURANT_ROLE_LABELS[role].toLowerCase()}.
                 </div>
               )}
-              {options.map((person) => {
+              {options.map(person => {
                 const selected = active?.id === person.id;
                 return (
                   <button
@@ -134,7 +161,9 @@ export function StaffSwitcher({ scope, role, currentUserName, className = '' }: 
                       <span className="block truncate text-sm font-semibold">{person.name}</span>
                       <span className="block text-xs text-muted-foreground">{RESTAURANT_ROLE_LABELS[person.role]}</span>
                     </span>
-                    {person.pin && <KeyRound size={16} className="text-muted-foreground" aria-label="Protegido con PIN" />}
+                    {person.pin && (
+                      <KeyRound size={16} className="text-muted-foreground" aria-label="Protegido con PIN" />
+                    )}
                     {selected && <span className="text-xs font-semibold text-primary">Activo</span>}
                   </button>
                 );

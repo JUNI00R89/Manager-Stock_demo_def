@@ -154,8 +154,7 @@ export function buildRevenueProjection(
   const monthTotal = sum(points.slice(0, monthDays).map(point => point.revenue));
   const monthBand = 1.2816 * sigma * Math.sqrt(monthDays);
   const weekdayAverages = sums.map((total, weekday) => (counts[weekday] ? total / counts[weekday] : 0));
-  const ranked = Array.from({ length: 7 }, (_, weekday) => weekday)
-    .sort((a, b) => seasonal[a] - seasonal[b]);
+  const ranked = Array.from({ length: 7 }, (_, weekday) => weekday).sort((a, b) => seasonal[a] - seasonal[b]);
 
   return {
     historyDays,

@@ -46,12 +46,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('theme', next);
   }, []);
 
-  const setTheme = useCallback((next: Theme) => {
-    if (themeRef.current === next) return;
-    themeRef.current = next;
-    applyThemeMode(next, true);
-    setThemeState(next);
-  }, [applyThemeMode]);
+  const setTheme = useCallback(
+    (next: Theme) => {
+      if (themeRef.current === next) return;
+      themeRef.current = next;
+      applyThemeMode(next, true);
+      setThemeState(next);
+    },
+    [applyThemeMode],
+  );
 
   // Sincroniza el tema guardado antes del primer pintado, sin animación.
   useLayoutEffect(() => {

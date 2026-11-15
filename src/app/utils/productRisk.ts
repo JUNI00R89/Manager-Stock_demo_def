@@ -50,7 +50,11 @@ export interface ProductRiskReport {
   windowDays: number;
 }
 
-export function analyzeProductRisk(products: Product[], sales: SaleRecord[], windowDays = 30): ProductRiskReport | null {
+export function analyzeProductRisk(
+  products: Product[],
+  sales: SaleRecord[],
+  windowDays = 30,
+): ProductRiskReport | null {
   const sellable = products.filter(product => !product.productType || product.productType === 'sale_item');
   if (!sellable.length) return null;
 
@@ -64,14 +68,16 @@ export function analyzeProductRisk(products: Product[], sales: SaleRecord[], win
     if (key < cutoff) continue;
     revenueWindow += saleNetTotal(sale);
     for (const item of sale.items ?? []) {
-      units.set(item.productId, (units.get(item.productId) ?? 0) + Math.max(0, item.quantity - returnedUnits(sale, item)));
+      units.set(
+        item.productId,
+        (units.get(item.productId) ?? 0) + Math.max(0, item.quantity - returnedUnits(sale, item)),
+      );
     }
   }
 
   const projection = buildRevenueProjection(sales, 90, 30, now);
-  const uplift = projection && revenueWindow > 0
-    ? Math.min(1.25, Math.max(1, projection.monthTotal / revenueWindow))
-    : 1;
+  const uplift =
+    projection && revenueWindow > 0 ? Math.min(1.25, Math.max(1, projection.monthTotal / revenueWindow)) : 1;
 
   const rows: ProductRiskRow[] = sellable.map(product => {
     const price = product.price;
@@ -80,7 +86,7 @@ export function analyzeProductRisk(products: Product[], sales: SaleRecord[], win
     const quantity = units.get(product.id) ?? 0;
     const daily = quantity / windowDays;
     const dailyProjected = daily * uplift;
-    const coverDays = daily > 0 ? stock / daily : (stock > 0 ? Number.POSITIVE_INFINITY : 0);
+    const coverDays = daily > 0 ? stock / daily : stock > 0 ? Number.POSITIVE_INFINITY : 0;
 
     let risk: ProductRiskLevel = 'ok';
     if (stock <= 0 && daily > 0) risk = 'quiebre';
@@ -88,26 +94,38 @@ export function analyzeProductRisk(products: Product[], sales: SaleRecord[], win
     else if (daily > 0 && coverDays > 60) risk = 'sobre_stock';
     else if (daily === 0 && stock > 0) risk = 'sin_rotacion';
 
-    const reorderQty = risk === 'quiebre' || risk === 'critico'
-      ? Math.max(0, Math.ceil(dailyProjected * 14 - stock))
-      : 0;
+    const reorderQty =
+      risk === 'quiebre' || risk === 'critico' ? Math.max(0, Math.ceil(dailyProjected * 14 - stock)) : 0;
     const reorderPoint = Math.ceil(dailyProjected * 7 * 1.2);
-    const action = risk === 'quiebre'
-      ? `Reponer ${reorderQty} uds ya`
-      : risk === 'critico'
-        ? `Reponer ${reorderQty} uds antes del fin de semana`
-        : risk === 'sobre_stock'
-          ? 'Congelar compra · mover con combo'
-          : risk === 'sin_rotacion'
-            ? 'Liquidar o descontinuar'
-            : 'Mantener';
+    const action =
+      risk === 'quiebre'
+        ? `Reponer ${reorderQty} uds ya`
+        : risk === 'critico'
+          ? `Reponer ${reorderQty} uds antes del fin de semana`
+          : risk === 'sobre_stock'
+            ? 'Congelar compra · mover con combo'
+            : risk === 'sin_rotacion'
+              ? 'Liquidar o descontinuar'
+              : 'Mantener';
 
     return {
-      id: product.id, name: product.name, category: product.category,
-      price, cost, stock, minStock: product.minStock, unit: product.unit ?? 'unidad',
-      units: quantity, daily, dailyProjected, coverDays,
+      id: product.id,
+      name: product.name,
+      category: product.category,
+      price,
+      cost,
+      stock,
+      minStock: product.minStock,
+      unit: product.unit ?? 'unidad',
+      units: quantity,
+      daily,
+      dailyProjected,
+      coverDays,
       marginPct: price > 0 ? ((price - cost) / price) * 100 : 0,
-      risk, reorderQty, reorderPoint, action,
+      risk,
+      reorderQty,
+      reorderPoint,
+      action,
     };
   });
 
@@ -125,8 +143,9 @@ export function analyzeProductRisk(products: Product[], sales: SaleRecord[], win
     dead,
     revenueAtRisk: atRisk.reduce((total, row) => total + row.dailyProjected * 30 * row.price, 0),
     marginAtRisk: atRisk.reduce((total, row) => total + row.dailyProjected * 30 * (row.price - row.cost), 0),
-    tiedCapital: overstock.reduce((total, row) => total + Math.max(0, row.stock - row.daily * 45) * row.cost, 0)
-      + dead.reduce((total, row) => total + row.stock * row.cost, 0),
+    tiedCapital:
+      overstock.reduce((total, row) => total + Math.max(0, row.stock - row.daily * 45) * row.cost, 0) +
+      dead.reduce((total, row) => total + row.stock * row.cost, 0),
     reorderInvestment: atRisk.reduce((total, row) => total + row.reorderQty * row.cost, 0),
     uplift,
     windowDays,

@@ -12,8 +12,8 @@ function getAudioContext(): AudioContext | null {
   if (typeof window === 'undefined') return null;
   try {
     if (!audioContext) {
-      const Context = window.AudioContext
-        ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      const Context =
+        window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!Context) return null;
       audioContext = new Context();
     }
@@ -50,10 +50,13 @@ function playMelody(notes: Array<{ frequency: number; at: number; duration: numb
   if (!context) return;
   const schedule = () => {
     const start = context.currentTime + 0.02;
-    notes.forEach((note) => playTone(context, note.frequency, start + note.at, note.duration, note.volume));
+    notes.forEach(note => playTone(context, note.frequency, start + note.at, note.duration, note.volume));
   };
   if (context.state === 'suspended') {
-    void context.resume().then(schedule).catch(() => undefined);
+    void context
+      .resume()
+      .then(schedule)
+      .catch(() => undefined);
   } else {
     schedule();
   }
