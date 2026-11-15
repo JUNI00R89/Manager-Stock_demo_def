@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse
 
 from backend.core.config import UPLOADS_DIR
 from backend.core.context import current_business_id, current_identity
+from backend.core.security import has_permission
 from backend.core.db import audit, connection, timestamp_iso
 from backend.schemas import ProductCategoryPayload, ProductImagePayload, ProductImportPayload, ProductPayload
 from backend.services.catalog import ensure_product_category, insert_product, next_sku, normalize_category_name, product_category_options, product_out
@@ -235,6 +236,9 @@ def update_product(product_id: str, payload: ProductPayload):
                 payload = payload.model_copy(update={"sku": old["sku"]})  # cleared field keeps the current code
             ensure_product_category(conn, current_business_id(), payload.category, allow_existing=(payload.category == old["category"]))
             delta = round(payload.stock - float(old["stock"] or 0), 6)
+            if delta and not has_permission("inventory.adjust"):
+                # Editing the catalog must not become a back door around the stock-adjustment permission.
+                raise HTTPException(403, "Necesitas permiso de ajuste de inventario para cambiar las existencias.")
             conn.execute(
                 """UPDATE products SET name=?,sku=?,category=?,price=?,cost=?,min_stock=?,description=?,image=?,product_type=?,unit=?,
                    supplier_id=?,barcode=?,track_lots=?,default_location_id=?,updated_at=CURRENT_TIMESTAMP
