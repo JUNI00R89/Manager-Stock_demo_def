@@ -118,17 +118,19 @@ Las copias se escriben por defecto en `backend/data/backups/` (o junto a la ruta
 
 ## Pruebas
 
-Desde la raíz del proyecto:
+Desde la raíz del proyecto (la CI de GitHub ejecuta lo mismo en Linux en cada PR):
 
 ```powershell
-.\.venv\Scripts\python.exe -m py_compile backend\main.py backend\tests\test_sales_api.py scripts\create_superadmin.py
-.\.venv\Scripts\python.exe backend\tests\test_sales_api.py
-npm run build
+.\.venv\Scripts\python.exe -m pytest -q   # backend: todas las pruebas con bases SQLite temporales
+npm test                                   # frontend (Vitest)
+npm run typecheck                          # tipos de TypeScript (vite build no los revisa)
+npm run build                              # compilación de producción
+npm run format:check                       # formato del frontend (Prettier)
 ```
 
-La prueba de API utiliza una base SQLite temporal; no modifica la base de datos del negocio. Abarca autenticación, roles predefinidos y personalizados, aislamiento entre negocios, categorías dinámicas, validación de unidades enteras, transición y limpieza a 15 días, hotel y citas persistidas por negocio, configuración/temas, suspensión y chat, reactivación, menú sin recetas, impuestos calculados en servidor, ventas con varios productos, costos históricos, idempotencia, paginación, reversos, caja y auditoría. En esta entrega se validó además la sintaxis de 97 archivos TypeScript/TSX mediante el parser de TypeScript.
+Las pruebas del backend usan bases SQLite temporales; nunca modifican la base del negocio. Las 3 pruebas de navegador se omiten salvo que se defina `MANAGER_STOCK_E2E=1` con Vite y la API en marcha.
 
-**Limitación de validación:** no se pudo completar `npm install` ni `npm run build` en el entorno de generación porque la solicitud al registro de paquetes agotó el tiempo de espera. Debes ejecutar `npm install` y `npm run build` en tu PC antes de desplegar. La comprobación sintáctica no sustituye un build completo ni una prueba visual en navegador.
+Si `npm run typecheck` falla con "out of memory" en un equipo con poca RAM, ejecútalo con más memoria: en PowerShell `$env:NODE_OPTIONS="--max-old-space-size=4096"; npm run typecheck`.
 
 ## Seguridad de acceso: intentos de login y CORS
 
