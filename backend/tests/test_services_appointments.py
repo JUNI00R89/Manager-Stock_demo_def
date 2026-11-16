@@ -82,7 +82,8 @@ def check_charge(client: TestClient) -> None:
     def charge(appointment_id, method="card", session=None):
         return client.post("/api/sales", headers=headers, json={
             "idempotencyKey": f"cobro-{appointment_id}-{method}-{session}", "items": [], "appointmentIds": [appointment_id],
-            "customer": "Cliente Prueba", "paymentMethod": method, "cashSessionId": session})
+            "customer": "Cliente Prueba", "paymentMethod": method, "cashSessionId": session,
+            "paymentProvider": "nequi" if method == "digital" else None})
 
     assert charge(first["id"]).status_code == 409, "an appointment must be attended before charging"
     for appointment in (first, second):
