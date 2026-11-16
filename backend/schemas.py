@@ -194,9 +194,28 @@ class SaleItemPayload(BaseModel):
     discountPercent: float = Field(default=0, ge=0, le=100)
 
 
+DigitalProvider = Literal["nequi", "daviplata", "breb", "other"]
+
+
+def _digital_details(method: str, provider: str | None, reference: str) -> tuple[str | None, str]:
+    """Digital wallets need the provider (to reconcile each account); other methods carry neither field."""
+    if method != "digital":
+        return None, ""
+    if not provider:
+        raise ValueError("Indica el proveedor del pago digital (Nequi, Daviplata, Bre-B u otro).")
+    return provider, reference.strip()
+
+
 class PaymentPartPayload(BaseModel):
     method: Literal["cash", "card", "digital", "transfer"]
     amount: float = Field(ge=0, allow_inf_nan=False)
+    provider: DigitalProvider | None = None
+    reference: str = Field(default="", max_length=60)
+
+    @model_validator(mode="after")
+    def digital_needs_provider(self):
+        self.provider, self.reference = _digital_details(self.method, self.provider, self.reference)
+        return self
 
 
 class SalePayload(BaseModel):
@@ -208,11 +227,19 @@ class SalePayload(BaseModel):
     customerId: str | None = Field(default=None, max_length=100)
     appointmentId: str | None = Field(default=None, max_length=100)
     paymentMethod: Literal["cash", "card", "digital", "split", "transfer"] = "cash"
+    paymentProvider: DigitalProvider | None = None
+    paymentReference: str = Field(default="", max_length=60)
     payments: list[PaymentPartPayload] = Field(default_factory=list, max_length=10)
     cashSessionId: str | None = None
     globalDiscountPercent: float = Field(default=0, ge=0, le=100)
     taxRate: float = Field(default=DEFAULT_TAX_RATE, ge=0, le=0.3)
     status: Literal["completed", "pending"] = "completed"
+
+    @model_validator(mode="after")
+    def single_digital_needs_provider(self):
+        if self.paymentMethod != "split":
+            self.paymentProvider, self.paymentReference = _digital_details(self.paymentMethod, self.paymentProvider, self.paymentReference)
+        return self
 
 
 class SupplierPayload(BaseModel):

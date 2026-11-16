@@ -91,7 +91,7 @@ def check_charge(client: TestClient) -> None:
     sale = charge(first["id"])
     assert sale.status_code == 201, sale.text
     sale = sale.json()
-    assert sale["totalPrice"] == 25000 and sale["payments"] == [{"method": "card", "amount": 25000}]
+    assert sale["totalPrice"] == 25000 and sale["payments"] == [{"method": "card", "amount": 25000, "provider": None, "reference": ""}]
     assert sale["items"][0]["productName"] == "Corte" and sale["items"][0]["productId"] is None
     assert charge(first["id"], method="cash").status_code == 409, "an appointment cannot be charged twice"
     listed = {a["id"]: a for a in client.get("/api/services/appointments", headers=headers).json()}

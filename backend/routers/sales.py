@@ -243,7 +243,8 @@ def create_sale(payload: SalePayload):
             conn.rollback()
             raise HTTPException(422, "La suma de los métodos de pago debe coincidir con el total de la venta.")
         if not payment_parts and payload.paymentMethod != "split":
-            payment_parts = [PaymentPartPayload(method=payload.paymentMethod if payload.paymentMethod != "split" else "cash", amount=total)]
+            payment_parts = [PaymentPartPayload(method=payload.paymentMethod if payload.paymentMethod != "split" else "cash", amount=total,
+                                                provider=payload.paymentProvider, reference=payload.paymentReference)]
         now = colombia_now_iso()
         sale_id = f"VTA-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
         conn.execute(
@@ -259,7 +260,7 @@ def create_sale(payload: SalePayload):
             from backend.commerce import link_customer
             link_customer(conn, "sale", sale_id, customer["id"])
         for part in payment_parts:
-            conn.execute("INSERT INTO sale_payments (sale_id,method,amount) VALUES (?,?,?)", (sale_id, part.method, part.amount))
+            conn.execute("INSERT INTO sale_payments (sale_id,method,amount,provider,reference) VALUES (?,?,?,?,?)", (sale_id, part.method, part.amount, part.provider, part.reference))
         recipe_costs = {product_id: recipe_unit_cost(conn, product_id) for product_id in quantities_by_product}
         for item, product, gross, disc, line_total in resolved_items:
             # Preserve unit cost at transaction time; later catalog edits must not rewrite past margins.
