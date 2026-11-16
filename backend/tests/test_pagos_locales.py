@@ -46,12 +46,16 @@ def run() -> None:
         assert {"method": "digital", "amount": 4000, "provider": "daviplata", "reference": "DV-77"} in split.json()["payments"]
         assert sale("pago-dividido-2", paymentMethod="split", payments=[{"method": "cash", "amount": 5000}, {"method": "digital", "amount": 4000}]).status_code == 422
 
+        # Tables send one explicit part: the provider travels in the part, not at the top level.
+        one_part = sale("pago-mesa-1", paymentMethod="digital", payments=[{"method": "digital", "amount": 9000, "provider": "nequi"}])
+        assert one_part.status_code == 201, one_part.text
+
         card = sale("pago-tarjeta-1", paymentMethod="card", paymentProvider="nequi")
         assert card.status_code == 201 and card.json()["payments"][0]["provider"] is None, "provider only applies to digital"
 
         current = client.get("/api/cash/sessions/current", headers=h).json()
         breakdown = {(row["method"], row["provider"]): row["amount"] for row in current["breakdown"]}
-        assert breakdown == {("digital", "nequi"): 9000, ("digital", "breb"): 9000, ("cash", None): 5000,
+        assert breakdown == {("digital", "nequi"): 18000, ("digital", "breb"): 9000, ("cash", None): 5000,
                              ("digital", "daviplata"): 4000, ("card", None): 9000}, breakdown
 
     print("OK: digital payments carry Nequi/Daviplata/Bre-B and an optional reference; the till shows the breakdown.")

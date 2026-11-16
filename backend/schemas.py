@@ -237,7 +237,8 @@ class SalePayload(BaseModel):
 
     @model_validator(mode="after")
     def single_digital_needs_provider(self):
-        if self.paymentMethod != "split":
+        # With explicit parts, each part carries its own provider (validated in PaymentPartPayload).
+        if self.paymentMethod != "split" and not self.payments:
             self.paymentProvider, self.paymentReference = _digital_details(self.paymentMethod, self.paymentProvider, self.paymentReference)
         return self
 

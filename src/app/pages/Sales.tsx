@@ -13,6 +13,7 @@ import { saleNetTotal } from '../utils/saleMetrics';
 import { useAuth } from '../context/AuthContext';
 import { formatMoney as money } from '../utils/restaurantFormat';
 import { downloadCsv } from '../utils/csv';
+import { digitalDetail } from '../utils/paymentLabel';
 
 const statusLabel: Record<SaleStatus, string> = { completed: 'Completada', pending: 'Pendiente', cancelled: 'Anulada' };
 
@@ -249,6 +250,11 @@ export function Sales() {
                           split: 'Dividido',
                           transfer: 'Transferencia',
                         }[sale.paymentMethod] || sale.paymentMethod}
+                        {digitalDetail(sale.payments) && (
+                          <span className="block text-xs normal-case text-muted-foreground">
+                            {digitalDetail(sale.payments)}
+                          </span>
+                        )}
                       </td>
                       <td className="px-5 py-4 text-muted-foreground">
                         {new Date(sale.date).toLocaleString('es-CO', {

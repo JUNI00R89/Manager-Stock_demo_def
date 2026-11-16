@@ -12,9 +12,19 @@ export type ImportReport = {
   newCategories: string[];
   created: number;
 };
+export type DigitalProvider = 'nequi' | 'daviplata' | 'breb' | 'other';
+export const DIGITAL_PROVIDERS: { id: DigitalProvider; label: string }[] = [
+  { id: 'nequi', label: 'Nequi' },
+  { id: 'daviplata', label: 'Daviplata' },
+  { id: 'breb', label: 'Bre-B' },
+  { id: 'other', label: 'Otro' },
+];
 export interface PaymentPartRecord {
   method: PaymentPartMethod;
   amount: number;
+  /** Required by the server when method is 'digital'. */
+  provider?: DigitalProvider | null;
+  reference?: string;
 }
 export interface CashSessionRecord {
   openedByUserId?: string;
@@ -27,6 +37,8 @@ export interface CashSessionRecord {
   status: 'open' | 'closed';
   openedAt: string;
   closedAt?: string | null;
+  /** Sales of this till by method and digital provider (Nequi, Daviplata...). */
+  breakdown?: { method: string; provider: string | null; amount: number }[];
 }
 
 export interface SaleItemInput {
@@ -91,6 +103,8 @@ export interface CreateSaleInput {
   idempotencyKey?: string;
   cashSessionId?: string | null;
   payments?: PaymentPartRecord[];
+  paymentProvider?: DigitalProvider | null;
+  paymentReference?: string;
 }
 
 export interface RecipeIngredientRecord {

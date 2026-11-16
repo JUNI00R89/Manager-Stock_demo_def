@@ -1,6 +1,6 @@
 import { AppointmentMoveHandle } from '../../components/AppointmentMoveHandle';
 import { ConfirmActionDialog } from '../../components/ConfirmActionDialog';
-import { moveServiceAppointment } from '../../services/dataService';
+import { DIGITAL_PROVIDERS, moveServiceAppointment, type DigitalProvider } from '../../services/dataService';
 import { ProfessionalScheduleDialog } from '../../components/ProfessionalScheduleDialog';
 import { ServiceCheckoutDialog } from '../../components/ServiceCheckoutDialog';
 import { useAuth } from '../../context/AuthContext';
@@ -174,7 +174,11 @@ export function Appointments() {
     }
   };
   const [charging, setCharging] = useState(false);
-  const chargeAppointment = async (appointment: Cita, paymentMethod: 'cash' | 'card' | 'digital') => {
+  const chargeAppointment = async (
+    appointment: Cita,
+    paymentMethod: 'cash' | 'card' | 'digital',
+    paymentProvider?: DigitalProvider,
+  ) => {
     setCharging(true);
     try {
       // The server charges the booked price and rejects a second charge, so a fresh key per click is safe.
@@ -184,6 +188,7 @@ export function Appointments() {
         appointmentIds: [appointment.id],
         customer: appointment.clienteNombre,
         paymentMethod,
+        ...(paymentProvider ? { paymentProvider } : {}),
         cashSessionId: session?.id,
         idempotencyKey: uniqueRestaurantId('cobro-cita'),
       });
@@ -699,7 +704,6 @@ export function Appointments() {
                             [
                               ['cash', 'Efectivo'],
                               ['card', 'Tarjeta'],
-                              ['digital', 'Digital'],
                             ] as const
                           ).map(([method, label]) => (
                             <Button
@@ -710,6 +714,18 @@ export function Appointments() {
                               onClick={() => void chargeAppointment(selectedCita, method)}
                             >
                               {label}
+                            </Button>
+                          ))}
+                          {/* Digital wallets: one tap per provider, so the till can reconcile each account. */}
+                          {DIGITAL_PROVIDERS.map(provider => (
+                            <Button
+                              key={provider.id}
+                              size="sm"
+                              disabled={charging}
+                              className="bg-purple-600 text-white hover:bg-purple-700"
+                              onClick={() => void chargeAppointment(selectedCita, 'digital', provider.id)}
+                            >
+                              {provider.label}
                             </Button>
                           ))}
                         </div>
