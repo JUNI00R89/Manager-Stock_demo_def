@@ -45,6 +45,7 @@ export interface DesktopUser {
   active: boolean;
   subscription: 'basic' | 'premium';
   createdAt?: string;
+  customRoleId?: string | null;
 }
 
 export interface DesktopBusinessSeed {
@@ -123,6 +124,8 @@ const BUSINESS_USERS_PREFIX = 'manager_stock_desktop_business_users_v1';
 const ROLES_PREFIX = 'manager_stock_desktop_roles_v1';
 const CATEGORIES_PREFIX = 'manager_stock_desktop_categories_v1';
 const USER_STATUS_PREFIX = 'manager_stock_desktop_user_status_v1';
+// Role changes for seed users (the seed itself is read-only).
+const USER_ROLE_PREFIX = 'manager_stock_desktop_user_role_v1';
 const PLATFORM_STATUS_PREFIX = 'manager_stock_desktop_business_status_v1';
 const PLATFORM_BUSINESS_META_PREFIX = 'manager_stock_desktop_business_meta_v1';
 const PLATFORM_AUDIT_KEY = 'manager_stock_desktop_platform_audit_v1';
@@ -358,7 +361,26 @@ function desktopBusinessName(businessId: string, fallback = 'Mi negocio') {
   return config?.name || seedCache?.businesses?.[businessId]?.name || fallback;
 }
 
+function rolesFor(businessId: string | null): CustomRoleRecord[] {
+  if (!businessId) return [];
+  return [
+    ...(seedCache?.businesses?.[businessId]?.customRoles ?? []),
+    ...readJson<CustomRoleRecord[]>(rolesKey(businessId), []),
+  ];
+}
+
+/** The single account state used by login, me() and the admin list: seed data plus local status/role changes. */
+function effectiveUser(user: DesktopUser): DesktopUser {
+  const active = readJson<Record<string, boolean>>(USER_STATUS_PREFIX, {})[user.id];
+  const roleOverride = readJson<Record<string, { role?: DesktopUser['role']; customRoleId?: string | null }>>(
+    USER_ROLE_PREFIX,
+    {},
+  )[user.id];
+  return { ...user, ...(roleOverride ?? {}), active: active ?? user.active };
+}
+
 function toAuthUser(user: DesktopUser): AuthUser {
+  const role = user.customRoleId ? rolesFor(user.businessId).find(item => item.id === user.customRoleId) : undefined;
   return {
     id: user.id,
     email: user.email,
@@ -368,6 +390,9 @@ function toAuthUser(user: DesktopUser): AuthUser {
     active: user.active,
     businessActive: true,
     subscription: user.subscription,
+    customRoleId: role ? role.id : null,
+    customRoleName: role?.name ?? null,
+    ...(role ? { permissions: role.permissions } : {}),
   };
 }
 
@@ -436,8 +461,8 @@ function toBusinessUser(user: DesktopUser): BusinessUserRecord {
       : user.role === 'business_admin'
         ? 'business_admin'
         : 'cashier') as BusinessUserRecord['role'],
-    customRoleId: null,
-    customRoleName: null,
+    customRoleId: user.customRoleId ?? null,
+    customRoleName: rolesFor(user.businessId).find(item => item.id === user.customRoleId)?.name ?? null,
     active: user.active,
     createdAt: user.createdAt || new Date().toISOString(),
   };
@@ -462,7 +487,14 @@ function publicBusinessUser(user: DesktopUser): PlatformUserRecord {
 
 function applyUserStatus(user: BusinessUserRecord): BusinessUserRecord {
   const override = readJson<Record<string, boolean>>(USER_STATUS_PREFIX, {})[user.id];
-  return override === undefined ? user : { ...user, active: override };
+  const roleOverride = readJson<Record<string, { role?: BusinessUserRecord['role']; customRoleId?: string | null }>>(
+    USER_ROLE_PREFIX,
+    {},
+  )[user.id];
+  const merged = { ...user, ...(roleOverride ?? {}), active: override ?? user.active };
+  const customRoleName =
+    rolesFor(merged.businessId || null).find(item => item.id === merged.customRoleId)?.name ?? null;
+  return { ...merged, customRoleName };
 }
 
 function findRegisteredByBusiness(businessId: string): DesktopUser[] {
@@ -582,8 +614,9 @@ export const desktop = {
   auth: {
     async login(email: string, password: string): Promise<AuthResponse> {
       const seed = await loadDesktopSeed();
-      const candidate = allUsersWithSeed().find(user => normalizedEmail(user.email) === normalizedEmail(email));
-      if (!candidate || candidate.password !== password) throw new Error('Correo o contraseña incorrectos.');
+      const found = allUsersWithSeed().find(user => normalizedEmail(user.email) === normalizedEmail(email));
+      if (!found || found.password !== password) throw new Error('Correo o contraseña incorrectos.');
+      const candidate = effectiveUser(found);
       if (!candidate.active) throw new Error('Esta cuenta está inactiva.');
       const user = toAuthUser(candidate);
       localStorage.setItem(USER_KEY, JSON.stringify(user));
@@ -593,6 +626,12 @@ export const desktop = {
     async me(): Promise<AuthUser> {
       const user = readCurrentDesktopUser();
       if (!user) throw new Error('No hay una sesión local activa.');
+      const account = allUsersWithSeed().find(item => item.id === user.id);
+      if (account && !effectiveUser(account).active) {
+        // A user deactivated from the admin screen loses the open session too.
+        localStorage.removeItem(USER_KEY);
+        throw new Error('Esta cuenta está inactiva.');
+      }
       if (user.businessId && !localStorage.getItem(databaseKeyFor(user.businessId))) {
         const seed = await ensureSeedLoaded();
         seedDatabaseForBusiness(user.businessId, seed);
@@ -1237,10 +1276,10 @@ export const desktop = {
         active: true,
         subscription: 'basic',
         createdAt: new Date().toISOString(),
+        customRoleId: payload.customRoleId || null,
       };
       writeRegisteredUsers([...readRegisteredUsers(), user]);
-      const created = toBusinessUser(user);
-      return { ...created, customRoleId: payload.customRoleId || null };
+      return toBusinessUser(user);
     },
     async update(
       id: string,
@@ -1254,9 +1293,10 @@ export const desktop = {
           ...target,
           role: (patch.role || target.role) as DesktopUser['role'],
           active: patch.active ?? target.active,
+          customRoleId: 'customRoleId' in patch ? (patch.customRoleId ?? null) : (target.customRoleId ?? null),
         };
         writeRegisteredUsers(registered.map(user => (user.id === id ? updated : user)));
-        return { ...toBusinessUser(updated), customRoleId: patch.customRoleId || null };
+        return toBusinessUser(updated);
       }
       if (patch.active !== undefined) {
         const statuses = readJson<Record<string, boolean>>(USER_STATUS_PREFIX, {});
@@ -1264,12 +1304,19 @@ export const desktop = {
       }
       const seeded = (seedCache?.businesses?.[businessId]?.users ?? []).find(user => user.id === id);
       if (!seeded) throw new Error('No se encontró el usuario.');
-      return {
-        ...seeded,
-        role: patch.role || seeded.role,
-        active: patch.active ?? seeded.active,
-        customRoleId: patch.customRoleId ?? seeded.customRoleId,
-      };
+      if (patch.role || 'customRoleId' in patch) {
+        const roles = readJson<Record<string, { role?: string; customRoleId?: string | null }>>(USER_ROLE_PREFIX, {});
+        const previous = roles[id] ?? {};
+        writeJson(USER_ROLE_PREFIX, {
+          ...roles,
+          [id]: {
+            ...previous,
+            ...(patch.role ? { role: patch.role } : {}),
+            ...('customRoleId' in patch ? { customRoleId: patch.customRoleId ?? null } : {}),
+          },
+        });
+      }
+      return applyUserStatus(seeded);
     },
     async roles(): Promise<CustomRoleRecord[]> {
       const businessId = requireBusinessId();
