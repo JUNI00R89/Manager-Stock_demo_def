@@ -82,7 +82,8 @@ def check_charge(client: TestClient) -> None:
     def charge(appointment_id, method="card", session=None):
         return client.post("/api/sales", headers=headers, json={
             "idempotencyKey": f"cobro-{appointment_id}-{method}-{session}", "items": [], "appointmentIds": [appointment_id],
-            "customer": "Cliente Prueba", "paymentMethod": method, "cashSessionId": session})
+            "customer": "Cliente Prueba", "paymentMethod": method, "cashSessionId": session,
+            "paymentProvider": "nequi" if method == "digital" else None})
 
     assert charge(first["id"]).status_code == 409, "an appointment must be attended before charging"
     for appointment in (first, second):
@@ -91,7 +92,7 @@ def check_charge(client: TestClient) -> None:
     sale = charge(first["id"])
     assert sale.status_code == 201, sale.text
     sale = sale.json()
-    assert sale["totalPrice"] == 25000 and sale["payments"] == [{"method": "card", "amount": 25000}]
+    assert sale["totalPrice"] == 25000 and sale["payments"] == [{"method": "card", "amount": 25000, "provider": None, "reference": ""}]
     assert sale["items"][0]["productName"] == "Corte" and sale["items"][0]["productId"] is None
     assert charge(first["id"], method="cash").status_code == 409, "an appointment cannot be charged twice"
     listed = {a["id"]: a for a in client.get("/api/services/appointments", headers=headers).json()}

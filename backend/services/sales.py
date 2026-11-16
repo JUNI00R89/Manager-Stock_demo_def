@@ -25,7 +25,7 @@ def _sale_out(sale: sqlite3.Row, items: list[sqlite3.Row], payment_rows: list[sq
         "lineDiscount": sale["line_discount"], "globalDiscount": sale["global_discount"],
         "taxRate": sale["tax_rate"], "tax": sale["tax"], "totalPrice": sale["total"],
         "cashSessionId": sale["cash_session_id"], "createdBy": sale["created_by"],
-        "payments": [{"method": row["method"], "amount": row["amount"]} for row in payment_rows],
+        "payments": [{"method": row["method"], "amount": row["amount"], "provider": row["provider"], "reference": row["reference"]} for row in payment_rows],
         "productId": mapped_items[0]["productId"] if mapped_items else "", "productName": product_names or "Venta sin productos",
         "quantity": sum(i["quantity"] for i in mapped_items), "items": mapped_items,
     }

@@ -13,6 +13,7 @@ import { Separator } from '../components/ui/separator';
 import { dataService, type SaleRecord } from '../services/dataService';
 import { useAuth } from '../context/AuthContext';
 import { formatMoney as money } from '../utils/restaurantFormat';
+import { digitalDetail } from '../utils/paymentLabel';
 
 const labels = { completed: 'Completada', pending: 'Pendiente', cancelled: 'Anulada' } as const;
 
@@ -163,6 +164,9 @@ export function SaleDetail() {
                       transfer: 'Transferencia',
                     }[sale.paymentMethod] || sale.paymentMethod}
                   </p>
+                  {digitalDetail(sale.payments) && (
+                    <p className="text-sm text-muted-foreground">{digitalDetail(sale.payments)}</p>
+                  )}
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Moneda</p>

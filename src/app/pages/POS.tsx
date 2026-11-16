@@ -38,6 +38,8 @@ import {
 import type { Product } from '../utils/types';
 import {
   dataService,
+  DIGITAL_PROVIDERS,
+  type DigitalProvider,
   type CashSessionRecord,
   type PaymentPartRecord,
   type CreateSaleInput,
@@ -52,6 +54,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { BarcodeScanner } from '../components/BarcodeScanner';
 import { quickCashAmounts } from '../utils/quickCash';
 import { formatMoney as money } from '../utils/restaurantFormat';
+import { tillBreakdown } from '../utils/paymentLabel';
 
 interface CartItem {
   productId: string;
@@ -65,7 +68,10 @@ interface CartItem {
 interface SplitPayment {
   method: 'cash' | 'card' | 'digital';
   amount: number;
+  provider?: DigitalProvider | null;
 }
+
+const providerLabel = (id?: string | null) => DIGITAL_PROVIDERS.find(p => p.id === id)?.label ?? '';
 
 type PosMode = 'open' | 'closed';
 interface PendingPayment {
@@ -105,6 +111,8 @@ export function POS() {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [globalDiscount, setGlobalDiscount] = useState(0);
   const [splitPayments, setSplitPayments] = useState<SplitPayment[]>([]);
+  const [digitalProvider, setDigitalProvider] = useState<DigitalProvider | null>(null);
+  const [digitalReference, setDigitalReference] = useState('');
   const [posMode, setPosMode] = useState<PosMode>('open');
   const [openingAmount, setOpeningAmount] = useState('');
   const [showOpenTurn, setShowOpenTurn] = useState(true);
@@ -186,7 +194,13 @@ export function POS() {
     try {
       const result = await dataService.closeCashSession(cashSession.id, amount);
       toast.success('Turno de caja cerrado.', {
-        description: `Esperado: ${money(result.expectedAmount || 0)} · Diferencia: ${money(result.difference || 0)}`,
+        description: [
+          `Esperado en efectivo: ${money(result.expectedAmount || 0)} · Diferencia: ${money(result.difference || 0)}`,
+          tillBreakdown(result.breakdown),
+        ]
+          .filter(Boolean)
+          .join(' — '),
+        duration: 15000,
       });
       setCashSession(null);
       setShowCloseTurn(false);
@@ -263,6 +277,8 @@ export function POS() {
     setCustomer(null);
     setGlobalDiscount(0);
     setSplitPayments([]);
+    setDigitalProvider(null);
+    setDigitalReference('');
   };
 
   const setItemDiscount = (productId: string, discount: number) => {
@@ -321,6 +337,13 @@ export function POS() {
         toast.error('El pago dividido no cubre el total');
         return;
       }
+      const digitalWithoutProvider =
+        (paymentMethod === 'digital' && !digitalProvider) ||
+        (paymentMethod === 'split' && splitPayments.some(sp => sp.method === 'digital' && !sp.provider));
+      if (digitalWithoutProvider) {
+        toast.error('Elige el proveedor del pago digital (Nequi, Daviplata, Bre-B u otro).');
+        return;
+      }
     }
     setProcessingPayment(true);
     try {
@@ -340,6 +363,9 @@ export function POS() {
           taxRate: TAX_RATE,
           cashSessionId: cashSession?.id,
           payments: paymentMethod === 'split' ? splitPayments : undefined,
+          ...(paymentMethod === 'digital'
+            ? { paymentProvider: digitalProvider, paymentReference: digitalReference.trim() }
+            : {}),
         },
       };
       if (!isDesktopMode()) {
@@ -974,6 +1000,33 @@ export function POS() {
                 </div>
               )}
 
+              {paymentMethod === 'digital' && (
+                <div className="space-y-2" aria-label="Proveedor del pago digital">
+                  <div className="grid grid-cols-4 gap-1">
+                    {DIGITAL_PROVIDERS.map(p => (
+                      <Button
+                        key={p.id}
+                        type="button"
+                        size="sm"
+                        variant={digitalProvider === p.id ? 'default' : 'outline'}
+                        className="h-8 px-1 text-xs"
+                        onClick={() => setDigitalProvider(p.id)}
+                      >
+                        {p.label}
+                      </Button>
+                    ))}
+                  </div>
+                  <Input
+                    id="pos-digital-reference"
+                    placeholder="Referencia (opcional)"
+                    maxLength={60}
+                    value={digitalReference}
+                    onChange={e => setDigitalReference(e.target.value)}
+                    className="h-9"
+                  />
+                </div>
+              )}
+
               {paymentMethod === 'split' && (
                 <div className="space-y-2 bg-accent/50 rounded-lg p-3">
                   <div className="flex justify-between text-xs text-muted-foreground">
@@ -988,6 +1041,29 @@ export function POS() {
                         {sp.method === 'cash' ? 'Efectivo' : sp.method === 'card' ? 'Tarjeta' : 'Digital'}
                       </span>
                       <span className="font-semibold text-foreground">{money(sp.amount)}</span>
+                      {sp.method === 'digital' && (
+                        <select
+                          aria-label="Proveedor del pago digital"
+                          value={sp.provider || ''}
+                          onChange={e =>
+                            setSplitPayments(
+                              splitPayments.map((row, j) =>
+                                j === i
+                                  ? { ...row, provider: (e.target.value || null) as DigitalProvider | null }
+                                  : row,
+                              ),
+                            )
+                          }
+                          className="h-6 rounded border border-input bg-background px-1 text-[11px]"
+                        >
+                          <option value="">Proveedor…</option>
+                          {DIGITAL_PROVIDERS.map(p => (
+                            <option key={p.id} value={p.id}>
+                              {p.label}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                       <button
                         onClick={() => setSplitPayments(splitPayments.filter((_, j) => j !== i))}
                         className="ml-auto text-red-400 hover:text-red-600"
@@ -1126,7 +1202,7 @@ export function POS() {
                         {receiptData.paymentMethod === 'card'
                           ? 'Tarjeta'
                           : receiptData.paymentMethod === 'digital'
-                            ? 'Billetera digital'
+                            ? `Billetera digital${receiptData.splitPayments?.[0]?.provider ? ` · ${providerLabel(receiptData.splitPayments[0].provider)}` : ''}`
                             : receiptData.paymentMethod === 'transfer'
                               ? 'Transferencia'
                               : receiptData.paymentMethod === 'split'

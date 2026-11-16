@@ -8,7 +8,7 @@ import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { dataService, type PaymentMethod } from '../services/dataService';
+import { dataService, DIGITAL_PROVIDERS, type DigitalProvider, type PaymentMethod } from '../services/dataService';
 import { useBusiness } from '../context/BusinessContext';
 import type { Product } from '../utils/types';
 import { formatMoney as money } from '../utils/restaurantFormat';
@@ -24,6 +24,8 @@ export function NewSale() {
   const [quantity, setQuantity] = useState('1');
   const [customer, setCustomer] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
+  const [digitalProvider, setDigitalProvider] = useState<DigitalProvider | ''>('');
+  const [digitalReference, setDigitalReference] = useState('');
   const [taxEnabled, setTaxEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
   const taxRate = taxEnabled ? (config?.taxRate ?? dataService.defaultTaxRate) : 0;
@@ -81,6 +83,10 @@ export function NewSale() {
       toast.error('Agrega al menos un producto a la venta.');
       return;
     }
+    if (paymentMethod === 'digital' && !digitalProvider) {
+      toast.error('Elige el proveedor del pago digital (Nequi, Daviplata, Bre-B u otro).');
+      return;
+    }
     setSaving(true);
     try {
       const sale = await dataService.createSale({
@@ -88,6 +94,9 @@ export function NewSale() {
         customer: customer.trim() || 'Cliente general',
         paymentMethod,
         taxRate,
+        ...(paymentMethod === 'digital'
+          ? { paymentProvider: digitalProvider || null, paymentReference: digitalReference.trim() }
+          : {}),
       });
       toast.success('Venta registrada correctamente.', { description: `${sale.id} · ${money(sale.totalPrice)}` });
       navigate(`/sales/${sale.id}`);
@@ -267,6 +276,31 @@ export function NewSale() {
                   <option value="transfer">Transferencia</option>
                   <option value="split">Pago dividido</option>
                 </select>
+                {paymentMethod === 'digital' && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <select
+                      aria-label="Proveedor del pago digital"
+                      value={digitalProvider}
+                      onChange={e => setDigitalProvider(e.target.value as DigitalProvider | '')}
+                      className="h-11 rounded-xl border border-input bg-background px-3 text-sm"
+                    >
+                      <option value="">Proveedor…</option>
+                      {DIGITAL_PROVIDERS.map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                    <Input
+                      aria-label="Referencia del pago digital"
+                      placeholder="Referencia (opcional)"
+                      maxLength={60}
+                      value={digitalReference}
+                      onChange={e => setDigitalReference(e.target.value)}
+                      className="h-11 rounded-xl"
+                    />
+                  </div>
+                )}
               </div>
               <label className="mt-4 flex items-center gap-2 rounded-xl bg-muted/40 p-3 text-sm">
                 <input
