@@ -50,12 +50,14 @@ def run() -> None:
 
         # Only automatic copies of this database are pruned; others are kept.
         history = Path(folder) / "history"
+        (Path(folder) / "uploads").mkdir()  # photos are copied with each backup and pruned with it
         for _ in range(16):
             create_backup(source, history, automatic=True)
         manual = create_backup(source, history)
         prune_automatic_backups(history, source, keep=14)
         automatic_left = [p for p in history.glob("manager_stock_*.db") if json.loads(p.with_suffix(".json").read_text()).get("automatic")]
         assert len(automatic_left) == 14, len(automatic_left)
+        assert len(list(history.glob("*_uploads"))) == 15, "pruned copies take their photos with them"
         assert manual.exists(), "a manual/older copy is never deleted"
     print("OK: backups are verified, portable and bounded.")
 
