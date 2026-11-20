@@ -112,6 +112,9 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="Manager Stock API", version="1.0.0", description="API local para inventario, ventas, proveedores y pedidos.", lifespan=lifespan)
 
+# The last middleware added is the outermost. CORS goes last so its headers also reach the
+# 401/403 answered by the auth middleware; otherwise the browser reports them as "Failed to fetch".
+app.middleware("http")(authenticate_and_authorize)
 app.add_middleware(
     CORSMiddleware,
     # Orígenes: ver CORS_* en backend/core/config.py (loopback siempre; LAN solo con
@@ -124,8 +127,6 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
     expose_headers=["Retry-After"],
 )
-# Registrado después de CORS para que quede como capa externa (mismo orden que antes).
-app.middleware("http")(authenticate_and_authorize)
 
 # El orden de registro se conserva respecto al main.py original.
 for module in (

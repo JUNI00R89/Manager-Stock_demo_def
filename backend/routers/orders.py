@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from backend.core.context import current_business_id, current_identity
-from backend.core.db import audit, connection, timestamp_iso
+from backend.core.db import audit, connection, timestamp_iso, colombia_now_iso
 from backend.services.inventory import allows_negative_stock, consume_product_stock, resolve_kitchen_requirements, reverse_movements, validate_product_quantity, validate_stock_requirements
 
 
@@ -103,7 +103,7 @@ def create_order(payload: OrderPayload):
         conn.execute("UPDATE orders SET restaurant_metadata=?,status=? WHERE id=?", (json.dumps(metadata), initial_status, order_id))
         audit(conn, "create", "order", order_id, {"total": total, "channel": channel, "tableNumber": payload.tableNumber, "waiter": payload.waiter.strip()})
         conn.commit()
-        return {"id": order_id, "status": initial_status, "total": round(total, 2), "tableNumber": payload.tableNumber, "waiter": payload.waiter.strip(), "createdAt": datetime.now().astimezone().isoformat(timespec="seconds")}
+        return {"id": order_id, "status": initial_status, "total": round(total, 2), "tableNumber": payload.tableNumber, "waiter": payload.waiter.strip(), "createdAt": colombia_now_iso()}
 
 
 @router.patch("/api/orders/{order_id}/status")
