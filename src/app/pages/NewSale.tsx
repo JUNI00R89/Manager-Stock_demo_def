@@ -12,6 +12,8 @@ import { dataService, DIGITAL_PROVIDERS, type DigitalProvider, type PaymentMetho
 import { useBusiness } from '../context/BusinessContext';
 import type { Product } from '../utils/types';
 import { formatMoney as money } from '../utils/restaurantFormat';
+import { CustomerPicker } from '../components/CustomerPicker';
+import type { Customer } from '../services/commerce';
 
 type CartItem = { product: Product; quantity: number };
 
@@ -23,6 +25,7 @@ export function NewSale() {
   const [selectedProductId, setSelectedProductId] = useState('');
   const [quantity, setQuantity] = useState('1');
   const [customer, setCustomer] = useState('');
+  const [creditCustomer, setCreditCustomer] = useState<Customer | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [digitalProvider, setDigitalProvider] = useState<DigitalProvider | ''>('');
   const [digitalReference, setDigitalReference] = useState('');
@@ -87,9 +90,14 @@ export function NewSale() {
       toast.error('Elige el proveedor del pago digital (Nequi, Daviplata, Bre-B u otro).');
       return;
     }
+    if (paymentMethod === 'credit' && !creditCustomer) {
+      toast.error('Elige un cliente registrado para vender fiado.');
+      return;
+    }
     setSaving(true);
     try {
       const sale = await dataService.createSale({
+        ...(paymentMethod === 'credit' && creditCustomer ? { customerId: creditCustomer.id } : {}),
         items: items.map(item => ({ productId: item.product.id, quantity: item.quantity })),
         customer: customer.trim() || 'Cliente general',
         paymentMethod,
@@ -275,7 +283,16 @@ export function NewSale() {
                   <option value="digital">Billetera digital</option>
                   <option value="transfer">Transferencia</option>
                   <option value="split">Pago dividido</option>
+                  <option value="credit">Fiado (a cuenta del cliente)</option>
                 </select>
+                {paymentMethod === 'credit' && (
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">
+                      El fiado queda a nombre de un cliente registrado y no puede superar su cupo.
+                    </p>
+                    <CustomerPicker value={creditCustomer} onChange={setCreditCustomer} />
+                  </div>
+                )}
                 {paymentMethod === 'digital' && (
                   <div className="grid grid-cols-2 gap-2">
                     <select

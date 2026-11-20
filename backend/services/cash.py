@@ -14,11 +14,14 @@ def cash_session_out(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
     hotel_cash = conn.execute("SELECT COALESCE(SUM(amount),0) FROM hotel_payments WHERE cash_session_id=? AND method='cash'", (row["id"],)).fetchone()[0]
     hotel_refunds = conn.execute("SELECT COALESCE(SUM(amount),0) FROM hotel_refunds WHERE cash_session_id=? AND method='cash'", (row["id"],)).fetchone()[0]
     sale_refunds = conn.execute("SELECT COALESCE(SUM(p.amount),0) FROM sale_return_payments p JOIN sale_returns r ON r.id=p.return_id WHERE r.cash_session_id=? AND p.method='cash'", (row["id"],)).fetchone()[0]
-    expected = round(row["opening_amount"] + cash_sales + hotel_cash - hotel_refunds - sale_refunds, 2)
-    # Sales of this till by method and digital provider, to reconcile with each account (Nequi, Daviplata...).
+    credit_cash = conn.execute("SELECT COALESCE(SUM(amount),0) FROM customer_credit_payments WHERE cash_session_id=? AND method='cash'", (row["id"],)).fetchone()[0]
+    expected = round(row["opening_amount"] + cash_sales + hotel_cash + credit_cash - hotel_refunds - sale_refunds, 2)
+    # Money of this till by method and digital provider (sales and fiado abonos), to reconcile with each account (Nequi, Daviplata...).
     breakdown = [{"method": r["method"], "provider": r["provider"], "amount": round(r["amount"], 2)} for r in conn.execute(
-        """SELECT sp.method, sp.provider, SUM(sp.amount) AS amount FROM sale_payments sp JOIN sales s ON s.id=sp.sale_id
-           WHERE s.cash_session_id=? AND s.status='completed' GROUP BY sp.method, sp.provider ORDER BY sp.method, sp.provider""", (row["id"],))]
+        """SELECT method, provider, SUM(amount) AS amount FROM (
+             SELECT sp.method, sp.provider, sp.amount FROM sale_payments sp JOIN sales s ON s.id=sp.sale_id WHERE s.cash_session_id=? AND s.status='completed'
+             UNION ALL SELECT method, provider, amount FROM customer_credit_payments WHERE cash_session_id=?)
+           GROUP BY method, provider ORDER BY method, provider""", (row["id"], row["id"]))]
     return {"id": row["id"], "openedBy": row["opened_by"], "openingAmount": row["opening_amount"],
             "closingAmount": row["closing_amount"], "expectedAmount": row["expected_amount"] if row["status"] == "closed" else expected,
             "difference": row["difference"], "status": row["status"], "openedAt": timestamp_iso(row["opened_at"]), "closedAt": timestamp_iso(row["closed_at"]), "breakdown": breakdown}

@@ -16,6 +16,50 @@ export interface Customer {
   taxResponsibilities: string;
   active: boolean;
   revision: number;
+  /** Fiado limit set by the owner/admin; 0 means the customer cannot buy on credit. */
+  creditLimit?: number;
+  /** What the customer owes (only in lists from the server). */
+  creditBalance?: number;
+}
+export interface CustomerCredit {
+  customerId: string;
+  creditLimit: number;
+  balance: number;
+  available: number;
+  movements: {
+    type: 'sale' | 'return' | 'payment';
+    id: string;
+    amount: number;
+    createdAt: string;
+    method?: string;
+    provider?: string | null;
+  }[];
+}
+const SERVER_ONLY = 'El fiado necesita conexión con el servidor.';
+export async function customerCredit(id: string): Promise<CustomerCredit> {
+  if (isDesktopMode()) throw new Error(SERVER_ONLY);
+  return api(`/customers/${encodeURIComponent(id)}/credit`);
+}
+export async function setCreditLimit(id: string, creditLimit: number): Promise<Customer> {
+  if (isDesktopMode()) throw new Error(SERVER_ONLY);
+  return api(`/customers/${encodeURIComponent(id)}/credit-limit`, {
+    method: 'PUT',
+    body: JSON.stringify({ creditLimit }),
+  });
+}
+export async function receiveCreditPayment(
+  id: string,
+  input: {
+    idempotencyKey: string;
+    amount: number;
+    method: 'cash' | 'card' | 'digital' | 'transfer';
+    provider?: string;
+    reference?: string;
+    cashSessionId?: string;
+  },
+): Promise<{ balance: number }> {
+  if (isDesktopMode()) throw new Error(SERVER_ONLY);
+  return api(`/customers/${encodeURIComponent(id)}/credit-payments`, { method: 'POST', body: JSON.stringify(input) });
 }
 export const emptyCustomer: Omit<Customer, 'id'> = {
   name: '',

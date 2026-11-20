@@ -2,8 +2,9 @@ import type { Product, Supplier } from '../utils/types';
 import { desktop, isDesktopMode } from './desktop';
 
 export type SaleStatus = 'completed' | 'pending' | 'cancelled';
-export type PaymentMethod = 'cash' | 'card' | 'digital' | 'split' | 'transfer';
-export type PaymentPartMethod = 'cash' | 'card' | 'digital' | 'transfer';
+export type PaymentMethod = 'cash' | 'card' | 'digital' | 'split' | 'transfer' | 'credit';
+/** 'credit' is fiado: charged to a registered customer's balance, never cash in the drawer. */
+export type PaymentPartMethod = 'cash' | 'card' | 'digital' | 'transfer' | 'credit';
 /** Result of reading a product spreadsheet; `row` is the spreadsheet row number (header = 1). */
 export type ImportReport = {
   toCreate: { row: number; sku: string; name: string; category: string }[];
@@ -2288,6 +2289,8 @@ export const dataService = {
       return serverCreated;
     }
     {
+      if (request.paymentMethod === 'credit' || request.payments?.some(p => p.method === 'credit'))
+        throw new Error('El fiado necesita conexión con el servidor para controlar el cupo del cliente.');
       const db = readLocal();
       const previous = db.sales.find(
         s => s.idempotencyKey === request.idempotencyKey || s.id === request.idempotencyKey,

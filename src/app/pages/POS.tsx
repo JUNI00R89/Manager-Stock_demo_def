@@ -1,7 +1,7 @@
 import { uniqueRestaurantId } from '../utils/restaurantStorage';
 import { SavedCarts } from '../components/SavedCarts';
 import { CustomerPicker } from '../components/CustomerPicker';
-import type { Customer } from '../services/commerce';
+import { customerCredit, type Customer, type CustomerCredit } from '../services/commerce';
 import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { Card } from '../components/ui/card';
@@ -34,6 +34,7 @@ import {
   MessageCircle,
   Mail,
   Star,
+  NotebookPen,
 } from 'lucide-react';
 import type { Product } from '../utils/types';
 import {
@@ -66,7 +67,7 @@ interface CartItem {
 }
 
 interface SplitPayment {
-  method: 'cash' | 'card' | 'digital';
+  method: 'cash' | 'card' | 'digital' | 'credit';
   amount: number;
   provider?: DigitalProvider | null;
 }
@@ -102,13 +103,14 @@ export function POS() {
   const [processingPayment, setProcessingPayment] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'digital' | 'split' | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'digital' | 'split' | 'credit' | null>(null);
   const [showReceipt, setShowReceipt] = useState(false);
   const [receiptData, setReceiptData] = useState<any>(null);
   const [cashReceived, setCashReceived] = useState('');
   const [showScanner, setShowScanner] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [customer, setCustomer] = useState<Customer | null>(null);
+  const [credit, setCredit] = useState<CustomerCredit | null>(null);
   const [globalDiscount, setGlobalDiscount] = useState(0);
   const [splitPayments, setSplitPayments] = useState<SplitPayment[]>([]);
   const [digitalProvider, setDigitalProvider] = useState<DigitalProvider | null>(null);
@@ -315,6 +317,20 @@ export function POS() {
   const splitTotal = splitPayments.reduce((sum, p) => sum + p.amount, 0);
   const splitRemaining = total - splitTotal;
 
+  const usesCredit =
+    paymentMethod === 'credit' || (paymentMethod === 'split' && splitPayments.some(sp => sp.method === 'credit'));
+  useEffect(() => {
+    setCredit(null);
+    if (!usesCredit || !customer) return;
+    let active = true;
+    customerCredit(customer.id)
+      .then(result => active && setCredit(result))
+      .catch(error => active && toastError(error, 'No fue posible consultar el cupo de fiado.'));
+    return () => {
+      active = false;
+    };
+  }, [usesCredit, customer]);
+
   const handlePayment = async () => {
     if (processingPayment) return;
     if (!pendingPayment) {
@@ -335,6 +351,10 @@ export function POS() {
       }
       if (paymentMethod === 'split' && Math.abs(splitTotal - total) > 0.01) {
         toast.error('El pago dividido no cubre el total');
+        return;
+      }
+      if (usesCredit && !customer) {
+        toast.error('Elige un cliente registrado para vender fiado.');
         return;
       }
       const digitalWithoutProvider =
@@ -946,6 +966,7 @@ export function POS() {
                     { id: 'card', icon: CreditCard, label: 'Tarjeta', color: 'bg-blue-600 hover:bg-blue-700' },
                     { id: 'digital', icon: Smartphone, label: 'Digital', color: 'bg-purple-600 hover:bg-purple-700' },
                     { id: 'split', icon: Split, label: 'Dividido', color: 'bg-orange-600 hover:bg-orange-700' },
+                    { id: 'credit', icon: NotebookPen, label: 'Fiado', color: 'bg-rose-600 hover:bg-rose-700' },
                   ] as const
                 ).map(({ id, icon: Icon, label, color }) => (
                   <Button
@@ -1027,6 +1048,32 @@ export function POS() {
                 </div>
               )}
 
+              {usesCredit && (
+                <div
+                  className="rounded-lg bg-rose-50 p-3 text-xs text-rose-900 dark:bg-rose-950/30 dark:text-rose-200"
+                  aria-live="polite"
+                >
+                  {!customer ? (
+                    'Elige arriba un cliente registrado para fiar.'
+                  ) : !credit ? (
+                    'Consultando cupo…'
+                  ) : credit.creditLimit <= 0 ? (
+                    `${customer.name} no tiene cupo de fiado. Asígnalo en Clientes.`
+                  ) : (
+                    <>
+                      Debe {money(credit.balance)} · Disponible <strong>{money(credit.available)}</strong> de{' '}
+                      {money(credit.creditLimit)}
+                      {(paymentMethod === 'credit'
+                        ? total
+                        : splitPayments.filter(sp => sp.method === 'credit').reduce((a, sp) => a + sp.amount, 0)) >
+                        credit.available + 0.005 && (
+                        <p className="mt-1 font-semibold">El cupo no alcanza para esta venta.</p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
               {paymentMethod === 'split' && (
                 <div className="space-y-2 bg-accent/50 rounded-lg p-3">
                   <div className="flex justify-between text-xs text-muted-foreground">
@@ -1038,7 +1085,13 @@ export function POS() {
                   {splitPayments.map((sp, i) => (
                     <div key={i} className="flex items-center gap-2 text-xs">
                       <span className="capitalize text-foreground w-16">
-                        {sp.method === 'cash' ? 'Efectivo' : sp.method === 'card' ? 'Tarjeta' : 'Digital'}
+                        {sp.method === 'cash'
+                          ? 'Efectivo'
+                          : sp.method === 'card'
+                            ? 'Tarjeta'
+                            : sp.method === 'credit'
+                              ? 'Fiado'
+                              : 'Digital'}
                       </span>
                       <span className="font-semibold text-foreground">{money(sp.amount)}</span>
                       {sp.method === 'digital' && (
@@ -1074,13 +1127,13 @@ export function POS() {
                   ))}
                   {splitRemaining > 0.01 && (
                     <div className="flex gap-1">
-                      {(['cash', 'card', 'digital'] as const).map(m => (
+                      {(['cash', 'card', 'digital', 'credit'] as const).map(m => (
                         <button
                           key={m}
                           onClick={() => setSplitPayments([...splitPayments, { method: m, amount: splitRemaining }])}
                           className="flex-1 text-[10px] py-1 rounded bg-orange-100 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400 hover:bg-orange-200 font-medium"
                         >
-                          + {m === 'cash' ? 'Efect.' : m === 'card' ? 'Tarj.' : 'Dig.'}
+                          + {m === 'cash' ? 'Efect.' : m === 'card' ? 'Tarj.' : m === 'credit' ? 'Fiado' : 'Dig.'}
                         </button>
                       ))}
                     </div>
@@ -1205,9 +1258,11 @@ export function POS() {
                             ? `Billetera digital${receiptData.splitPayments?.[0]?.provider ? ` · ${providerLabel(receiptData.splitPayments[0].provider)}` : ''}`
                             : receiptData.paymentMethod === 'transfer'
                               ? 'Transferencia'
-                              : receiptData.paymentMethod === 'split'
-                                ? 'Pago dividido'
-                                : receiptData.paymentMethod}
+                              : receiptData.paymentMethod === 'credit'
+                                ? 'Fiado'
+                                : receiptData.paymentMethod === 'split'
+                                  ? 'Pago dividido'
+                                  : receiptData.paymentMethod}
                       </span>
                     </div>
                   )}
@@ -1229,7 +1284,7 @@ export function POS() {
                 <Button
                   variant="outline"
                   onClick={() => {
-                    const msg = `*${config?.name || 'Manager Stock'}*\nComprobante interno: ${receiptData.invoiceNumber}\nFecha: ${new Date(receiptData.date).toLocaleString('es-CO')}\n\n${receiptData.items.map((i: CartItem) => `${i.quantity}x ${i.name} - ${money(itemSubtotal(i))}`).join('\n')}\n\nSubtotal: ${money(receiptData.subtotal)}\nIVA: ${money(receiptData.tax)}\n*Total: ${money(receiptData.total)}*\nMétodo: ${receiptData.paymentMethod === 'cash' ? 'Efectivo' : receiptData.paymentMethod === 'card' ? 'Tarjeta' : receiptData.paymentMethod === 'digital' ? 'Billetera digital' : receiptData.paymentMethod === 'transfer' ? 'Transferencia' : receiptData.paymentMethod === 'split' ? 'Pago dividido' : receiptData.paymentMethod}`;
+                    const msg = `*${config?.name || 'Manager Stock'}*\nComprobante interno: ${receiptData.invoiceNumber}\nFecha: ${new Date(receiptData.date).toLocaleString('es-CO')}\n\n${receiptData.items.map((i: CartItem) => `${i.quantity}x ${i.name} - ${money(itemSubtotal(i))}`).join('\n')}\n\nSubtotal: ${money(receiptData.subtotal)}\nIVA: ${money(receiptData.tax)}\n*Total: ${money(receiptData.total)}*\nMétodo: ${receiptData.paymentMethod === 'cash' ? 'Efectivo' : receiptData.paymentMethod === 'card' ? 'Tarjeta' : receiptData.paymentMethod === 'digital' ? 'Billetera digital' : receiptData.paymentMethod === 'transfer' ? 'Transferencia' : receiptData.paymentMethod === 'credit' ? 'Fiado' : receiptData.paymentMethod === 'split' ? 'Pago dividido' : receiptData.paymentMethod}`;
                     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
                   }}
                   className="border-green-200 text-green-700 dark:border-green-800 dark:text-green-400 text-xs"

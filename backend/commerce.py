@@ -63,7 +63,7 @@ def customer_out(row):
             'documentNumber': row['document_number'], 'email': row['email'], 'phone': row['phone'],
             'address': row['address'], 'municipalityCode': row['municipality_code'],
             'personType': row['person_type'], 'taxResponsibilities': row['tax_responsibilities'],
-            'active': bool(row['active']), 'revision': row['revision']}
+            'active': bool(row['active']), 'revision': row['revision'], 'creditLimit': row['credit_limit']}
 
 
 def resolve_customer(conn, customer_id, *, active=True):
@@ -88,7 +88,8 @@ def customers(search: str = Query(default='', max_length=160), include_inactive:
         rows = conn.execute("""SELECT * FROM customers WHERE business_id=? AND (active=1 OR ?)
           AND (name LIKE ? ESCAPE '!' OR document_number LIKE ? ESCAPE '!' OR phone LIKE ? ESCAPE '!' OR email LIKE ? ESCAPE '!')
           ORDER BY name COLLATE NOCASE,id LIMIT ? OFFSET ?""", (core.current_business_id(), include_inactive, term, term, term, term, limit, offset)).fetchall()
-        return [customer_out(r) for r in rows]
+        from backend.customer_credit import credit_balance
+        return [{**customer_out(r), 'creditBalance': credit_balance(conn, r['id'])} for r in rows]
 
 
 @router.post('/customers', status_code=201)

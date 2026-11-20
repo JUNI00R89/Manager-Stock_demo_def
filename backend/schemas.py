@@ -207,7 +207,7 @@ def _digital_details(method: str, provider: str | None, reference: str) -> tuple
 
 
 class PaymentPartPayload(BaseModel):
-    method: Literal["cash", "card", "digital", "transfer"]
+    method: Literal["cash", "card", "digital", "transfer", "credit"]
     amount: float = Field(ge=0, allow_inf_nan=False)
     provider: DigitalProvider | None = None
     reference: str = Field(default="", max_length=60)
@@ -226,7 +226,7 @@ class SalePayload(BaseModel):
     customer: str = Field(default="Cliente general", max_length=120)
     customerId: str | None = Field(default=None, max_length=100)
     appointmentId: str | None = Field(default=None, max_length=100)
-    paymentMethod: Literal["cash", "card", "digital", "split", "transfer"] = "cash"
+    paymentMethod: Literal["cash", "card", "digital", "split", "transfer", "credit"] = "cash"
     paymentProvider: DigitalProvider | None = None
     paymentReference: str = Field(default="", max_length=60)
     payments: list[PaymentPartPayload] = Field(default_factory=list, max_length=10)
