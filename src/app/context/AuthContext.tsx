@@ -8,6 +8,7 @@ interface AuthContextType {
   register: (email: string, password: string, name: string) => Promise<AuthUser | null>;
   logout: () => void;
   updateSubscription: (subscription: 'basic' | 'premium') => void;
+  saveHiddenNav: (hiddenNav: string[]) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -72,8 +73,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) setUser({ ...user, subscription });
   };
 
+  const saveHiddenNav = async (hiddenNav: string[]) => {
+    const updated = await authService.saveHiddenNav(hiddenNav);
+    setUser(current => (current ? { ...current, hiddenNav: updated.hiddenNav ?? [] } : current));
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, updateSubscription }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, updateSubscription, saveHiddenNav }}>
       {children}
     </AuthContext.Provider>
   );

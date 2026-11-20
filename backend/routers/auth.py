@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import uuid
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel, Field, StringConstraints
 
 from backend.core.config import DEFAULT_TAX_RATE
 from backend.core.context import current_identity
@@ -92,6 +95,23 @@ def auth_me():
         if not row:
             raise HTTPException(401, "La cuenta ya no existe.")
         return public_user(row, conn)
+
+
+class NavPreferencesPayload(BaseModel):
+    hiddenNav: list[Annotated[str, StringConstraints(pattern=r"^/[a-z0-9/-]{1,60}$")]] = Field(max_length=60)
+
+
+ALWAYS_VISIBLE = {"/dashboard", "/settings"}  # never hidden, so a user can always undo the change
+
+
+@router.put("/api/auth/me/preferences")
+def save_nav_preferences(payload: NavPreferencesPayload):
+    hidden = [path for path in dict.fromkeys(payload.hiddenNav) if path not in ALWAYS_VISIBLE]
+    identity = current_identity()
+    with connection() as conn:
+        conn.execute("UPDATE auth_users SET hidden_nav=? WHERE id=?", (json.dumps(hidden), identity["id"]))
+        conn.commit()
+        return public_user(conn.execute("SELECT * FROM auth_users WHERE id=?", (identity["id"],)).fetchone(), conn)
 
 
 @router.post("/api/auth/logout")

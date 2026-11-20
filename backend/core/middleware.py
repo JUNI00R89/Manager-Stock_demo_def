@@ -24,7 +24,7 @@ from backend.core.context import _current_identity
 from backend.core.db import connection
 
 PUBLIC_PATHS = {"/api/health", "/api/auth/login", "/api/auth/register", "/api/subscription/plans"}
-SESSION_PATHS = {"/api/auth/me", "/api/auth/logout"}
+SESSION_PATHS = {"/api/auth/me", "/api/auth/logout", "/api/auth/me/preferences"}
 SUSPENSION_ALLOWED_PATHS = SESSION_PATHS | {"/api/suspension/status", "/api/support/messages", "/api/support/case"}
 
 # --- Permisos requeridos por ruta -------------------------------------------

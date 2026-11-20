@@ -39,6 +39,10 @@ def public_user(row: sqlite3.Row, conn: sqlite3.Connection | None = None) -> dic
     }
     custom_role_id = row["custom_role_id"] if "custom_role_id" in keys else None
     result["customRoleId"] = custom_role_id
+    try:
+        result["hiddenNav"] = json.loads(row["hidden_nav"]) if "hidden_nav" in keys else []
+    except json.JSONDecodeError:
+        result["hiddenNav"] = []
     result["customRoleName"] = None
     result["permissions"] = []
     result["businessActive"] = True
