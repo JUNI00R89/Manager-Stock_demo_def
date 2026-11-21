@@ -93,8 +93,9 @@ def run() -> None:
         # Returning a credit line lowers the debt; cancelling a credit sale removes it.
         sale = first.json()
         item = sale["items"][0]
+        owner_till = client.post("/api/cash/sessions", headers=owner, json={"openingAmount": 50000}).json()["id"]
         refund = client.post(f"/api/sales/{sale['id']}/returns", headers=owner, json={
-            "idempotencyKey": "devolucion-fiado-1", "cashSessionId": client.post("/api/cash/sessions", headers=owner, json={"openingAmount": 0}).json()["id"],
+            "idempotencyKey": "devolucion-fiado-1", "cashSessionId": owner_till,
             "reason": "Producto en mal estado", "items": [{"itemId": item["id"], "quantity": 1, "restock": True}],
             "payments": [{"method": "credit", "amount": 10000}], "expectedTotal": 10000})
         assert refund.status_code == 201, refund.text
@@ -102,6 +103,14 @@ def run() -> None:
         cancelled = client.post(f"/api/sales/{mixed.json()['id']}/cancel", headers=owner)
         assert cancelled.status_code == 200, cancelled.text
         assert credit()["balance"] == 0
+        # Already paid off: what was sold on credit is now refunded in cash, never pushed into a negative balance.
+        quote = client.post(f"/api/sales/{sale['id']}/returns/quote", headers=owner, json={"items": [{"itemId": item["id"], "quantity": 1, "restock": True}]}).json()
+        assert quote["availablePayments"] == {"cash": 20000}, quote["availablePayments"]
+        cash_back = client.post(f"/api/sales/{sale['id']}/returns", headers=owner, json={
+            "idempotencyKey": "devolucion-fiado-2", "cashSessionId": owner_till, "reason": "Cliente ya pagó y devuelve",
+            "items": [{"itemId": item["id"], "quantity": 1, "restock": True}], "payments": [{"method": "cash", "amount": 10000}], "expectedTotal": 10000})
+        assert cash_back.status_code == 201, cash_back.text
+        assert credit()["balance"] == 0, "a cash refund does not touch the debt"
         listed = next(c for c in client.get("/api/customers", headers=owner).json() if c["id"] == customer["id"])
         assert listed["creditBalance"] == 0 and listed["creditLimit"] == 50000
 

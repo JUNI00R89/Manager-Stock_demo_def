@@ -2,6 +2,7 @@ import { uniqueRestaurantId } from '../utils/restaurantStorage';
 import { api, authService, dataService } from './dataService';
 import { isDesktopMode } from './desktop';
 import { canPerformAction } from '../security/permissions';
+import type { AbonoReceipt } from '../utils/abonoReceipt';
 
 export interface Customer {
   id: string;
@@ -57,7 +58,7 @@ export async function receiveCreditPayment(
     reference?: string;
     cashSessionId?: string;
   },
-): Promise<{ balance: number }> {
+): Promise<{ balance: number; payment: AbonoReceipt['payment'] }> {
   if (isDesktopMode()) throw new Error(SERVER_ONLY);
   return api(`/customers/${encodeURIComponent(id)}/credit-payments`, { method: 'POST', body: JSON.stringify(input) });
 }

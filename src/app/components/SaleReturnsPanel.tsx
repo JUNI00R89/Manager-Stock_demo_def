@@ -43,6 +43,7 @@ const methods: Record<string, string> = {
   card: 'Tarjeta',
   transfer: 'Transferencia',
   digital: 'Digital',
+  credit: 'Fiado (rebaja la deuda)',
 };
 
 export function SaleReturnsPanel({

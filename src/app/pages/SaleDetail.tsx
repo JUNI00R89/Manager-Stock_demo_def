@@ -162,6 +162,7 @@ export function SaleDetail() {
                       digital: 'Billetera digital',
                       split: 'Pago dividido',
                       transfer: 'Transferencia',
+                      credit: 'Fiado',
                     }[sale.paymentMethod] || sale.paymentMethod}
                   </p>
                   {digitalDetail(sale.payments) && (

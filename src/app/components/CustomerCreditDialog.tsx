@@ -17,6 +17,8 @@ import { canPerformAction } from '../security/permissions';
 import { toastError } from '../utils/notifications';
 import { formatMoney as money } from '../utils/restaurantFormat';
 import { uniqueRestaurantId } from '../utils/restaurantStorage';
+import { useBusiness } from '../context/BusinessContext';
+import { abonoReceiptText, downloadAbonoReceipt, type AbonoReceipt } from '../utils/abonoReceipt';
 
 const METHODS = { cash: 'Efectivo', card: 'Tarjeta', digital: 'Digital', transfer: 'Transferencia' } as const;
 type Method = keyof typeof METHODS;
@@ -42,6 +44,8 @@ export function CustomerCreditDialog({
   // One key per abono attempt: a retry after a network error never charges twice.
   const [paymentKey, setPaymentKey] = useState(() => uniqueRestaurantId('abono'));
   const [busy, setBusy] = useState(false);
+  const { config } = useBusiness();
+  const [receipt, setReceipt] = useState<AbonoReceipt | null>(null);
   const [changed, setChanged] = useState(false);
 
   const load = async (id: string) => {
@@ -51,6 +55,7 @@ export function CustomerCreditDialog({
   };
   useEffect(() => {
     setCredit(null);
+    setReceipt(null);
     setAmount('');
     setChanged(false);
     if (customer) load(customer.id).catch(e => toastError(e, 'No se pudo cargar el fiado.'));
@@ -90,6 +95,12 @@ export function CustomerCreditDialog({
         cashSessionId: session.id,
       });
       setPaymentKey(uniqueRestaurantId('abono'));
+      setReceipt({
+        businessName: config?.name || 'Manager Stock',
+        customerName: customer.name,
+        payment: result.payment,
+        balance: result.balance,
+      });
       setAmount('');
       setReference('');
       await load(customer.id);
@@ -154,6 +165,32 @@ export function CustomerCreditDialog({
                 >
                   Guardar cupo
                 </Button>
+              </div>
+            )}
+
+            {receipt && (
+              <div className="space-y-2 rounded-xl border border-emerald-300 bg-emerald-50 p-3 dark:bg-emerald-950/30">
+                <pre className="whitespace-pre-wrap font-sans text-sm">{abonoReceiptText(receipt)}</pre>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-11 flex-1"
+                    onClick={() => downloadAbonoReceipt(receipt)}
+                  >
+                    Descargar comprobante
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-11 flex-1"
+                    onClick={() =>
+                      window.open(`https://wa.me/?text=${encodeURIComponent(abonoReceiptText(receipt))}`, '_blank')
+                    }
+                  >
+                    WhatsApp
+                  </Button>
+                </div>
               </div>
             )}
 

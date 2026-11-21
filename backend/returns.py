@@ -124,6 +124,18 @@ def quote(conn, sale_id, selection):
     for r in conn.execute('''SELECT p.method,SUM(p.amount) amount FROM sale_return_payments p JOIN sale_returns r ON r.id=p.return_id
                              WHERE r.sale_id=? GROUP BY p.method''', (sale_id,)):
         payments[r['method']] = round(payments.get(r['method'], 0) - r['amount'], 2)
+    if payments.get('credit', 0) > 0:
+        # A fiado refund lowers the debt only up to what is still owed; anything the customer already paid back is returned in cash.
+        link = conn.execute("SELECT customer_id FROM customer_operations WHERE business_id=? AND source_type='sale' AND source_id=?",
+                            (core.current_business_id(), sale_id)).fetchone()
+        from backend.customer_credit import credit_balance
+        owed = max(credit_balance(conn, link['customer_id']), 0) if link else payments['credit']
+        excess = round(payments['credit'] - min(payments['credit'], owed), 2)
+        if excess > 0:
+            payments['credit'] = round(payments['credit'] - excess, 2)
+            payments['cash'] = round(payments.get('cash', 0) + excess, 2)
+        if payments['credit'] <= 0:
+            del payments['credit']
     return {'saleId': sale_id, 'items': output, 'serviceAmount': selection.serviceAmount,
             'total': float(sum(cents(i['amount']) for i in output) + cents(selection.serviceAmount)), 'availablePayments': payments}
 
