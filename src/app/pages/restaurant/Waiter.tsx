@@ -21,6 +21,14 @@ import {
 import { toast } from 'sonner';
 import { imagesEnabled, productImageUrl } from '../../utils/productImage';
 import { mergeableLine } from '../../utils/orderCart';
+import { OptionPicker } from '../../components/OptionPicker';
+import {
+  groupsForProduct,
+  listOptionGroups,
+  optionsLabel,
+  optionsPrice,
+  type OptionGroup,
+} from '../../services/productOptions';
 import { uniqueRestaurantId } from '../../utils/restaurantStorage';
 import { toastError } from '../../utils/notifications';
 import { Layout } from '../../components/Layout';
@@ -60,6 +68,8 @@ interface CartLine {
   productId: string;
   cantidad: number;
   nota: string;
+  /** Chosen option ids; lines with different options never merge. */
+  opciones: string[];
 }
 
 const FILTER_LABELS: Record<OrderFilter, string> = {
@@ -94,6 +104,16 @@ export function Waiter() {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('Todos');
   const [cart, setCart] = useState<CartLine[]>([]);
+  const [optionGroups, setOptionGroups] = useState<OptionGroup[]>([]);
+  const [picking, setPicking] = useState<RestaurantCatalogProduct | null>(null);
+  useEffect(() => {
+    listOptionGroups()
+      .then(setOptionGroups)
+      .catch(() => setOptionGroups([]));
+  }, []);
+  const lineGroups = (productId: string) => groupsForProduct(optionGroups, productId);
+  const linePrice = (line: CartLine & { product: RestaurantCatalogProduct }) =>
+    line.product.price + optionsPrice(lineGroups(line.productId), line.opciones);
   const contentRef = useRef<HTMLDivElement>(null);
   const [cartOpen, setCartOpen] = useState(false);
   const [sending, setSending] = useState(false);
@@ -126,7 +146,7 @@ export function Waiter() {
   );
 
   const cartCount = cartLines.reduce((sum, line) => sum + line.cantidad, 0);
-  const subtotal = cartLines.reduce((sum, line) => sum + line.product.price * line.cantidad, 0);
+  const subtotal = cartLines.reduce((sum, line) => sum + linePrice(line) * line.cantidad, 0);
   const taxRate = Math.max(0, Number(config?.taxRate) || 0);
   const impuesto = Math.round(subtotal * taxRate);
   const total = subtotal + impuesto;
@@ -223,13 +243,25 @@ export function Waiter() {
     scrollToTop();
   };
 
-  const addProduct = (product: Product) => {
+  const addProduct = (product: Product, opciones?: string[]) => {
+    if (!opciones && lineGroups(product.id).length) {
+      setPicking(product as RestaurantCatalogProduct);
+      return;
+    }
+    const chosen = [...(opciones ?? [])].sort();
     setCart(current => {
-      const line = mergeableLine(current, product.id, item => item.nota);
+      const line = mergeableLine(
+        current.filter(item => item.opciones.join() === chosen.join()),
+        product.id,
+        item => item.nota,
+      );
       if (line) {
         return current.map(item => (item.lineId === line.lineId ? { ...item, cantidad: item.cantidad + 1 } : item));
       }
-      return [...current, { lineId: uniqueRestaurantId('linea'), productId: product.id, cantidad: 1, nota: '' }];
+      return [
+        ...current,
+        { lineId: uniqueRestaurantId('linea'), productId: product.id, cantidad: 1, nota: '', opciones: chosen },
+      ];
     });
   };
 
@@ -286,9 +318,10 @@ export function Waiter() {
         items: cartLines.map(line => ({
           productId: line.product.id,
           nombre: line.product.name,
-          precioUnitario: line.product.price,
+          precioUnitario: linePrice(line),
           cantidad: line.cantidad,
           nota: line.nota,
+          opciones: line.opciones,
           ventaDirecta: line.product.directSale,
         })),
         horaInicioJornada: settings.startTime,
@@ -751,6 +784,12 @@ export function Waiter() {
         </div>
       </div>
 
+      <OptionPicker
+        product={picking}
+        groups={picking ? lineGroups(picking.id) : []}
+        onConfirm={selected => picking && addProduct(picking, selected)}
+        onClose={() => setPicking(null)}
+      />
       <Dialog open={cartOpen} onOpenChange={setCartOpen}>
         <DialogContent className="max-h-[88vh] overflow-y-auto max-sm:bottom-0 max-sm:top-auto max-sm:translate-y-0 max-sm:rounded-b-none max-sm:rounded-t-3xl sm:max-w-lg">
           <DialogHeader>
@@ -767,8 +806,13 @@ export function Waiter() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-semibold leading-snug text-foreground">{line.product.name}</p>
+                    {line.opciones.length > 0 && (
+                      <p className="text-xs font-medium text-primary">
+                        {optionsLabel(lineGroups(line.productId), line.opciones)}
+                      </p>
+                    )}
                     <p className="text-xs text-muted-foreground">
-                      {formatMoney(line.product.price, config?.currency)} c/u
+                      {formatMoney(linePrice(line), config?.currency)} c/u
                     </p>
                   </div>
                   <button
@@ -801,7 +845,7 @@ export function Waiter() {
                     </button>
                   </div>
                   <span className="text-sm font-bold">
-                    {formatMoney(line.product.price * line.cantidad, config?.currency)}
+                    {formatMoney(linePrice(line) * line.cantidad, config?.currency)}
                   </span>
                 </div>
                 <Input
@@ -893,6 +937,9 @@ function ReadyOrderCard({
           <li key={item.id} className="flex justify-between gap-3">
             <span className="min-w-0 text-foreground">
               <strong>{item.cantidad}×</strong> {item.nombre}
+              {item.opciones?.length ? (
+                <span className="font-medium text-primary"> · {item.opciones.map(o => o.nombre).join(', ')}</span>
+              ) : null}
               {item.nota ? <span className="text-muted-foreground"> · {item.nota}</span> : null}
             </span>
             <span className="shrink-0 text-muted-foreground">

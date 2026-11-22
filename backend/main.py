@@ -36,6 +36,7 @@ from backend.routers import (
     inventory_transfers,
     orders,
     platform,
+    product_options,
     purchase_orders,
     recipes,
     sales,
@@ -132,7 +133,7 @@ app.add_middleware(
 for module in (
     auth, business, subscriptions, platform, support, system, catalog, sales, suppliers,
     inventory, purchase_orders, inventory_counts, inventory_transfers, inventory_reports,
-    cash, hotel, services, orders, tables, recipes,
+    cash, hotel, services, orders, tables, recipes, product_options,
 ):
     app.include_router(module.router)
 

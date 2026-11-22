@@ -46,6 +46,7 @@ ROUTE_PERMISSIONS: tuple[tuple[str, str, str], ...] = (
     ("/api/products/import/template", "catalog.view", "catalog.view"),
     ("/api/products/import*", "catalog.create", "catalog.create"),
     ("/api/products/*", "catalog.view", "catalog.edit"),
+    ("/api/product-options*", "catalog.view", "catalog.edit"),
     ("/api/suppliers", "suppliers.view", "suppliers.manage"),
     ("/api/suppliers/*", "suppliers.view", "suppliers.manage"),
     ("/api/recipes", "catalog.view", "catalog.edit"),
@@ -107,7 +108,7 @@ def required_permission_for_request(path: str, method: str) -> str | None:
 
 # --- Módulos del negocio ----------------------------------------------------
 def _module_for_request(path: str, method: str) -> str | None:
-    if path.startswith("/api/products") or path.startswith("/api/product-categories") or path.startswith("/api/recipes"):
+    if path.startswith(("/api/products", "/api/product-categories", "/api/recipes", "/api/product-options")):
         return "catalog_read" if method == "GET" else "catalog_write"
     if path.startswith("/api/hotel/"):
         return "hotel"
@@ -162,7 +163,7 @@ def _cashier_allowed(path: str, method: str) -> bool:
         return method in {"GET", "POST", "PUT"}
     if path in SESSION_PATHS:
         return True
-    if path in {"/api/products", "/api/business/config", "/api/tables", "/api/dashboard"}:
+    if path in {"/api/products", "/api/business/config", "/api/tables", "/api/dashboard", "/api/product-options"}:
         return method == "GET"
     if path == "/api/sales":
         return method in {"GET", "POST"}

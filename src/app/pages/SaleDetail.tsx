@@ -128,6 +128,11 @@ export function SaleDetail() {
                       <tr key={`${item.productId}-${i}`}>
                         <td className="px-5 py-4">
                           <p className="font-medium">{item.productName}</p>
+                          {!!item.options?.length && (
+                            <p className="text-xs font-medium text-primary">
+                              {item.options.map(option => option.name).join(', ')}
+                            </p>
+                          )}
                           <p className="mt-1 text-xs text-muted-foreground">SKU {item.sku || '—'}</p>
                         </td>
                         <td className="px-5 py-4">{money(item.price)}</td>

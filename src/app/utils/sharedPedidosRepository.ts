@@ -33,6 +33,7 @@ export class SharedPedidosRepository implements PedidosRepository {
         cantidad: item.quantity,
         precioUnitario: item.unitPrice,
         nota: item.notes,
+        opciones: (item.options || []).map(o => ({ grupo: o.group, nombre: o.name, precio: o.priceDelta })),
         ventaDirecta: (meta.directProductIds || []).includes(item.productId),
       }));
       const impuesto = Math.round(row.total * taxRate * 100) / 100;
@@ -109,7 +110,12 @@ export class SharedPedidosRepository implements PedidosRepository {
       customer: input.mesaNombre,
       waiter: input.mesero.nombre,
       notes: input.nota,
-      items: input.items.map(item => ({ productId: item.productId, quantity: item.cantidad, notes: item.nota })),
+      items: input.items.map(item => ({
+        productId: item.productId,
+        quantity: item.cantidad,
+        notes: item.nota,
+        options: item.opciones,
+      })),
       restaurantMetadata: {
         mesaId: input.mesaId,
         meseroId: input.mesero.id,

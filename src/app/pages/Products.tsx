@@ -1,16 +1,29 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { AlertTriangle, Boxes, Edit3, FileSpreadsheet, History, Package, Plus, Search, Trash2 } from 'lucide-react';
+import {
+  AlertTriangle,
+  Boxes,
+  Edit3,
+  FileSpreadsheet,
+  History,
+  ListPlus,
+  Package,
+  Plus,
+  Search,
+  Trash2,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { toastError } from '../utils/notifications';
 import { Layout } from '../components/Layout';
 import { ConfirmActionDialog } from '../components/ConfirmActionDialog';
 import { ImportProductsDialog } from '../components/ImportProductsDialog';
+import { ProductOptionsManager } from '../components/ProductOptionsManager';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
 import { dataService } from '../services/dataService';
+import { isDesktopMode } from '../services/desktop';
 import { useBusiness } from '../context/BusinessContext';
 import { useAuth } from '../context/AuthContext';
 import { canAccessPath } from '../security/permissions';
@@ -49,6 +62,8 @@ export function Products() {
   const [loading, setLoading] = useState(true);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const canManageOptions = isFoodBusiness && canEditProduct && !isDesktopMode();
 
   const load = async () => {
     try {
@@ -113,6 +128,12 @@ export function Products() {
               actions={
                 canCreateProduct && (
                   <>
+                    {canManageOptions && (
+                      <Button variant="outline" size="sm" className="dash-action" onClick={() => setOptionsOpen(true)}>
+                        <ListPlus className="mr-2 h-3.5 w-3.5" />
+                        Opciones del menú
+                      </Button>
+                    )}
                     <Button variant="outline" size="sm" className="dash-action" onClick={() => setImportOpen(true)}>
                       <FileSpreadsheet className="mr-2 h-3.5 w-3.5" />
                       Importar desde Excel
@@ -160,6 +181,12 @@ export function Products() {
               </div>
               {canCreateProduct && (
                 <div className="flex flex-wrap gap-2">
+                  {canManageOptions && (
+                    <Button variant="outline" onClick={() => setOptionsOpen(true)} className="h-11">
+                      <ListPlus className="mr-2 h-4 w-4" />
+                      Opciones del menú
+                    </Button>
+                  )}
                   <Button variant="outline" onClick={() => setImportOpen(true)} className="h-11">
                     <FileSpreadsheet className="mr-2 h-4 w-4" />
                     Importar desde Excel
@@ -207,6 +234,9 @@ export function Products() {
         )}
         {canCreateProduct && (
           <ImportProductsDialog open={importOpen} onOpenChange={setImportOpen} onImported={() => void load()} />
+        )}
+        {canManageOptions && (
+          <ProductOptionsManager open={optionsOpen} onOpenChange={setOptionsOpen} products={products} />
         )}
 
         <Card className="rounded-2xl border-border/70 p-4 shadow-sm">

@@ -192,6 +192,7 @@ class SaleItemPayload(BaseModel):
     productId: str
     quantity: float = Field(gt=0, le=100000)
     discountPercent: float = Field(default=0, ge=0, le=100)
+    options: list[str] = Field(default_factory=list, max_length=20)
 
 
 DigitalProvider = Literal["nequi", "daviplata", "breb", "other"]

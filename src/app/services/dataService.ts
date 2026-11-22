@@ -46,6 +46,16 @@ export interface SaleItemInput {
   productId: string;
   quantity: number;
   discountPercent?: number;
+  /** Chosen menu options (ids); the server prices and validates them. */
+  options?: string[];
+}
+
+/** A chosen option as stored with an order or sale line (snapshot of its name and price at that moment). */
+export interface LineOption {
+  id: string;
+  group: string;
+  name: string;
+  priceDelta: number;
 }
 
 export interface SaleItemRecord {
@@ -58,6 +68,7 @@ export interface SaleItemRecord {
   unitCost?: number;
   discountPercent: number;
   subtotal: number;
+  options?: LineOption[];
 }
 
 export interface SaleRecord {
@@ -141,6 +152,7 @@ export interface OrderItemRecord {
   quantity: number;
   unitPrice: number;
   notes?: string;
+  options?: LineOption[];
 }
 
 export interface OrderRecord {
@@ -168,7 +180,7 @@ export interface CreateOrderInput {
   phone?: string;
   address?: string;
   notes?: string;
-  items: { productId: string; quantity: number; notes?: string }[];
+  items: { productId: string; quantity: number; notes?: string; options?: string[] }[];
   tableId?: string | null;
   tableNumber?: number | null;
   waiter?: string;
@@ -2308,6 +2320,8 @@ export const dataService = {
     {
       if (request.paymentMethod === 'credit' || request.payments?.some(p => p.method === 'credit'))
         throw new Error('El fiado necesita conexión con el servidor para controlar el cupo del cliente.');
+      if (request.items.some(item => item.options?.length))
+        throw new Error('Las opciones del menú necesitan conexión con el servidor.');
       const db = readLocal();
       const previous = db.sales.find(
         s => s.idempotencyKey === request.idempotencyKey || s.id === request.idempotencyKey,
@@ -2890,12 +2904,14 @@ export const dataService = {
   },
   async addOrderItems(
     orderId: string,
-    items: { productId: string; quantity: number; notes?: string }[],
+    items: { productId: string; quantity: number; notes?: string; options?: string[] }[],
   ): Promise<OrderRecord> {
     try {
       await api(`/orders/${encodeURIComponent(orderId)}/items`, { method: 'POST', body: JSON.stringify({ items }) });
     } catch (error) {
       if (!canFallbackToLocal(error)) throw error;
+      if (items.some(item => item.options?.length))
+        throw new Error('Las opciones del menú necesitan conexión con el servidor.');
       const db = readLocal();
       const order = db.orders.find(o => o.id === orderId);
       if (!order) throw new Error('Pedido no encontrado.');
@@ -2949,6 +2965,7 @@ export const dataService = {
           quantity: item.quantity,
           unitPrice: item.unit_price || item.unitPrice,
           notes: item.notes,
+          options: item.options || [],
         })),
       })) as OrderRecord[];
       const db = readLocal();
@@ -2969,6 +2986,8 @@ export const dataService = {
       );
     } catch (error) {
       if (!canFallbackToLocal(error)) throw error;
+      if (input.items.some(item => item.options?.length))
+        throw new Error('Las opciones del menú necesitan conexión con el servidor.');
     }
     if (serverCreated) {
       const db = readLocal();
