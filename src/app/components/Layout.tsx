@@ -43,7 +43,9 @@ import {
   ClipboardCheck,
   ArrowLeftRight,
   Boxes,
+  SlidersHorizontal,
 } from 'lucide-react';
+import { NavCustomizeDialog, ALWAYS_VISIBLE_NAV } from './NavCustomizeDialog';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 
@@ -306,7 +308,7 @@ function LayoutShell({ children }: LayoutProps) {
     return items;
   };
 
-  const navItems = getNavItems().filter(item => {
+  const allowedNavItems = getNavItems().filter(item => {
     const hasRoutePermission = canAccessPath(
       item.path,
       user?.role,
@@ -319,6 +321,10 @@ function LayoutShell({ children }: LayoutProps) {
       Boolean(user.permissions?.some(permission => ['catalog.view', 'sales.view'].includes(permission)));
     return hasRoutePermission && hasAlertSourcePermission;
   });
+  const hiddenNav = new Set(user?.hiddenNav ?? []);
+  const visibleByChoice = (path: string) => ALWAYS_VISIBLE_NAV.has(path) || !hiddenNav.has(path);
+  const navItems = allowedNavItems.filter(item => visibleByChoice(item.path));
+  const [customizingNav, setCustomizingNav] = useState(false);
 
   const getMobileBottomItems = (): NavItem[] => {
     const always = [{ path: '/dashboard', icon: LayoutDashboard, label: 'Inicio', group: 'general' }];
@@ -374,6 +380,7 @@ function LayoutShell({ children }: LayoutProps) {
 
   const mobileBottomItems = getMobileBottomItems().filter(item => {
     if (item.path === '__more__') return true;
+    if (!visibleByChoice(item.path)) return false;
     const hasRoutePermission = canAccessPath(
       item.path,
       user?.role,
@@ -624,6 +631,14 @@ function LayoutShell({ children }: LayoutProps) {
         {/* User + logout */}
         <div className="mt-2 border-t border-sidebar-border px-3 pt-2 pb-2">
           <button
+            onClick={() => setCustomizingNav(true)}
+            className={`w-full flex items-center gap-3 py-2 rounded-xl text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-all duration-200 ${collapsed ? 'min-h-[40px] justify-center px-0' : 'min-h-[44px] px-3'}`}
+            title="Personalizar menú"
+          >
+            <SlidersHorizontal size={22} />
+            {!collapsed && <span>Personalizar menú</span>}
+          </button>
+          <button
             onClick={handleLogout}
             className={`w-full flex items-center gap-3 py-2 rounded-xl text-sidebar-foreground/60 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-500/10 transition-all duration-200 ${collapsed ? 'min-h-[40px] justify-center px-0' : 'min-h-[44px] px-3'}`}
             title="Cerrar sesión"
@@ -638,6 +653,12 @@ function LayoutShell({ children }: LayoutProps) {
 
   return (
     <div className="app-shell flex h-screen overflow-hidden">
+      <NavCustomizeDialog
+        open={customizingNav}
+        onClose={() => setCustomizingNav(false)}
+        items={allowedNavItems}
+        groupLabels={groupLabels}
+      />
       {/* ── Desktop sidebar ── */}
       <aside
         className={`app-sidebar hidden lg:flex flex-col overflow-hidden rounded-2xl transition-all duration-300 flex-shrink-0 m-4 ${sidebarCollapsed ? 'w-16 app-sidebar-collapsed' : 'w-64'}`}

@@ -816,6 +816,8 @@ export interface AuthUser {
   customRoleName?: string | null;
   permissions?: string[];
   subscription: 'basic' | 'premium';
+  /** Sidebar paths this user chose to hide (visual only). */
+  hiddenNav?: string[];
 }
 
 export interface AuthResponse {
@@ -834,8 +836,23 @@ export const authService = {
     return api<AuthResponse>('/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password }) });
   },
   me() {
-    if (isDesktopMode()) return desktop.auth.me();
+    if (isDesktopMode())
+      return desktop.auth.me().then(u => {
+        try {
+          return { ...u, hiddenNav: JSON.parse(localStorage.getItem(`manager_stock_hidden_nav:${u.id}`) || '[]') };
+        } catch {
+          return u;
+        }
+      });
     return api<AuthUser>('/auth/me');
+  },
+  async saveHiddenNav(hiddenNav: string[]): Promise<AuthUser> {
+    if (!isDesktopMode())
+      return api<AuthUser>('/auth/me/preferences', { method: 'PUT', body: JSON.stringify({ hiddenNav }) });
+    // Desktop demo: no server, so the choice stays in this browser.
+    const current = await desktop.auth.me();
+    localStorage.setItem(`manager_stock_hidden_nav:${current.id}`, JSON.stringify(hiddenNav));
+    return { ...current, hiddenNav };
   },
   logout() {
     if (isDesktopMode()) return desktop.auth.logout();
