@@ -28,6 +28,14 @@ import {
 import { toast } from 'sonner';
 import { imagesEnabled, productImageUrl } from '../../utils/productImage';
 import { mergeableLine } from '../../utils/orderCart';
+import { OptionPicker } from '../../components/OptionPicker';
+import {
+  groupsForProduct,
+  listOptionGroups,
+  optionsLabel,
+  optionsPrice,
+  type OptionGroup,
+} from '../../services/productOptions';
 import { uniqueRestaurantId } from '../../utils/restaurantStorage';
 import { toastError } from '../../utils/notifications';
 import { dataService, type OrderRecord, type RestaurantTableRecord } from '../../services/dataService';
@@ -71,6 +79,9 @@ interface CartItem {
   sendToKitchen: boolean;
   /** Kitchen note for this line ("sin cebolla"); travels as order_items.notes. */
   notes: string;
+  /** Chosen option ids and their label; price already includes them. */
+  options: string[];
+  optionsLabel: string;
 }
 
 interface TableView {
@@ -107,6 +118,13 @@ export function Tables() {
   const [selectedTable, setSelectedTable] = useState<RestaurantTableRecord | null>(null);
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [optionGroups, setOptionGroups] = useState<OptionGroup[]>([]);
+  const [picking, setPicking] = useState<Product | null>(null);
+  useEffect(() => {
+    listOptionGroups()
+      .then(setOptionGroups)
+      .catch(() => setOptionGroups([]));
+  }, []);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategory, setActiveCategory] = useState('Todos');
   const [customerName, setCustomerName] = useState('');
@@ -229,12 +247,23 @@ export function Tables() {
   const quantityInCart = (productId: string) =>
     cart.reduce((sum, item) => sum + (item.productId === productId ? item.quantity : 0), 0);
 
-  const addToCart = (product: Product) => {
+  const addToCart = (product: Product, options?: string[]) => {
     if (quantityInCart(product.id) + 1 > product.stock) {
       toast.error(product.stock < 1 ? 'Producto sin stock' : 'Sin stock suficiente');
       return;
     }
-    const line = mergeableLine(cart, product.id, item => item.notes);
+    const groups = groupsForProduct(optionGroups, product.id);
+    if (!options && groups.length) {
+      setPicking(product);
+      return;
+    }
+    const chosen = [...(options ?? [])].sort();
+    // Only lines with the same options merge: "con queso" and "sin queso" stay apart.
+    const line = mergeableLine(
+      cart.filter(item => item.options.join() === chosen.join()),
+      product.id,
+      item => item.notes,
+    );
     if (line) {
       setCart(cart.map(item => (item.lineId === line.lineId ? { ...item, quantity: item.quantity + 1 } : item)));
     } else {
@@ -244,11 +273,13 @@ export function Tables() {
           lineId: uniqueRestaurantId('linea'),
           productId: product.id,
           name: product.name,
-          price: product.price,
+          price: product.price + optionsPrice(groups, chosen),
           quantity: 1,
           sku: product.sku,
           sendToKitchen: goesToKitchen(product.category),
           notes: '',
+          options: chosen,
+          optionsLabel: optionsLabel(groups, chosen),
         },
       ]);
     }
@@ -426,7 +457,12 @@ export function Tables() {
         tableId: selectedTable.id,
         tableNumber: selectedTable.number,
         waiter: user?.name || '',
-        items: cart.map(item => ({ productId: item.productId, quantity: item.quantity, notes: item.notes.trim() })),
+        items: cart.map(item => ({
+          productId: item.productId,
+          quantity: item.quantity,
+          notes: item.notes.trim(),
+          options: item.options,
+        })),
         restaurantMetadata: {
           mesaId: selectedTable.id,
           meseroId: user?.id || '',
@@ -700,6 +736,12 @@ export function Tables() {
         )}
       </div>
 
+      <OptionPicker
+        product={picking}
+        groups={picking ? groupsForProduct(optionGroups, picking.id) : []}
+        onConfirm={selected => picking && addToCart(picking, selected)}
+        onClose={() => setPicking(null)}
+      />
       <Dialog open={showOrderModal} onOpenChange={setShowOrderModal}>
         <DialogContent className="w-full sm:w-[96vw] max-w-full sm:max-w-7xl max-h-[100vh] sm:max-h-[92vh] overflow-y-auto p-0 top-0 sm:top-[4%] translate-y-0 rounded-none sm:rounded-lg">
           <DialogHeader className="p-4 sm:p-6 pb-3 sm:pb-4">
@@ -825,6 +867,9 @@ export function Tables() {
                         <div className="flex justify-between items-start mb-2">
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold text-foreground truncate">{item.name}</p>
+                            {item.optionsLabel && (
+                              <p className="text-xs font-medium text-primary">{item.optionsLabel}</p>
+                            )}
                             <p className="text-xs text-muted-foreground">{money(item.price)} c/u</p>
                           </div>
                           <button

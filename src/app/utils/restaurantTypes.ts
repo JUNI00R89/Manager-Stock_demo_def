@@ -23,6 +23,8 @@ export interface PedidoItem {
   precioUnitario: number;
   cantidad: number;
   nota?: string;
+  /** Opciones elegidas ("Doble", "Queso"), tal como quedaron al pedir. */
+  opciones?: { grupo: string; nombre: string; precio: number }[];
   /** Los productos de venta directa no aparecen en cocina. */
   ventaDirecta: boolean;
 }
@@ -75,6 +77,8 @@ export interface CrearPedidoItemInput {
   precioUnitario: number;
   cantidad: number;
   nota?: string;
+  /** Ids de las opciones elegidas; el servidor valida y calcula el precio. */
+  opciones?: string[];
   ventaDirecta: boolean;
 }
 

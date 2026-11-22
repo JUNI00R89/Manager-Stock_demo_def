@@ -1,6 +1,14 @@
 import { uniqueRestaurantId } from '../utils/restaurantStorage';
 import { SavedCarts } from '../components/SavedCarts';
 import { CustomerPicker } from '../components/CustomerPicker';
+import { OptionPicker } from '../components/OptionPicker';
+import {
+  groupsForProduct,
+  listOptionGroups,
+  optionsLabel,
+  optionsPrice,
+  type OptionGroup,
+} from '../services/productOptions';
 import { customerCredit, type Customer, type CustomerCredit } from '../services/commerce';
 import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
@@ -64,7 +72,14 @@ interface CartItem {
   quantity: number;
   sku: string;
   discount: number; // percentage 0-100
+  /** Chosen menu options; the price above already includes them. */
+  options?: string[];
+  optionsLabel?: string;
+  /** Identifies the line: product plus options. Lines without options use the product id (older saved carts too). */
+  lineKey?: string;
 }
+
+const keyOf = (item: CartItem) => item.lineKey ?? item.productId;
 
 interface SplitPayment {
   method: 'cash' | 'card' | 'digital' | 'credit';
@@ -103,6 +118,13 @@ export function POS() {
   const [processingPayment, setProcessingPayment] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [optionGroups, setOptionGroups] = useState<OptionGroup[]>([]);
+  const [picking, setPicking] = useState<{ product: Product; quantity: number } | null>(null);
+  useEffect(() => {
+    listOptionGroups()
+      .then(setOptionGroups)
+      .catch(() => setOptionGroups([]));
+  }, []);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'digital' | 'split' | 'credit' | null>(null);
   const [showReceipt, setShowReceipt] = useState(false);
   const [receiptData, setReceiptData] = useState<any>(null);
@@ -232,45 +254,59 @@ export function POS() {
   });
   const showPhotos = imagesEnabled(config);
 
-  const addToCart = (product: Product, quantity = 1) => {
-    const existing = cart.find(item => item.productId === product.id);
-    if (existing) {
-      if (existing.quantity + quantity > product.stock) {
-        toast.error('Sin stock suficiente');
-        return;
-      }
-      setCart(
-        cart.map(item => (item.productId === product.id ? { ...item, quantity: item.quantity + quantity } : item)),
-      );
+  const productQuantity = (productId: string) =>
+    cart.reduce((sum, item) => sum + (item.productId === productId ? item.quantity : 0), 0);
+
+  const addToCart = (product: Product, quantity = 1, options?: string[]) => {
+    const groups = groupsForProduct(optionGroups, product.id);
+    if (!options && groups.length) {
+      setPicking({ product, quantity });
+      return;
+    }
+    const chosen = [...(options ?? [])].sort();
+    const key = chosen.length ? `${product.id}|${chosen.join(',')}` : product.id;
+    // Stock is shared by every line of the product, whatever its options.
+    if (productQuantity(product.id) + quantity > product.stock) {
+      toast.error(product.stock < 1 ? 'Producto sin stock' : 'Sin stock suficiente');
+      return;
+    }
+    if (cart.some(item => keyOf(item) === key)) {
+      setCart(cart.map(item => (keyOf(item) === key ? { ...item, quantity: item.quantity + quantity } : item)));
     } else {
-      if (product.stock < 1) {
-        toast.error('Producto sin stock');
-        return;
-      }
       setCart([
         ...cart,
-        { productId: product.id, name: product.name, price: product.price, quantity, sku: product.sku, discount: 0 },
+        {
+          productId: product.id,
+          name: product.name,
+          price: product.price + optionsPrice(groups, chosen),
+          quantity,
+          sku: product.sku,
+          discount: 0,
+          options: chosen,
+          optionsLabel: optionsLabel(groups, chosen),
+          lineKey: key,
+        },
       ]);
     }
   };
 
-  const updateQuantity = (productId: string, delta: number) => {
-    const product = products.find(p => p.id === productId);
-    const cartItem = cart.find(item => item.productId === productId);
+  const updateQuantity = (key: string, delta: number) => {
+    const cartItem = cart.find(item => keyOf(item) === key);
+    const product = products.find(p => p.id === cartItem?.productId);
     if (!product || !cartItem) return;
     const newQty = cartItem.quantity + delta;
     if (newQty < 1) {
-      removeFromCart(productId);
+      removeFromCart(key);
       return;
     }
-    if (newQty > product.stock) {
+    if (productQuantity(product.id) + delta > product.stock) {
       toast.error('Sin stock suficiente');
       return;
     }
-    setCart(cart.map(item => (item.productId === productId ? { ...item, quantity: newQty } : item)));
+    setCart(cart.map(item => (keyOf(item) === key ? { ...item, quantity: newQty } : item)));
   };
 
-  const removeFromCart = (productId: string) => setCart(cart.filter(item => item.productId !== productId));
+  const removeFromCart = (key: string) => setCart(cart.filter(item => keyOf(item) !== key));
   const clearCart = () => {
     setCart([]);
     setPaymentMethod(null);
@@ -283,11 +319,9 @@ export function POS() {
     setDigitalReference('');
   };
 
-  const setItemDiscount = (productId: string, discount: number) => {
+  const setItemDiscount = (key: string, discount: number) => {
     setCart(
-      cart.map(item =>
-        item.productId === productId ? { ...item, discount: Math.min(100, Math.max(0, discount)) } : item,
-      ),
+      cart.map(item => (keyOf(item) === key ? { ...item, discount: Math.min(100, Math.max(0, discount)) } : item)),
     );
   };
 
@@ -374,6 +408,7 @@ export function POS() {
             productId: item.productId,
             quantity: item.quantity,
             discountPercent: item.discount,
+            ...(item.options?.length ? { options: item.options } : {}),
           })),
           customer: customerName || 'Cliente general',
           customerId: customer?.id,
@@ -406,8 +441,10 @@ export function POS() {
         invoiceNumber: sale.id,
         date: sale.date,
         customer: sale.customer,
-        items: sale.items.map(item => ({
+        items: sale.items.map((item, index) => ({
           productId: item.productId,
+          lineKey: `${item.productId}-${index}`,
+          optionsLabel: (item.options ?? []).map(option => option.name).join(', '),
           name: item.productName,
           sku: item.sku || '',
           price: item.price,
@@ -678,7 +715,8 @@ export function POS() {
               </div>
             ) : (
               filteredProducts.map(product => {
-                const inCart = cart.find(item => item.productId === product.id);
+                const inCartQuantity = productQuantity(product.id);
+                const inCart = inCartQuantity ? { quantity: inCartQuantity } : undefined;
                 const outOfStock = product.stock < 1;
                 const photoUrl = productImageUrl(product.image, showPhotos);
                 return (
@@ -817,14 +855,17 @@ export function POS() {
                 </div>
               ) : (
                 cart.map(item => (
-                  <div key={item.productId} className="group rounded-xl border border-border bg-card p-3 shadow-sm">
+                  <div key={keyOf(item)} className="group rounded-xl border border-border bg-card p-3 shadow-sm">
                     <div className="flex justify-between items-start gap-2 mb-2.5">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-foreground truncate leading-tight">{item.name}</p>
+                        {item.optionsLabel && (
+                          <p className="text-[11px] font-medium text-primary leading-tight">{item.optionsLabel}</p>
+                        )}
                         <p className="text-[10px] text-muted-foreground mt-0.5">{item.sku}</p>
                       </div>
                       <button
-                        onClick={() => removeFromCart(item.productId)}
+                        onClick={() => removeFromCart(keyOf(item))}
                         className="shrink-0 rounded-full p-1 text-muted-foreground hover:bg-transparent"
                       >
                         <X size={14} />
@@ -833,21 +874,21 @@ export function POS() {
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5">
                         <button
-                          onClick={() => updateQuantity(item.productId, -1)}
+                          onClick={() => updateQuantity(keyOf(item), -1)}
                           className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-background text-foreground transition-colors hover:bg-orange-50 hover:text-orange-600 dark:hover:bg-orange-950/30"
                         >
                           <Minus size={14} />
                         </button>
                         <span className="w-8 text-center text-sm font-bold text-foreground">{item.quantity}</span>
                         <button
-                          onClick={() => updateQuantity(item.productId, 1)}
+                          onClick={() => updateQuantity(keyOf(item), 1)}
                           className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-background text-foreground transition-colors hover:bg-orange-50 hover:text-orange-600 dark:hover:bg-orange-950/30"
                         >
                           <Plus size={14} />
                         </button>
                       </div>
                       <div className="flex items-center gap-2">
-                        {editingDiscount === item.productId ? (
+                        {editingDiscount === keyOf(item) ? (
                           <div className="flex items-center gap-1">
                             <Input
                               type="number"
@@ -855,7 +896,7 @@ export function POS() {
                               onChange={e => setDiscountInput(e.target.value)}
                               onKeyDown={e => {
                                 if (e.key === 'Enter') {
-                                  setItemDiscount(item.productId, parseFloat(discountInput) || 0);
+                                  setItemDiscount(keyOf(item), parseFloat(discountInput) || 0);
                                   setEditingDiscount(null);
                                 }
                                 if (e.key === 'Escape') setEditingDiscount(null);
@@ -871,7 +912,7 @@ export function POS() {
                         ) : (
                           <button
                             onClick={() => {
-                              setEditingDiscount(item.productId);
+                              setEditingDiscount(keyOf(item));
                               setDiscountInput(String(item.discount));
                             }}
                             className="text-[10px] px-2 py-1 rounded-md bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 font-medium transition-colors hover:bg-amber-200"
@@ -1171,6 +1212,12 @@ export function POS() {
           </Button>
         </DialogContent>
       </Dialog>
+      <OptionPicker
+        product={picking?.product ?? null}
+        groups={picking ? groupsForProduct(optionGroups, picking.product.id) : []}
+        onConfirm={selected => picking && addToCart(picking.product, picking.quantity, selected)}
+        onClose={() => setPicking(null)}
+      />
       <Dialog open={showReceipt} onOpenChange={setShowReceipt}>
         <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -1201,9 +1248,12 @@ export function POS() {
 
                 <div className="space-y-1.5 mb-3">
                   {receiptData.items.map((item: CartItem) => (
-                    <div key={item.productId}>
+                    <div key={keyOf(item)}>
                       <div className="flex justify-between text-xs">
-                        <span className="text-gray-900 truncate mr-2">{item.name}</span>
+                        <span className="text-gray-900 truncate mr-2">
+                          {item.name}
+                          {item.optionsLabel ? ` (${item.optionsLabel})` : ''}
+                        </span>
                         <span className="text-gray-900 flex-shrink-0">{money(itemSubtotal(item))}</span>
                       </div>
                       <p className="text-[10px] text-gray-500">

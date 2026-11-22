@@ -6,14 +6,17 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from backend.core.context import current_business_id
 from backend.core.db import timestamp_iso
+from backend.services.product_options import load_snapshots, public_options
 
 
-def _sale_out(sale: sqlite3.Row, items: list[sqlite3.Row], payment_rows: list[sqlite3.Row]) -> dict:
+def _sale_out(sale: sqlite3.Row, items: list[sqlite3.Row], payment_rows: list[sqlite3.Row], options: dict | None = None) -> dict:
+    options = options or {}
     mapped_items = [{
         "id": i["id"] if i["product_id"] else None, "productId": i["product_id"], "productName": i["product_name"], "sku": i["sku_snapshot"],
         "quantity": i["quantity"], "price": i["unit_price"],
         "unitCost": i["unit_cost_snapshot"] if "unit_cost_snapshot" in i.keys() else 0,
         "discountPercent": i["discount_percent"], "subtotal": i["line_total"],
+        "options": public_options(options.get(i["id"], [])),
     } for i in items]
     count_products = len(mapped_items)
     product_names = ", ".join(i["productName"] for i in mapped_items[:2])
@@ -57,11 +60,12 @@ def get_sales(conn, sales):
         ri = grouped(f'SELECT * FROM sale_return_items WHERE return_id IN ({rm}) ORDER BY id', refund_ids, 'return_id')
         rp = grouped(f'SELECT * FROM sale_return_payments WHERE return_id IN ({rm})', refund_ids, 'return_id')
         rs = grouped(f'SELECT * FROM service_return_amounts WHERE return_id IN ({rm})', refund_ids, 'return_id')
+    options = load_snapshots(conn, "sale_item_options", "sale_item_id", [i["id"] for rows in items.values() for i in rows])
     out = []
     cents = lambda n: Decimal(str(n)).quantize(Decimal('.01'), rounding=ROUND_HALF_UP)
     for sale in sales:
         sid = sale['id']; lines = items.get(sid, [])
-        value = _sale_out(sale, lines, payments.get(sid, []))
+        value = _sale_out(sale, lines, payments.get(sid, []), options)
         for service in services.get(sid, []):
             value['items'].insert(0, dict(productId='service:'+service['service_id'], productName=service['service_name'], sku='SERVICIO', quantity=1, price=service['unit_price'], unitCost=0, discountPercent=0, subtotal=service['line_total']))
         if services.get(sid):

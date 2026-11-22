@@ -16,6 +16,7 @@ from backend.core.db import audit, connection, colombia_now_iso
 from backend.schemas import PaymentPartPayload, SaleItemPayload, SalePayload
 from backend.services.inventory import allows_negative_stock, consume_product_stock, recipe_ingredient_usage, recipe_unit_cost, reverse_movements, validate_product_quantity
 from backend.services.sales import get_sale, get_sales
+from backend.services.product_options import add_option_ingredients, load_snapshots, options_price, resolve_line_options, store_snapshot
 
 
 router = APIRouter()
@@ -144,6 +145,7 @@ def create_sale(payload: SalePayload):
             raise HTTPException(422, "El cobro de pedidos o citas debe ser una venta completada.")
         linked_orders = []
         items = list(payload.items)
+        order_snapshots: dict[int, list[dict]] = {}
         for order_id in dict.fromkeys(payload.orderIds):
             order = conn.execute("SELECT * FROM orders WHERE id=? AND business_id=?", (order_id, current_business_id())).fetchone()
             if not order:
@@ -151,7 +153,11 @@ def create_sale(payload: SalePayload):
             if order["sale_id"] or order["status"] in {"cancelled", "delivered"}:
                 raise HTTPException(409, "El pedido ya fue cobrado o cerrado.")
             linked_orders.append(order)
-            items.extend(SaleItemPayload(productId=row["product_id"], quantity=row["quantity"]) for row in conn.execute("SELECT product_id,quantity FROM order_items WHERE order_id=?", (order_id,)))
+            order_lines = conn.execute("SELECT id,product_id,quantity FROM order_items WHERE order_id=? ORDER BY id", (order_id,)).fetchall()
+            stored = load_snapshots(conn, "order_item_options", "order_item_id", [row["id"] for row in order_lines])
+            for row in order_lines:
+                order_snapshots[len(items)] = stored.get(row["id"], [])
+                items.append(SaleItemPayload(productId=row["product_id"], quantity=row["quantity"]))
             if order["stock_consumed"]:
                 movements = conn.execute("SELECT * FROM inventory_movements WHERE order_id=? AND movement_type IN ('consumption','recipe_consumption') ORDER BY id", (order_id,)).fetchall()
                 reverse_movements(conn, movements, f"Traslado a venta del pedido {order_id}", "adjustment")
@@ -193,6 +199,11 @@ def create_sale(payload: SalePayload):
             else:
                 direct_requirements[product_id] = round(direct_requirements.get(product_id, 0.0) + requested_quantity, 6)
 
+        line_snapshots = [order_snapshots[index] if index in order_snapshots else resolve_line_options(conn, product_rows[item.productId], item.options)
+                          for index, item in enumerate(payload.items)]
+        for item, snapshot in zip(payload.items, line_snapshots):
+            add_option_ingredients(ingredient_requirements, snapshot, item.quantity)
+
         # Validate the combined physical requirement (direct sales + recipe ingredients) before writing anything.
         allow_negative = allows_negative_stock(conn)
         if not allow_negative:
@@ -218,15 +229,15 @@ def create_sale(payload: SalePayload):
         subtotal = float(appointment["price_snapshot"]) if appointment else 0.0
         line_discount = 0.0
         resolved_items = []
-        for item in payload.items:
+        for item, snapshot in zip(payload.items, line_snapshots):
             product = product_rows[item.productId]
             validate_product_quantity(product, item.quantity)
-            gross = round(product["price"] * item.quantity, 2)
+            gross = round((float(product["price"]) + options_price(snapshot)) * item.quantity, 2)
             disc = round(gross * (item.discountPercent / 100), 2)
             line_total = round(gross - disc, 2)
             subtotal += gross
             line_discount += disc
-            resolved_items.append((item, product, gross, disc, line_total))
+            resolved_items.append((item, product, gross, disc, line_total, snapshot))
         subtotal += sum(float(booked["price_snapshot"]) for booked in legacy_appointments)
         subtotal = round(subtotal, 2)
         line_discount = round(line_discount, 2)
@@ -267,16 +278,21 @@ def create_sale(payload: SalePayload):
         for part in payment_parts:
             conn.execute("INSERT INTO sale_payments (sale_id,method,amount,provider,reference) VALUES (?,?,?,?,?)", (sale_id, part.method, part.amount, part.provider, part.reference))
         recipe_costs = {product_id: recipe_unit_cost(conn, product_id) for product_id in quantities_by_product}
-        for item, product, gross, disc, line_total in resolved_items:
+        for item, product, gross, disc, line_total, snapshot in resolved_items:
             # Preserve unit cost at transaction time; later catalog edits must not rewrite past margins.
             # Recipe-based products snapshot the cost of their ingredients instead of the sale item's own cost.
             recipe_cost = recipe_costs.get(item.productId)
             unit_cost = float(recipe_cost if recipe_cost is not None else (product["cost"] or 0))
-            conn.execute(
+            for option in snapshot:  # the ingredient an option adds is part of the line's cost
+                if option["ingredient_id"] and option["ingredient_quantity"] > 0:
+                    ingredient = conn.execute("SELECT cost FROM products WHERE id=?", (option["ingredient_id"],)).fetchone()
+                    unit_cost += float(ingredient["cost"] or 0) * option["ingredient_quantity"] if ingredient else 0
+            line = conn.execute(
                 """INSERT INTO sale_items (sale_id,product_id,product_name,sku_snapshot,quantity,unit_price,unit_cost_snapshot,discount_percent,line_total)
                    VALUES (?,?,?,?,?,?,?,?,?)""",
-                (sale_id, item.productId, product["name"], product["sku"], item.quantity, product["price"], round(unit_cost, 4), item.discountPercent, line_total),
+                (sale_id, item.productId, product["name"], product["sku"], item.quantity, round(float(product["price"]) + options_price(snapshot), 2), round(unit_cost, 4), item.discountPercent, line_total),
             )
+            store_snapshot(conn, "sale_item_options", "sale_item_id", line.lastrowid, snapshot)
         # Deduct physical stock once per product. Recipe products consume their ingredients instead of the product itself.
         for product_id, quantity in direct_requirements.items():
             product = conn.execute("SELECT * FROM products WHERE id=? AND business_id=?", (product_id, current_business_id())).fetchone()

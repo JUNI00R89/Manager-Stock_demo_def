@@ -824,7 +824,12 @@ function HistoryCard({ order, currency }: { order: Pedido; currency?: string }) 
             <span>{order.meseroNombre}</span>
           </p>
           <p className="mt-1 text-sm text-foreground">
-            {order.items.map(item => `${item.cantidad}× ${item.nombre}`).join(' · ')}
+            {order.items
+              .map(
+                item =>
+                  `${item.cantidad}× ${item.nombre}${item.opciones?.length ? ` (${item.opciones.map(o => o.nombre).join(', ')})` : ''}`,
+              )
+              .join(' · ')}
           </p>
           {order.estado === 'entregado' && order.entregadoEn && (
             <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-300">

@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from backend.core.context import current_business_id, current_identity
 from backend.core.db import audit, connection, timestamp_iso, colombia_now_iso
+from backend.services.product_options import add_option_ingredients, load_snapshots, options_price, public_options, resolve_line_options, store_snapshot
 from backend.services.inventory import allows_negative_stock, consume_product_stock, resolve_kitchen_requirements, reverse_movements, validate_product_quantity, validate_stock_requirements
 
 
@@ -31,21 +32,14 @@ def list_orders(status: str | None = None, table_number: int | None = None, open
         if open:
             query += " AND status NOT IN ('delivered','cancelled')"
         query += " ORDER BY created_at DESC"
-        rows = conn.execute(query, params).fetchall()
-        result = []
-        for row in rows:
-            items = conn.execute("SELECT * FROM order_items WHERE order_id=?", (row["id"],)).fetchall()
-            order_data = dict(row)
-            order_data["created_at"] = timestamp_iso(order_data.get("created_at"))
-            order_data["updated_at"] = timestamp_iso(order_data.get("updated_at"))
-            result.append({**order_data, "items": [dict(i) for i in items]})
-        return result
+        return [order_to_dict(conn, row) for row in conn.execute(query, params).fetchall()]
 
 
 class OrderItemPayload(BaseModel):
     productId: str
     quantity: float = Field(gt=0)
     notes: str = Field(default="", max_length=300)
+    options: list[str] = Field(default_factory=list, max_length=20)
 
 
 class RestaurantMetadata(BaseModel):
@@ -81,10 +75,14 @@ def create_order(payload: OrderPayload):
                 conn.rollback()
                 raise HTTPException(404, f"Producto no encontrado: {item.productId}")
             validate_product_quantity(product, item.quantity)
+            snapshot = resolve_line_options(conn, product, item.options)
+            unit_price = round(float(product["price"]) + options_price(snapshot), 2)
             quantities[item.productId] = round(quantities.get(item.productId, 0.0) + item.quantity, 6)
-            total += product["price"] * item.quantity
-            resolved.append((item, product))
+            total += unit_price * item.quantity
+            resolved.append((item, product, snapshot, unit_price))
         direct, ingredients = resolve_kitchen_requirements(conn, quantities)
+        for item, _product, snapshot, _price in resolved:
+            add_option_ingredients(ingredients, snapshot, item.quantity)
         combined = {key: round(direct.get(key, 0.0) + ingredients.get(key, 0.0), 6) for key in set(direct) | set(ingredients)}
         try:
             validate_stock_requirements(conn, combined)
@@ -94,9 +92,10 @@ def create_order(payload: OrderPayload):
         channel = "table" if payload.tableNumber else payload.channel
         conn.execute("INSERT INTO orders (id,business_id,channel,customer,phone,address,status,notes,total,table_number,waiter) VALUES (?,?,?,?,?,?,'received',?,?,?,?)",
                      (order_id, current_business_id(), channel, payload.customer, payload.phone, payload.address, payload.notes, round(total, 2), payload.tableNumber, payload.waiter.strip()))
-        for item, product in resolved:
-            conn.execute("INSERT INTO order_items (order_id,product_id,product_name,quantity,unit_price,notes) VALUES (?,?,?,?,?,?)",
-                         (order_id, item.productId, product["name"], item.quantity, product["price"], item.notes))
+        for item, product, snapshot, unit_price in resolved:
+            line = conn.execute("INSERT INTO order_items (order_id,product_id,product_name,quantity,unit_price,notes) VALUES (?,?,?,?,?,?)",
+                                (order_id, item.productId, product["name"], item.quantity, unit_price, item.notes))
+            store_snapshot(conn, "order_item_options", "order_item_id", line.lastrowid, snapshot)
         metadata = payload.restaurantMetadata.model_dump()
         initial_status = "ready" if all(item.productId in metadata["directProductIds"] for item in payload.items) else "received"
         metadata["numero"] = conn.execute("SELECT rowid FROM orders WHERE id=?", (order_id,)).fetchone()[0]
@@ -135,6 +134,7 @@ def update_order_status(order_id: str, status: Literal["received", "preparing", 
             for item in conn.execute("SELECT product_id,quantity FROM order_items WHERE order_id=?", (order_id,)).fetchall():
                 quantities[item["product_id"]] = round(quantities.get(item["product_id"], 0.0) + float(item["quantity"] or 0), 6)
             direct, ingredients = resolve_kitchen_requirements(conn, quantities)
+            add_order_option_ingredients(conn, order_id, ingredients)
             combined = {key: round(direct.get(key, 0.0) + ingredients.get(key, 0.0), 6) for key in set(direct) | set(ingredients)}
             try:
                 validate_stock_requirements(conn, combined)
@@ -171,12 +171,21 @@ def update_order_status(order_id: str, status: Literal["received", "preparing", 
         return {"id": order_id, "status": status}
 
 
+def add_order_option_ingredients(conn: sqlite3.Connection, order_id: str, requirements: dict[str, float]) -> None:
+    """Adds the ingredients consumed by the options of every line already in the order."""
+    lines = conn.execute("SELECT id,quantity FROM order_items WHERE order_id=?", (order_id,)).fetchall()
+    snapshots = load_snapshots(conn, "order_item_options", "order_item_id", [line["id"] for line in lines])
+    for line in lines:
+        add_option_ingredients(requirements, snapshots.get(line["id"], []), float(line["quantity"] or 0))
+
+
 def order_to_dict(conn: sqlite3.Connection, row) -> dict:
     items = conn.execute("SELECT * FROM order_items WHERE order_id=?", (row["id"],)).fetchall()
+    snapshots = load_snapshots(conn, "order_item_options", "order_item_id", [i["id"] for i in items])
     order_data = dict(row)
     order_data["created_at"] = timestamp_iso(order_data.get("created_at"))
     order_data["updated_at"] = timestamp_iso(order_data.get("updated_at"))
-    return {**order_data, "items": [dict(i) for i in items]}
+    return {**order_data, "items": [{**dict(i), "options": public_options(snapshots.get(i["id"], []))} for i in items]}
 
 
 @router.get("/api/orders/{order_id}")
@@ -213,9 +222,11 @@ def add_order_items(order_id: str, payload: OrderItemsPayload):
                 conn.rollback()
                 raise HTTPException(404, f"Producto no encontrado: {item.productId}")
             validate_product_quantity(product, item.quantity)
+            snapshot = resolve_line_options(conn, product, item.options)
+            unit_price = round(float(product["price"]) + options_price(snapshot), 2)
             added_quantities[item.productId] = round(added_quantities.get(item.productId, 0.0) + item.quantity, 6)
-            total += product["price"] * item.quantity
-            resolved.append((item, product))
+            total += unit_price * item.quantity
+            resolved.append((item, product, snapshot, unit_price))
         full_quantities: dict[str, float] = {}
         for item in conn.execute("SELECT product_id,quantity FROM order_items WHERE order_id=?", (order_id,)).fetchall():
             full_quantities[item["product_id"]] = round(full_quantities.get(item["product_id"], 0.0) + float(item["quantity"] or 0), 6)
@@ -223,15 +234,20 @@ def add_order_items(order_id: str, payload: OrderItemsPayload):
             full_quantities[product_id] = round(full_quantities.get(product_id, 0.0) + quantity, 6)
         already_consumed = int(order["stock_consumed"] or 0) == 1
         direct, ingredients = resolve_kitchen_requirements(conn, added_quantities if already_consumed else full_quantities)
+        if not already_consumed:
+            add_order_option_ingredients(conn, order_id, ingredients)
+        for item, _product, snapshot, _price in resolved:
+            add_option_ingredients(ingredients, snapshot, item.quantity)
         combined = {key: round(direct.get(key, 0.0) + ingredients.get(key, 0.0), 6) for key in set(direct) | set(ingredients)}
         try:
             validate_stock_requirements(conn, combined)
         except HTTPException:
             conn.rollback()
             raise
-        for item, product in resolved:
-            conn.execute("INSERT INTO order_items (order_id,product_id,product_name,quantity,unit_price,notes) VALUES (?,?,?,?,?,?)",
-                         (order_id, item.productId, product["name"], item.quantity, product["price"], item.notes))
+        for item, product, snapshot, unit_price in resolved:
+            line = conn.execute("INSERT INTO order_items (order_id,product_id,product_name,quantity,unit_price,notes) VALUES (?,?,?,?,?,?)",
+                                (order_id, item.productId, product["name"], item.quantity, unit_price, item.notes))
+            store_snapshot(conn, "order_item_options", "order_item_id", line.lastrowid, snapshot)
         if already_consumed:
             allow_negative = allows_negative_stock(conn)
             for product_id, quantity in direct.items():
