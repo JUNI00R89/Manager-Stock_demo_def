@@ -723,14 +723,17 @@ export function POS() {
                         >
                           <Star size={18} fill={favorites.includes(product.id) ? 'currentColor' : 'none'} />
                         </button>
-                        <h3 className="text-sm font-semibold text-foreground line-clamp-2 leading-tight">
+                        <h3 className="min-w-0 flex-1 self-center text-center text-sm font-semibold text-foreground line-clamp-2 leading-tight">
                           {product.name}
                         </h3>
-                        {inCart && (
-                          <span className="ml-1 w-5 h-5 bg-primary text-white text-[10px] rounded-full flex items-center justify-center font-bold flex-shrink-0">
-                            {inCart.quantity}
-                          </span>
-                        )}
+                        {/* Same width as the star button so the name stays centered with or without the counter. */}
+                        <span className="min-w-11 min-h-11 flex flex-shrink-0 items-center justify-center">
+                          {inCart && (
+                            <span className="w-5 h-5 bg-primary text-white text-[10px] rounded-full flex items-center justify-center font-bold">
+                              {inCart.quantity}
+                            </span>
+                          )}
+                        </span>
                       </div>
                       <p className="text-xs text-muted-foreground">SKU: {product.sku}</p>
                       <div className="flex items-end justify-between">
