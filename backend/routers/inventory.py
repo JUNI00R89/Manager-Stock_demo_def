@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -19,10 +19,11 @@ router = APIRouter()
 
 @router.get("/api/inventory/movements")
 def inventory_movements(
-    limit: int = Query(default=100, ge=1, le=500), productId: str | None = None,
+    # Annotated keeps plain defaults, so other modules can call this as a function (inventory_overview does).
+    limit: Annotated[int, Query(ge=1, le=500)] = 100, productId: str | None = None,
     movementType: str | None = None, locationId: str | None = None, lotId: str | None = None,
     search: str = "", dateFrom: str | None = None, dateTo: str | None = None,
-    offset: int = Query(default=0, ge=0),
+    offset: Annotated[int, Query(ge=0)] = 0,
 ):
     with connection() as conn:
         query = """SELECT m.*, p.name AS product_name, p.sku, p.unit AS product_unit,
