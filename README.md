@@ -114,7 +114,21 @@ Conserva una copia de `backend/data/manager_stock.db` antes de actualizaciones o
 .\.venv\Scripts\python.exe scripts\backup_database.py
 ```
 
-Las copias se escriben por defecto en `backend/data/backups/` (o junto a la ruta configurada de la base). La API verifica una copia diaria mientras está encendida y guarda otra antes de aplicar migraciones nuevas. Configura `MANAGER_STOCK_BACKUP_DIR` para cambiar el destino. `python scripts/restore_database.py COPIA.db NUEVA_RUTA.db` restaura y verifica sin sobrescribir archivos existentes. Ver [operación y facturación en Colombia](docs/facturacion-colombia.md).
+Las copias se escriben por defecto en `backend/data/backups/` (o junto a la ruta configurada de la base). La API verifica una copia diaria mientras está encendida y guarda otra antes de aplicar migraciones nuevas. Configura `MANAGER_STOCK_BACKUP_DIR` para cambiar el destino. Cada copia guarda también las fotos de productos (carpeta `*_uploads` junto al `.db`); se conservan las últimas 14 copias automáticas y nunca se borran las manuales.
+
+**Restaurar una copia** (nunca sobrescribe la base actual):
+
+1. Detén la API.
+2. Restaura en una carpeta nueva; verifica integridad y SHA-256 y trae las fotos:
+
+   ```powershell
+   .\.venv\Scripts\python.exe scripts\restore_database.py backend\data\backups\manager_stock_AAAAMMDDT....db C:\ManagerStock\restaurada\manager_stock.db
+   ```
+
+3. Arranca la API apuntando a la copia restaurada: `$env:MANAGER_STOCK_DB = "C:\ManagerStock\restaurada\manager_stock.db"`.
+4. Entra con un usuario del negocio y revisa productos y ventas. La base anterior queda intacta por si necesitas volver.
+
+`backend/tests/test_backup_restore.py` ensaya este recorrido completo en cada CI. Ver [operación y facturación en Colombia](docs/facturacion-colombia.md).
 
 ## Pruebas
 

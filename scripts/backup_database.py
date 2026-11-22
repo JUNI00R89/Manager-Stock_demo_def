@@ -2,7 +2,6 @@
 import argparse
 import os
 import sys
-import shutil
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -15,9 +14,6 @@ args = parser.parse_args()
 directory = args.directory or Path(os.getenv('MANAGER_STOCK_BACKUP_DIR', str(args.source.parent / 'backups')))
 try:
     target = create_backup(args.source, directory)
-    print('Copia creada y verificada:', target)
-    uploads = args.source.parent / 'uploads'
-    if uploads.is_dir():
-        shutil.copytree(uploads, target.with_name(target.stem + '_uploads'))
+    print('Copia creada y verificada (con fotos de productos):', target)
 except (ValueError, OSError) as exc:
     parser.exit(1, str(exc) + '\n')

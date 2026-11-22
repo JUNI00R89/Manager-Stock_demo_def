@@ -65,11 +65,19 @@ def create_backup(source: Path, directory: Path, automatic: bool = False) -> Pat
     stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     target = directory / f'manager_stock_{stamp}_{uuid.uuid4().hex[:8]}.db'
     copy_verified(source, target)
+    uploads = source.parent / 'uploads'
+    if uploads.is_dir():
+        # Product photos live outside SQLite; without them a restored business loses its images.
+        shutil.copytree(uploads, uploads_copy(target))
     digest = sha256_file(target)
     manifest = {'file': target.name, 'source': str(source.resolve()), 'sha256': digest, 'createdAt': datetime.now(timezone.utc).isoformat(), 'integrity': 'ok', 'automatic': automatic}
     target.with_suffix('.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
     target.with_suffix('.json').chmod(0o600)
     return target
+
+
+def uploads_copy(backup: Path) -> Path:
+    return backup.with_name(backup.stem + '_uploads')
 
 
 def restore_backup(source: Path, target: Path) -> Path:
@@ -78,7 +86,10 @@ def restore_backup(source: Path, target: Path) -> Path:
         expected = json.loads(manifest_path.read_text())['sha256']
         if sha256_file(source) != expected:
             raise ValueError('La copia no coincide con su manifiesto SHA-256.')
-    return copy_verified(source, target)
+    copy_verified(source, target)
+    if uploads_copy(source).is_dir():
+        shutil.copytree(uploads_copy(source), target.parent / 'uploads', dirs_exist_ok=True)
+    return target
 
 
 def backup_if_due(source: Path) -> Path | None:
@@ -113,6 +124,7 @@ def prune_automatic_backups(directory: Path, source: Path, keep: int = 14) -> No
     for path in sorted(automatic, key=lambda p: p.stat().st_mtime, reverse=True)[keep:]:
         path.unlink(missing_ok=True)
         path.with_suffix('.json').unlink(missing_ok=True)
+        shutil.rmtree(uploads_copy(path), ignore_errors=True)
 
 
 async def backup_worker(source: Path):
