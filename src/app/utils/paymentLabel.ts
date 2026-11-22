@@ -6,6 +6,7 @@ const METHOD_NAMES: Record<string, string> = {
   card: 'Tarjeta',
   transfer: 'Transferencia',
   digital: 'Digital',
+  credit: 'Fiado',
 };
 const providerName = (id?: string | null) => DIGITAL_PROVIDERS.find(p => p.id === id)?.label ?? '';
 

@@ -149,7 +149,7 @@ from backend.services.business_types import delete_business_type_data
 from backend.routers.sales import create_sale
 from backend.routers.services import appointment_out, professional_out
 from backend.routers.inventory_counts import physical_count_out
-from backend import commerce, returns, scheduling, service_checkout, count_reviews
-for domain in (commerce, returns, scheduling, service_checkout, count_reviews):
+from backend import commerce, customer_credit, returns, scheduling, service_checkout, count_reviews
+for domain in (commerce, customer_credit, returns, scheduling, service_checkout, count_reviews):
     app.include_router(domain.router)
 app.include_router(scheduling.appointment_router)

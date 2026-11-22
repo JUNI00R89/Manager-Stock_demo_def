@@ -23,8 +23,9 @@ describe('tillBreakdown', () => {
       { method: 'cash', provider: null, amount: 5000 },
       { method: 'digital', provider: 'nequi', amount: 80000 },
       { method: 'digital', provider: 'daviplata', amount: 40000 },
+      { method: 'credit', provider: null, amount: 20000 },
     ]);
     // Intl separates "$" from the amount with a non-breaking space.
-    expect(line.replace(/ /g, ' ')).toBe('Efectivo $ 5.000 · Nequi $ 80.000 · Daviplata $ 40.000');
+    expect(line.replace(/ /g, ' ')).toBe('Efectivo $ 5.000 · Nequi $ 80.000 · Daviplata $ 40.000 · Fiado $ 20.000');
   });
 });

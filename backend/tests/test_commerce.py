@@ -28,7 +28,7 @@ def run():
         customer = c.post('/api/customers', headers=h, json=payload).json()
         assert c.post('/api/customers', headers=h, json=payload).status_code == 409
         foreign = c.post('/api/customers', headers=other, json=payload).json()
-        assert c.get('/api/customers?search=Ana', headers=h).json() == [customer]
+        assert c.get('/api/customers?search=Ana', headers=h).json() == [{**customer, 'creditBalance': 0}]
         assert c.get('/api/customers?search=%25', headers=h).json() == []
         assert c.put('/api/customers/' + customer['id'], headers=other, json=customer).status_code == 404
         updated = c.put('/api/customers/' + customer['id'], headers=h, json={**customer, 'phone': '123'}).json()

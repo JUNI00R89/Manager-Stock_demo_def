@@ -10,6 +10,9 @@ import { useAuth } from '../context/AuthContext';
 import { canPerformAction } from '../security/permissions';
 import { toastError } from '../utils/notifications';
 import { toast } from 'sonner';
+import { CustomerCreditDialog } from '../components/CustomerCreditDialog';
+import { isDesktopMode } from '../services/desktop';
+import { formatMoney as money } from '../utils/restaurantFormat';
 
 export function Customers() {
   const { user } = useAuth();
@@ -21,6 +24,7 @@ export function Customers() {
   const [form, setForm] = useState<(Omit<Customer, 'id'> & { id?: string }) | null>(null);
   const [history, setHistory] = useState<{ name: string; sales: SaleRecord[] } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [creditOf, setCreditOf] = useState<Customer | null>(null);
   const [error, setError] = useState('');
   const load = useCallback(
     () =>
@@ -105,6 +109,19 @@ export function Customers() {
                 <br />
                 {c.email}
               </p>
+              {(c.creditBalance ?? 0) !== 0 && (
+                <p
+                  className={
+                    (c.creditBalance ?? 0) > 0
+                      ? 'text-sm font-semibold text-rose-700'
+                      : 'text-sm font-semibold text-emerald-700'
+                  }
+                >
+                  {(c.creditBalance ?? 0) > 0
+                    ? `Debe ${money(c.creditBalance!)}`
+                    : `A favor ${money(-c.creditBalance!)}`}
+                </p>
+              )}
               <div className="flex flex-wrap gap-2">
                 {canManage && (
                   <Button variant="outline" className="min-h-11" onClick={() => setForm(c)}>
@@ -125,6 +142,11 @@ export function Customers() {
                 >
                   Historial
                 </Button>
+                {!isDesktopMode() && (
+                  <Button variant="outline" className="min-h-11" onClick={() => setCreditOf(c)}>
+                    Fiado
+                  </Button>
+                )}
               </div>
             </article>
           ))}
@@ -243,6 +265,13 @@ export function Customers() {
             )}
           </DialogContent>
         </Dialog>
+        <CustomerCreditDialog
+          customer={creditOf}
+          onClose={changed => {
+            setCreditOf(null);
+            if (changed) void load();
+          }}
+        />
         <Dialog
           open={!!history}
           onOpenChange={open => {

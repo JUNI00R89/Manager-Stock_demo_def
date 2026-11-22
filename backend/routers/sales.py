@@ -245,6 +245,11 @@ def create_sale(payload: SalePayload):
         if not payment_parts and payload.paymentMethod != "split":
             payment_parts = [PaymentPartPayload(method=payload.paymentMethod if payload.paymentMethod != "split" else "cash", amount=total,
                                                 provider=payload.paymentProvider, reference=payload.paymentReference)]
+        credit_amount = round(sum(part.amount for part in payment_parts if part.method == "credit"), 2)
+        if credit_amount > 0 and payload.status != "completed":
+            raise HTTPException(422, "Una venta fiada debe quedar completada.")
+        from backend.customer_credit import check_credit_sale
+        check_credit_sale(conn, customer, credit_amount)
         now = colombia_now_iso()
         sale_id = f"VTA-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
         conn.execute(

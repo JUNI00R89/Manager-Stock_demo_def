@@ -249,6 +249,7 @@ export function Sales() {
                           digital: 'Digital',
                           split: 'Dividido',
                           transfer: 'Transferencia',
+                          credit: 'Fiado',
                         }[sale.paymentMethod] || sale.paymentMethod}
                         {digitalDetail(sale.payments) && (
                           <span className="block text-xs normal-case text-muted-foreground">
