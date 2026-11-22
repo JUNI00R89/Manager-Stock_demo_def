@@ -13,10 +13,13 @@ import { toast } from 'sonner';
 import { CustomerCreditDialog } from '../components/CustomerCreditDialog';
 import { isDesktopMode } from '../services/desktop';
 import { formatMoney as money } from '../utils/restaurantFormat';
+import { useDesignMode } from '../context/DesignModeContext';
+import { EditorialHeader } from '../components/editorial/EditorialBlocks';
 
 export function Customers() {
   const { user } = useAuth();
   const canManage = canPerformAction(user, 'customers.manage');
+  const { isEditorial } = useDesignMode();
   const [search, setSearch] = useState('');
   const [inactive, setInactive] = useState(false);
   const [offset, setOffset] = useState(0);
@@ -57,18 +60,35 @@ export function Customers() {
   }, [search, inactive, offset]);
   return (
     <Layout>
-      <div className="space-y-5 max-w-6xl mx-auto">
-        <div className="flex flex-wrap justify-between items-center gap-3">
-          <div>
-            <h1 className="text-2xl font-bold">Clientes</h1>
-            <p className="text-muted-foreground">Contactos, datos fiscales e historial de compras de tu negocio.</p>
-          </div>
-          {canManage && (
-            <Button className="min-h-11" onClick={() => setForm({ ...emptyCustomer })}>
-              Nuevo cliente
-            </Button>
-          )}
-        </div>
+      <div className={`${isEditorial ? 'editorial-page ' : ''}space-y-5 max-w-6xl mx-auto`}>
+        {isEditorial ? (
+          <EditorialHeader
+            eyebrow="Relación con clientes"
+            title="Clientes"
+            subtitle="Contactos, datos fiscales, fiado e historial de compras de tu negocio."
+            actions={
+              canManage && (
+                <Button size="sm" className="dash-action" onClick={() => setForm({ ...emptyCustomer })}>
+                  Nuevo cliente
+                </Button>
+              )
+            }
+          />
+        ) : (
+          <>
+            <div className="flex flex-wrap justify-between items-center gap-3">
+              <div>
+                <h1 className="text-2xl font-bold">Clientes</h1>
+                <p className="text-muted-foreground">Contactos, datos fiscales e historial de compras de tu negocio.</p>
+              </div>
+              {canManage && (
+                <Button className="min-h-11" onClick={() => setForm({ ...emptyCustomer })}>
+                  Nuevo cliente
+                </Button>
+              )}
+            </div>
+          </>
+        )}
         <Input
           aria-label="Buscar clientes"
           placeholder="Buscar por nombre, documento, teléfono o correo"

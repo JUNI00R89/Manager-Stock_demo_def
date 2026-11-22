@@ -14,12 +14,15 @@ import { useAuth } from '../context/AuthContext';
 import { formatMoney as money } from '../utils/restaurantFormat';
 import { downloadCsv } from '../utils/csv';
 import { digitalDetail } from '../utils/paymentLabel';
+import { useDesignMode } from '../context/DesignModeContext';
+import { EditorialSales } from '../components/sales/EditorialSales';
 
 const statusLabel: Record<SaleStatus, string> = { completed: 'Completada', pending: 'Pendiente', cancelled: 'Anulada' };
 
 export function Sales() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { isEditorial } = useDesignMode();
   const canCreateSale = user?.customRoleId
     ? Boolean(user.permissions?.includes('sales.create'))
     : user?.role === 'owner' || user?.role === 'business_admin' || user?.role === 'cashier';
@@ -98,6 +101,24 @@ export function Sales() {
       ]),
     ]);
   };
+
+  if (isEditorial)
+    return (
+      <Layout>
+        <EditorialSales
+          sales={sales}
+          loading={loading}
+          canCreateSale={canCreateSale}
+          canExport={canExportSales}
+          onExport={exportCsv}
+          search={search}
+          onSearch={setSearch}
+          status={status}
+          onStatus={setStatus}
+          filtered={filtered}
+        />
+      </Layout>
+    );
 
   return (
     <Layout>
