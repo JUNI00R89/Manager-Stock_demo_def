@@ -1,7 +1,7 @@
-/* Vista previa de diseño. Todo está acotado a .design-preview:
+/* Estilo editorial de páginas (Dashboard y vista previa). Todo está acotado a .editorial-page:
    ninguna otra pantalla cambia. */
 
-.design-preview {
+.editorial-page {
   --dash-line: color-mix(in srgb, var(--foreground) 13%, transparent);
   --dash-line-strong: color-mix(in srgb, var(--foreground) 20%, transparent);
   --dash-muted: var(--muted-foreground);
@@ -13,14 +13,14 @@
   --dash-radius-sm: 6px;
 }
 
-.dark .design-preview {
+.dark .editorial-page {
   --dash-hero-bg: #101512;
   --dash-hero-fg: #f7f3ea;
   --dash-hero-muted: rgba(247, 243, 234, 0.6);
   --dash-hero-line: rgba(247, 243, 234, 0.12);
 }
 
-.design-preview .dash-header {
+.editorial-page .dash-header {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
@@ -30,7 +30,7 @@
   border-bottom: 1px solid var(--dash-line);
 }
 
-.design-preview .dash-eyebrow {
+.editorial-page .dash-eyebrow {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.18em;
@@ -38,7 +38,7 @@
   color: var(--primary);
 }
 
-.design-preview .dash-title {
+.editorial-page .dash-title {
   margin-top: 6px;
   font-size: clamp(1.75rem, 3vw, 2.4rem);
   line-height: 1.06;
@@ -47,7 +47,7 @@
   text-wrap: balance;
 }
 
-.design-preview .dash-subtitle {
+.editorial-page .dash-subtitle {
   margin-top: 8px;
   max-width: 62ch;
   font-size: 0.875rem;
@@ -55,13 +55,13 @@
   color: var(--dash-muted);
 }
 
-.design-preview .dash-actions {
+.editorial-page .dash-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.design-preview .dash-action {
+.editorial-page .dash-action {
   height: 36px !important;
   padding: 0 14px !important;
   border-radius: var(--dash-radius-sm) !important;
@@ -69,7 +69,7 @@
   box-shadow: none !important;
 }
 
-.design-preview .dash-hero {
+.editorial-page .dash-hero {
   position: relative;
   overflow: hidden;
   border-radius: var(--dash-radius);
@@ -78,7 +78,7 @@
   padding: 22px 24px;
 }
 
-.design-preview .dash-hero::before {
+.editorial-page .dash-hero::before {
   content: "";
   position: absolute;
   inset: 0 auto 0 0;
@@ -87,7 +87,7 @@
   pointer-events: none;
 }
 
-.design-preview .dash-hero-top {
+.editorial-page .dash-hero-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -96,7 +96,7 @@
   border-bottom: 1px solid var(--dash-hero-line);
 }
 
-.design-preview .dash-hero-kicker {
+.editorial-page .dash-hero-kicker {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.18em;
@@ -104,30 +104,31 @@
   color: var(--dash-hero-muted);
 }
 
-.design-preview .dash-hero-date {
+.editorial-page .dash-hero-date {
   font-size: 11px;
   color: var(--dash-hero-muted);
 }
 
-.design-preview .dash-hero-body {
+.editorial-page .dash-hero-body {
   display: grid;
   gap: 24px;
   padding-top: 20px;
 }
 
-@media (min-width: 900px) {
-  .design-preview .dash-hero-body {
+@media (min-width: 1200px) {
+  /* Below this, the sidebar leaves too little room: the metrics went under the value instead of breaking mid-word. */
+  .editorial-page .dash-hero-body {
     grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
     align-items: end;
   }
 }
 
-.design-preview .dash-hero-label {
+.editorial-page .dash-hero-label {
   font-size: 12px;
   color: var(--dash-hero-muted);
 }
 
-.design-preview .dash-hero-value {
+.editorial-page .dash-hero-value {
   margin-top: 6px;
   font-size: clamp(2.4rem, 5vw, 3.7rem);
   line-height: 0.98;
@@ -136,7 +137,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.design-preview .dash-hero-note {
+.editorial-page .dash-hero-note {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -146,23 +147,23 @@
   color: var(--dash-hero-muted);
 }
 
-.design-preview .dash-hero-note strong {
+.editorial-page .dash-hero-note strong {
   color: var(--dash-hero-fg);
   font-weight: 600;
 }
 
-.design-preview .dash-hero-up,
-.design-preview .dash-hero-down {
+.editorial-page .dash-hero-up,
+.editorial-page .dash-hero-down {
   display: inline-flex;
   align-items: center;
   gap: 3px;
   font-weight: 600;
 }
 
-.design-preview .dash-hero-up { color: #8ee0a5; }
-.design-preview .dash-hero-down { color: #ff9b9b; }
+.editorial-page .dash-hero-up { color: #8ee0a5; }
+.editorial-page .dash-hero-down { color: #ff9b9b; }
 
-.design-preview .dash-hero-metrics {
+.editorial-page .dash-hero-metrics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px 0;
@@ -170,47 +171,47 @@
   border-top: 1px solid var(--dash-hero-line);
 }
 
-.design-preview .dash-hero-metric {
+.editorial-page .dash-hero-metric {
   min-width: 0;
   padding-right: 12px;
 }
 
-.design-preview .dash-hero-metric:nth-child(2) {
+.editorial-page .dash-hero-metric:nth-child(2) {
   padding-left: 16px;
   border-left: 1px solid var(--dash-hero-line);
 }
 
-.design-preview .dash-hero-metric:nth-child(3) {
+.editorial-page .dash-hero-metric:nth-child(3) {
   grid-column: 1 / -1;
   padding-top: 12px;
   border-top: 1px solid var(--dash-hero-line);
 }
 
 @media (min-width: 640px) {
-  .design-preview .dash-hero-metrics {
+  .editorial-page .dash-hero-metrics {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     padding-top: 0;
     border-top: 0;
   }
 
-  .design-preview .dash-hero-metric {
+  .editorial-page .dash-hero-metric {
     padding: 0 16px;
     border-left: 1px solid var(--dash-hero-line);
   }
 
-  .design-preview .dash-hero-metric:first-child {
+  .editorial-page .dash-hero-metric:first-child {
     padding-left: 0;
     border-left: 0;
   }
 
-  .design-preview .dash-hero-metric:nth-child(3) {
+  .editorial-page .dash-hero-metric:nth-child(3) {
     grid-column: auto;
     padding-top: 0;
     border-top: 0;
   }
 }
 
-.design-preview .dash-hero-metric-label {
+.editorial-page .dash-hero-metric-label {
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.12em;
@@ -218,7 +219,7 @@
   color: var(--dash-hero-muted);
 }
 
-.design-preview .dash-hero-metric-value {
+.editorial-page .dash-hero-metric-value {
   margin-top: 5px;
   font-size: 1.45rem;
   line-height: 1.1;
@@ -227,14 +228,14 @@
   font-variant-numeric: tabular-nums;
 }
 
-.design-preview .dash-hero-metric-note {
+.editorial-page .dash-hero-metric-note {
   margin-top: 4px;
   font-size: 10px;
   line-height: 1.4;
   color: var(--dash-hero-muted);
 }
 
-.design-preview .dash-panel {
+.editorial-page .dash-panel {
   min-width: 0;
   padding: 20px;
   border: 1px solid var(--dash-line);
@@ -242,7 +243,7 @@
   background: var(--card);
 }
 
-.design-preview .dash-panel-head {
+.editorial-page .dash-panel-head {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
@@ -252,7 +253,7 @@
   border-bottom: 1px solid var(--dash-line);
 }
 
-.design-preview .dash-kicker {
+.editorial-page .dash-kicker {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.16em;
@@ -260,70 +261,70 @@
   color: var(--dash-muted);
 }
 
-.design-preview .dash-panel-title {
+.editorial-page .dash-panel-title {
   margin-top: 3px;
   font-size: 1.125rem;
   font-weight: 600;
   letter-spacing: -0.02em;
 }
 
-.design-preview .dash-panel-note,
-.design-preview .dash-rail-note {
+.editorial-page .dash-panel-note,
+.editorial-page .dash-rail-note {
   margin-top: 4px;
   font-size: 11px;
   color: var(--dash-muted);
 }
 
-.design-preview .dash-main-grid {
+.editorial-page .dash-main-grid {
   display: grid;
   gap: 24px;
 }
 
 @media (min-width: 1024px) {
-  .design-preview .dash-main-grid {
+  .editorial-page .dash-main-grid {
     grid-template-columns: minmax(0, 1.65fr) minmax(280px, 0.75fr);
     align-items: start;
   }
 }
 
-.design-preview .dash-chart-summary { text-align: right; }
+.editorial-page .dash-chart-summary { text-align: right; }
 
-.design-preview .dash-chart-total {
+.editorial-page .dash-chart-total {
   font-size: 1.1rem;
   font-weight: 600;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
 }
 
-.design-preview .dash-chart-delta {
+.editorial-page .dash-chart-delta {
   margin-top: 2px;
   font-size: 10px;
   font-weight: 600;
 }
 
-.design-preview .dash-chart-delta.is-positive { color: #15803d; }
-.design-preview .dash-chart-delta.is-negative { color: #b91c1c; }
-.design-preview .dash-chart-delta.is-neutral { color: var(--dash-muted); font-weight: 500; }
-.dark .design-preview .dash-chart-delta.is-positive { color: #4ade80; }
-.dark .design-preview .dash-chart-delta.is-negative { color: #fb7185; }
+.editorial-page .dash-chart-delta.is-positive { color: #15803d; }
+.editorial-page .dash-chart-delta.is-negative { color: #b91c1c; }
+.editorial-page .dash-chart-delta.is-neutral { color: var(--dash-muted); font-weight: 500; }
+.dark .editorial-page .dash-chart-delta.is-positive { color: #4ade80; }
+.dark .editorial-page .dash-chart-delta.is-negative { color: #fb7185; }
 
-.design-preview .dash-chart {
+.editorial-page .dash-chart {
   height: 280px;
   margin-top: 16px;
 }
 
 @media (max-width: 639px) {
-  .design-preview .dash-chart { height: 230px; }
+  .editorial-page .dash-chart { height: 230px; }
 }
 
-.design-preview .dash-rail {
+.editorial-page .dash-rail {
   min-width: 0;
   padding-top: 20px;
   border-top: 1px solid var(--dash-line);
 }
 
 @media (min-width: 1024px) {
-  .design-preview .dash-rail {
+  .editorial-page .dash-rail {
     padding-top: 0;
     padding-left: 24px;
     border-top: 0;
@@ -331,10 +332,10 @@
   }
 }
 
-.design-preview .dash-rail-head { padding-bottom: 2px; }
-.design-preview .dash-rail-list { margin-top: 8px; }
+.editorial-page .dash-rail-head { padding-bottom: 2px; }
+.editorial-page .dash-rail-list { margin-top: 8px; }
 
-.design-preview .dash-rail-item {
+.editorial-page .dash-rail-item {
   display: flex;
   width: 100%;
   align-items: center;
@@ -345,10 +346,10 @@
   transition: padding 0.15s ease;
 }
 
-.design-preview .dash-rail-item:last-child { border-bottom: 0; }
-.design-preview .dash-rail-item:hover { padding-left: 3px; }
+.editorial-page .dash-rail-item:last-child { border-bottom: 0; }
+.editorial-page .dash-rail-item:hover { padding-left: 3px; }
 
-.design-preview .dash-rail-icon {
+.editorial-page .dash-rail-icon {
   display: flex;
   width: 30px;
   height: 30px;
@@ -360,14 +361,14 @@
   color: var(--primary);
 }
 
-.design-preview .dash-rail-label {
+.editorial-page .dash-rail-label {
   display: block;
   font-size: 13px;
   font-weight: 600;
   line-height: 1.2;
 }
 
-.design-preview .dash-rail-desc {
+.editorial-page .dash-rail-desc {
   display: block;
   margin-top: 2px;
   font-size: 11px;
@@ -375,7 +376,7 @@
   color: var(--dash-muted);
 }
 
-.design-preview .dash-rail-arrow {
+.editorial-page .dash-rail-arrow {
   width: 14px;
   height: 14px;
   flex: 0 0 auto;
@@ -383,23 +384,23 @@
   transition: transform 0.15s ease, color 0.15s ease;
 }
 
-.design-preview .dash-rail-item:hover .dash-rail-arrow {
+.editorial-page .dash-rail-item:hover .dash-rail-arrow {
   transform: translate(2px, -2px);
   color: var(--primary);
 }
 
-.design-preview .dash-rail-empty {
+.editorial-page .dash-rail-empty {
   margin-top: 12px;
   font-size: 12px;
   color: var(--dash-muted);
 }
 
-.design-preview .dash-ledger {
+.editorial-page .dash-ledger {
   padding-top: 24px;
   border-top: 1px solid var(--dash-line);
 }
 
-.design-preview .dash-ledger-head {
+.editorial-page .dash-ledger-head {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
@@ -409,39 +410,39 @@
   border-bottom: 1px solid var(--dash-line);
 }
 
-.design-preview .dash-ledger-note {
+.editorial-page .dash-ledger-note {
   font-size: 11px;
   color: var(--dash-muted);
 }
 
-.design-preview .dash-ledger-grid { display: grid; }
+.editorial-page .dash-ledger-grid { display: grid; }
 
 @media (min-width: 1024px) {
-  .design-preview .dash-ledger-grid.is-split {
+  .editorial-page .dash-ledger-grid.is-split {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .design-preview .dash-ledger-grid.is-split .dash-ledger-column + .dash-ledger-column {
+  .editorial-page .dash-ledger-grid.is-split .dash-ledger-column + .dash-ledger-column {
     margin-left: 28px;
     padding-left: 28px;
     border-left: 1px solid var(--dash-line);
   }
 }
 
-.design-preview .dash-ledger-column {
+.editorial-page .dash-ledger-column {
   min-width: 0;
   padding-top: 18px;
 }
 
 @media (max-width: 1023px) {
-  .design-preview .dash-ledger-grid.is-split .dash-ledger-column + .dash-ledger-column {
+  .editorial-page .dash-ledger-grid.is-split .dash-ledger-column + .dash-ledger-column {
     margin-top: 20px;
     padding-top: 20px;
     border-top: 1px solid var(--dash-line);
   }
 }
 
-.design-preview .dash-ledger-subhead {
+.editorial-page .dash-ledger-subhead {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -449,12 +450,12 @@
   padding-bottom: 10px;
 }
 
-.design-preview .dash-ledger-title {
+.editorial-page .dash-ledger-title {
   font-size: 12px;
   font-weight: 600;
 }
 
-.design-preview .dash-ledger-link {
+.editorial-page .dash-ledger-link {
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -463,7 +464,7 @@
   color: var(--primary);
 }
 
-.design-preview .dash-ledger-row {
+.editorial-page .dash-ledger-row {
   display: flex;
   width: 100%;
   align-items: center;
@@ -473,10 +474,10 @@
   text-align: left;
 }
 
-.design-preview .dash-ledger-row:last-child { border-bottom: 0; }
-.design-preview .dash-ledger-row:hover { background: color-mix(in srgb, var(--foreground) 3%, transparent); }
+.editorial-page .dash-ledger-row:last-child { border-bottom: 0; }
+.editorial-page .dash-ledger-row:hover { background: color-mix(in srgb, var(--foreground) 3%, transparent); }
 
-.design-preview .dash-ledger-time {
+.editorial-page .dash-ledger-time {
   width: 42px;
   flex: 0 0 auto;
   font-size: 11px;
@@ -484,7 +485,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.design-preview .dash-ledger-primary {
+.editorial-page .dash-ledger-primary {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -494,7 +495,7 @@
   line-height: 1.3;
 }
 
-.design-preview .dash-ledger-meta {
+.editorial-page .dash-ledger-meta {
   display: block;
   margin-top: 2px;
   font-size: 10px;
@@ -502,7 +503,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.design-preview .dash-ledger-amount {
+.editorial-page .dash-ledger-amount {
   display: block;
   text-align: right;
   font-size: 13px;
@@ -511,7 +512,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.design-preview .dash-ledger-stock {
+.editorial-page .dash-ledger-stock {
   width: 34px;
   flex: 0 0 auto;
   text-align: right;
@@ -520,17 +521,17 @@
   font-variant-numeric: tabular-nums;
 }
 
-.design-preview .dash-ledger-stock.is-low { color: #b91c1c; }
-.dark .design-preview .dash-ledger-stock.is-low { color: #fb7185; }
+.editorial-page .dash-ledger-stock.is-low { color: #b91c1c; }
+.dark .editorial-page .dash-ledger-stock.is-low { color: #fb7185; }
 
-.design-preview .dash-ledger-empty {
+.editorial-page .dash-ledger-empty {
   padding: 16px 0;
   font-size: 12px;
   line-height: 1.6;
   color: var(--dash-muted);
 }
 
-.design-preview .dash-status {
+.editorial-page .dash-status {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -541,7 +542,7 @@
   text-transform: uppercase;
 }
 
-.design-preview .dash-status-dot {
+.editorial-page .dash-status-dot {
   width: 5px;
   height: 5px;
   flex: 0 0 auto;
@@ -549,14 +550,14 @@
   background: currentColor;
 }
 
-.design-preview .dash-status-success { color: #15803d; }
-.design-preview .dash-status-warning { color: #b45309; }
-.design-preview .dash-status-danger { color: #b91c1c; }
-.dark .design-preview .dash-status-success { color: #4ade80; }
-.dark .design-preview .dash-status-warning { color: #fbbf24; }
-.dark .design-preview .dash-status-danger { color: #fb7185; }
+.editorial-page .dash-status-success { color: #15803d; }
+.editorial-page .dash-status-warning { color: #b45309; }
+.editorial-page .dash-status-danger { color: #b91c1c; }
+.dark .editorial-page .dash-status-success { color: #4ade80; }
+.dark .editorial-page .dash-status-warning { color: #fbbf24; }
+.dark .editorial-page .dash-status-danger { color: #fb7185; }
 
-.design-preview .dash-empty-state {
+.editorial-page .dash-empty-state {
   display: flex;
   height: 100%;
   min-height: 180px;
@@ -567,23 +568,23 @@
   color: var(--dash-muted);
 }
 
-.design-preview .dash-empty-state svg { opacity: 0.5; }
+.editorial-page .dash-empty-state svg { opacity: 0.5; }
 
-.design-preview .dash-empty-title {
+.editorial-page .dash-empty-title {
   margin-top: 10px;
   font-size: 13px;
   font-weight: 600;
   color: var(--foreground);
 }
 
-.design-preview .dash-empty-copy {
+.editorial-page .dash-empty-copy {
   margin-top: 3px;
   max-width: 36ch;
   font-size: 11px;
   line-height: 1.5;
 }
 
-.design-preview .dash-alert {
+.editorial-page .dash-alert {
   padding: 16px;
   border: 1px solid color-mix(in srgb, #f59e0b 42%, var(--border));
   border-left: 3px solid #d97706;
@@ -591,12 +592,12 @@
   background: color-mix(in srgb, #f59e0b 9%, var(--card));
 }
 
-.dark .design-preview .dash-alert {
+.dark .editorial-page .dash-alert {
   border-color: color-mix(in srgb, #f59e0b 28%, var(--border));
   background: color-mix(in srgb, #f59e0b 10%, var(--card));
 }
 
-.design-preview .dash-alert-icon {
+.editorial-page .dash-alert-icon {
   display: flex;
   width: 34px;
   height: 34px;
@@ -608,26 +609,26 @@
   color: #b45309;
 }
 
-.dark .design-preview .dash-alert-icon { color: #fbbf24; }
+.dark .editorial-page .dash-alert-icon { color: #fbbf24; }
 
-.design-preview .dash-alert-title {
+.editorial-page .dash-alert-title {
   font-size: 14px;
   font-weight: 600;
 }
 
-.design-preview .dash-alert-copy {
+.editorial-page .dash-alert-copy {
   margin-top: 4px;
   font-size: 12px;
   line-height: 1.6;
   color: var(--dash-muted);
 }
 
-.design-preview .dash-alert-copy strong {
+.editorial-page .dash-alert-copy strong {
   color: var(--foreground);
   font-weight: 600;
 }
 
-.design-preview .dash-support {
+.editorial-page .dash-support {
   padding-top: 24px;
   border-top: 1px solid var(--dash-line);
 }
@@ -635,7 +636,7 @@
 /* Aplanado de las tarjetas y controles que viven dentro del Dashboard.
    Se mantiene el radio pequeño y se eliminan sombras, vidrio y animaciones
    en cascada para que el piloto no parezca una colección de tarjetas. */
-.design-preview [data-slot="card"] {
+.editorial-page [data-slot="card"] {
   border-radius: var(--dash-radius) !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
@@ -644,38 +645,38 @@
   background: var(--card) !important;
 }
 
-.design-preview [data-slot="card"] [data-slot="card"] {
+.editorial-page [data-slot="card"] [data-slot="card"] {
   border-radius: 8px !important;
   box-shadow: none !important;
 }
 
-.design-preview .rounded-3xl,
-.design-preview .rounded-2xl {
+.editorial-page .rounded-3xl,
+.editorial-page .rounded-2xl {
   border-radius: var(--dash-radius) !important;
 }
 
-.design-preview .rounded-xl,
-.design-preview .rounded-lg {
+.editorial-page .rounded-xl,
+.editorial-page .rounded-lg {
   border-radius: 8px !important;
 }
 
-.design-preview .shadow-sm,
-.design-preview .shadow-soft,
-.design-preview .shadow-lift {
+.editorial-page .shadow-sm,
+.editorial-page .shadow-soft,
+.editorial-page .shadow-lift {
   box-shadow: none !important;
 }
 
-.design-preview [data-slot="button"] {
+.editorial-page [data-slot="button"] {
   border-radius: var(--dash-radius-sm) !important;
 }
 
-.design-preview [data-slot="input"],
-.design-preview select,
-.design-preview textarea {
+.editorial-page [data-slot="input"],
+.editorial-page select,
+.editorial-page textarea {
   border-radius: var(--dash-radius-sm) !important;
 }
 
-.design-preview .preview-banner {
+.editorial-page .preview-banner {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -685,7 +686,7 @@
   font-size: 11px;
 }
 
-.design-preview .preview-banner-tag {
+.editorial-page .preview-banner-tag {
   padding: 3px 7px;
   border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--dash-line));
   border-radius: 4px;
@@ -696,7 +697,7 @@
   text-transform: uppercase;
 }
 
-.design-preview .preview-rail-group-title {
+.editorial-page .preview-rail-group-title {
   margin-bottom: 2px;
   font-size: 10px;
   font-weight: 700;
@@ -705,16 +706,16 @@
   color: var(--dash-muted);
 }
 
-.design-preview .dash-rail-item.is-active .dash-rail-label {
+.editorial-page .dash-rail-item.is-active .dash-rail-label {
   color: var(--primary);
 }
 
-.design-preview .dash-rail-item.is-active .dash-rail-icon {
+.editorial-page .dash-rail-item.is-active .dash-rail-icon {
   border-color: color-mix(in srgb, var(--primary) 45%, var(--dash-line));
   background: color-mix(in srgb, var(--primary) 8%, transparent);
 }
 
-.design-preview .preview-active-dot {
+.editorial-page .preview-active-dot {
   width: 6px;
   height: 6px;
   flex: 0 0 auto;
@@ -722,19 +723,19 @@
   background: var(--primary);
 }
 
-.design-preview .preview-method-list {
+.editorial-page .preview-method-list {
   display: grid;
   gap: 16px;
 }
 
-.design-preview .preview-method-head {
+.editorial-page .preview-method-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.design-preview .preview-method-label {
+.editorial-page .preview-method-label {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -742,13 +743,13 @@
   font-weight: 600;
 }
 
-.design-preview .preview-method-percent {
+.editorial-page .preview-method-percent {
   font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
-.design-preview .preview-method-track {
+.editorial-page .preview-method-track {
   height: 4px;
   margin-top: 7px;
   overflow: hidden;
@@ -756,21 +757,21 @@
   background: color-mix(in srgb, var(--foreground) 8%, transparent);
 }
 
-.design-preview .preview-method-bar {
+.editorial-page .preview-method-bar {
   display: block;
   height: 100%;
   border-radius: inherit;
   background: var(--primary);
 }
 
-.design-preview .preview-method-amount {
+.editorial-page .preview-method-amount {
   margin-top: 5px;
   font-size: 11px;
   color: var(--dash-muted);
   font-variant-numeric: tabular-nums;
 }
 
-.design-preview .preview-footer {
+.editorial-page .preview-footer {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -780,3 +781,38 @@
 }
 
 
+
+/* Reportes: los filtros de fecha y estado se apilan dentro del panel lateral. */
+.editorial-page .report-rail-filters > .grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Indicador suelto (pantallas con varias cifras independientes, como Bodega). */
+.editorial-page .dash-stat {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  height: 100%;
+}
+
+.editorial-page .dash-stat-value {
+  margin-top: 8px;
+  font-size: 1.6rem;
+  line-height: 1.05;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.editorial-page .dash-stat-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--dash-muted);
+}
+
+.editorial-page .dash-stat-icon {
+  color: var(--dash-muted);
+  flex-shrink: 0;
+}

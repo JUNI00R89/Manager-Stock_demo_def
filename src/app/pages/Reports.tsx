@@ -23,12 +23,15 @@ import { saleNetTotal, saleNetRevenue, saleCost, returnedUnits } from '../utils/
 
 import { formatMoney as money } from '../utils/restaurantFormat';
 import { downloadCsv } from '../utils/csv';
+import { useDesignMode } from '../context/DesignModeContext';
+import './editorial-page.css';
 
 const daysAgo = (days: number) => colombiaDateKey(new Date(Date.now() - days * 86400000));
 const formatDate = (value: string) =>
   new Intl.DateTimeFormat('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(value));
 
 export function Reports() {
+  const { isEditorial } = useDesignMode();
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [start, setStart] = useState(daysAgo(29));
   const [end, setEnd] = useState(colombiaDateKey());
@@ -123,6 +126,334 @@ export function Reports() {
     ]);
   };
 
+  const products = new Map<string, { name: string; units: number; revenue: number }>();
+  validSales.forEach(sale =>
+    sale.items.forEach(item => {
+      const row = products.get(item.productId) || { name: item.productName, units: 0, revenue: 0 };
+      const units = Math.max(0, item.quantity - returnedUnits(sale, item));
+      row.units += units;
+      row.revenue += item.quantity > 0 ? (item.subtotal * units) / item.quantity : 0;
+      products.set(item.productId, row);
+    }),
+  );
+  const best = [...products.values()]
+    .filter(p => p.units > 0)
+    .sort((a, b) => b.units - a.units)
+    .slice(0, 6);
+  const bestList = best.length ? (
+    <div className="space-y-4">
+      {best.map((product, index) => (
+        <div key={product.name} className="flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-sm font-bold text-orange-700 dark:bg-orange-950/40 dark:text-orange-300">
+            {index + 1}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex justify-between gap-3">
+              <p className="truncate text-sm font-medium">{product.name}</p>
+              <span className="shrink-0 text-sm font-semibold">{product.units} un.</span>
+            </div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+              <div
+                className="bar-fill h-full rounded-full bg-orange-500"
+                style={{ width: `${Math.max(4, (product.units / best[0].units) * 100)}%` }}
+              />
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {money(product.revenue)} antes de descuento general e impuestos
+            </p>
+          </div>
+        </div>
+      ))}
+    </div>
+  ) : (
+    <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+      Aún no hay productos vendidos.
+    </div>
+  );
+  const filterFields = (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_200px_auto]">
+      <div className="space-y-1.5">
+        <label htmlFor="reportStart" className="text-xs font-semibold text-muted-foreground">
+          Desde
+        </label>
+        <Input
+          id="reportStart"
+          type="date"
+          value={start}
+          max={end || undefined}
+          onChange={event => setStart(event.target.value)}
+          className="h-11 rounded-xl"
+        />
+      </div>
+      <div className="space-y-1.5">
+        <label htmlFor="reportEnd" className="text-xs font-semibold text-muted-foreground">
+          Hasta
+        </label>
+        <Input
+          id="reportEnd"
+          type="date"
+          value={end}
+          min={start || undefined}
+          onChange={event => setEnd(event.target.value)}
+          className="h-11 rounded-xl"
+        />
+      </div>
+      <div className="space-y-1.5">
+        <label htmlFor="reportStatus" className="text-xs font-semibold text-muted-foreground">
+          Estado de ventas
+        </label>
+        <select
+          id="reportStatus"
+          value={status}
+          onChange={event => setStatus(event.target.value as 'completed' | 'all')}
+          className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"
+        >
+          <option value="completed">Solo completadas</option>
+          <option value="all">Todos los estados</option>
+        </select>
+      </div>
+      <div className="flex items-end">
+        <Button
+          variant="outline"
+          onClick={() => {
+            setStart(daysAgo(29));
+            setEnd(colombiaDateKey());
+            setStatus('completed');
+          }}
+          className="h-11 w-full rounded-xl"
+        >
+          Últimos 30 días
+        </Button>
+      </div>
+    </div>
+  );
+  const chartBody = (
+    <>
+      {loading ? (
+        <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">Cargando reporte…</div>
+      ) : chartData.length ? (
+        <div className="h-64 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+              <XAxis
+                dataKey="label"
+                tickLine={false}
+                axisLine={false}
+                tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
+              />
+              <YAxis
+                width={72}
+                tickLine={false}
+                axisLine={false}
+                tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
+                tickFormatter={value => `${Math.round(value / 1000)}k`}
+              />
+              <Tooltip
+                formatter={value => money(Number(value))}
+                labelFormatter={label => `Fecha ${label}`}
+                contentStyle={{
+                  borderRadius: 12,
+                  borderColor: 'var(--border)',
+                  background: 'var(--card)',
+                  color: 'var(--card-foreground)',
+                }}
+              />
+              <Bar
+                dataKey="revenue"
+                name="Ingreso neto"
+                fill="var(--chart-1)"
+                radius={[8, 8, 0, 0]}
+                maxBarSize={44}
+                animationBegin={150}
+                animationDuration={800}
+                animationEasing="ease-out"
+              >
+                {chartData.map((entry, index) => (
+                  <Cell
+                    key={`${entry.label}-${index}`}
+                    fill={isEditorial || index % 2 === 1 ? 'var(--chart-1)' : 'var(--chart-2)'}
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      ) : (
+        <div className="flex h-64 flex-col items-center justify-center text-center">
+          <CalendarDays className="mb-2 h-9 w-9 text-muted-foreground/50" />
+          <p className="font-medium">Sin ventas en este período</p>
+          <p className="mt-1 text-sm text-muted-foreground">Cuando registres ventas aparecerán en este gráfico.</p>
+        </div>
+      )}
+    </>
+  );
+
+  const statusTone = (value: SaleRecord['status']) =>
+    value === 'completed'
+      ? ['Completada', 'dash-status-success']
+      : value === 'pending'
+        ? ['Pendiente', 'dash-status-warning']
+        : ['Anulada', 'dash-status-danger'];
+
+  if (isEditorial)
+    return (
+      <Layout>
+        <div className="editorial-page mx-auto max-w-7xl space-y-6">
+          <header className="dash-header">
+            <div>
+              <p className="dash-eyebrow">Análisis del negocio</p>
+              <h1 className="dash-title">Reportes y rentabilidad</h1>
+              <p className="dash-subtitle">Por fecha de venta, descontadas todas las devoluciones registradas.</p>
+            </div>
+            <div className="dash-actions">
+              <Button variant="outline" size="sm" className="dash-action" onClick={() => void load()}>
+                <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                Actualizar
+              </Button>
+              <Button size="sm" className="dash-action" disabled={!reportSales.length} onClick={exportCsv}>
+                <Download className="mr-2 h-3.5 w-3.5" />
+                Exportar CSV
+              </Button>
+            </div>
+          </header>
+
+          <section className="dash-hero" aria-label="Resumen del periodo">
+            <div className="dash-hero-top">
+              <p className="dash-hero-kicker">
+                {start ? formatDate(`${start}T12:00:00`) : 'Inicio'} — {end ? formatDate(`${end}T12:00:00`) : 'Hoy'}
+              </p>
+              <span className="dash-hero-date">COP · sin impuestos</span>
+            </div>
+            <div className="dash-hero-body">
+              <div>
+                <p className="dash-hero-label">Ingreso neto estimado</p>
+                <p className="dash-hero-value">{loading ? '—' : money(revenue)}</p>
+                <p className="dash-hero-note">
+                  {validSales.length} ventas completadas · descontadas devoluciones e impuesto.
+                </p>
+              </div>
+              <div className="dash-hero-metrics">
+                <div className="dash-hero-metric">
+                  <p className="dash-hero-metric-label">Costo vendido</p>
+                  <p className="dash-hero-metric-value">{loading ? '—' : money(cost)}</p>
+                  <p className="dash-hero-metric-note">Costos guardados al vender</p>
+                </div>
+                <div className="dash-hero-metric">
+                  <p className="dash-hero-metric-label">Utilidad bruta</p>
+                  <p className="dash-hero-metric-value">{loading ? '—' : money(profit)}</p>
+                  <p className="dash-hero-metric-note">Estimada, antes de gastos</p>
+                </div>
+                <div className="dash-hero-metric">
+                  <p className="dash-hero-metric-label">Ticket promedio</p>
+                  <p className="dash-hero-metric-value">{loading ? '—' : money(averageTicket)}</p>
+                  <p className="dash-hero-metric-note">Por venta completada</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <div className="dash-main-grid">
+            <section className="dash-panel">
+              <div className="dash-panel-head">
+                <div>
+                  <p className="dash-kicker">Comportamiento</p>
+                  <h2 className="dash-panel-title">Ingresos por día</h2>
+                </div>
+                <div className="dash-chart-summary">
+                  <p className="dash-chart-total">{money(revenue)}</p>
+                  <p className="dash-chart-delta">Sin impuestos</p>
+                </div>
+              </div>
+              {chartBody}
+            </section>
+            <aside className="dash-rail">
+              <div className="dash-rail-head">
+                <p className="dash-kicker">Filtros</p>
+                <h2 className="dash-panel-title">Periodo del reporte</h2>
+                <p className="dash-rail-note">Las cifras y el detalle usan estas fechas.</p>
+              </div>
+              <div className="report-rail-filters">{filterFields}</div>
+            </aside>
+          </div>
+
+          <section className="dash-ledger">
+            <div className="dash-ledger-head">
+              <div>
+                <p className="dash-kicker">Operación</p>
+                <h2 className="dash-panel-title">Detalle de operaciones</h2>
+              </div>
+              <p className="dash-ledger-note">
+                {reportSales.length} registros ·{' '}
+                {status === 'all' ? 'incluye anuladas y pendientes' : 'solo ventas completadas'}
+              </p>
+            </div>
+            <div className="dash-ledger-grid is-split">
+              <div className="dash-ledger-column">
+                {loading ? (
+                  <p className="py-6 text-sm text-muted-foreground">Cargando operaciones…</p>
+                ) : reportSales.length ? (
+                  reportSales.map(sale => {
+                    const net = saleNetRevenue(sale);
+                    const profitValue = net - saleCost(sale);
+                    const [label, tone] = statusTone(sale.status);
+                    return (
+                      <div key={sale.id} className="dash-ledger-row">
+                        <span className="dash-ledger-time">
+                          {new Date(sale.date).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit' })}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="dash-ledger-primary">{sale.customer || 'Cliente general'}</span>
+                          <span className="dash-ledger-meta">
+                            {sale.id} · {sale.productName} · utilidad{' '}
+                            <span className={profitValue < 0 ? 'text-rose-600' : ''}>{money(profitValue)}</span>
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-right">
+                          <span className="dash-ledger-amount">{money(net)}</span>
+                          <span className={`dash-status ${tone}`}>
+                            <span className="dash-status-dot" />
+                            {label}
+                          </span>
+                        </span>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="py-6 text-sm text-muted-foreground">No hay registros para los filtros elegidos.</p>
+                )}
+              </div>
+              <div className="dash-ledger-column">
+                <div className="dash-ledger-subhead">
+                  <h3 className="dash-ledger-title">Mejores productos</h3>
+                  <span className="dash-ledger-link">Por unidades</span>
+                </div>
+                {best.length ? (
+                  best.map(product => (
+                    <div key={product.name} className="dash-ledger-row">
+                      <span className="dash-ledger-stock">{product.units}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="dash-ledger-primary">{product.name}</span>
+                        <span className="dash-ledger-meta">Antes de descuento general e impuestos</span>
+                      </span>
+                      <span className="dash-ledger-amount">{money(product.revenue)}</span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="py-6 text-sm text-muted-foreground">Aún no hay productos vendidos.</p>
+                )}
+              </div>
+            </div>
+            <p className="mt-4 text-xs leading-5 text-muted-foreground">
+              La utilidad es una estimación bruta: solo los artículos devueltos y repuestos al inventario revierten su
+              costo, y en ventas antiguas sin costo guardado el costo se toma como $0. No reemplaza la liquidación
+              contable ni tributaria.
+            </p>
+          </section>
+        </div>
+      </Layout>
+    );
+
   return (
     <Layout>
       <div className="mx-auto max-w-7xl space-y-6">
@@ -150,63 +481,7 @@ export function Reports() {
             </Button>
           </div>
         </header>
-        <Card className="rounded-2xl border-border/70 p-4 shadow-sm">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_200px_auto]">
-            <div className="space-y-1.5">
-              <label htmlFor="reportStart" className="text-xs font-semibold text-muted-foreground">
-                Desde
-              </label>
-              <Input
-                id="reportStart"
-                type="date"
-                value={start}
-                max={end || undefined}
-                onChange={event => setStart(event.target.value)}
-                className="h-11 rounded-xl"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label htmlFor="reportEnd" className="text-xs font-semibold text-muted-foreground">
-                Hasta
-              </label>
-              <Input
-                id="reportEnd"
-                type="date"
-                value={end}
-                min={start || undefined}
-                onChange={event => setEnd(event.target.value)}
-                className="h-11 rounded-xl"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label htmlFor="reportStatus" className="text-xs font-semibold text-muted-foreground">
-                Estado de ventas
-              </label>
-              <select
-                id="reportStatus"
-                value={status}
-                onChange={event => setStatus(event.target.value as 'completed' | 'all')}
-                className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"
-              >
-                <option value="completed">Solo completadas</option>
-                <option value="all">Todos los estados</option>
-              </select>
-            </div>
-            <div className="flex items-end">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setStart(daysAgo(29));
-                  setEnd(colombiaDateKey());
-                  setStatus('completed');
-                }}
-                className="h-11 w-full rounded-xl"
-              >
-                Últimos 30 días
-              </Button>
-            </div>
-          </div>
-        </Card>
+        <Card className="rounded-2xl border-border/70 p-4 shadow-sm">{filterFields}</Card>
         <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
           <Card className="min-w-0 rounded-2xl border-border/70 p-5 shadow-sm">
             <div className="flex items-center justify-between gap-2">
@@ -260,119 +535,14 @@ export function Reports() {
               </div>
               <BarChart3 className="h-5 w-5 text-orange-600" />
             </div>
-            {loading ? (
-              <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
-                Cargando reporte…
-              </div>
-            ) : chartData.length ? (
-              <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-                    <XAxis
-                      dataKey="label"
-                      tickLine={false}
-                      axisLine={false}
-                      tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
-                    />
-                    <YAxis
-                      width={72}
-                      tickLine={false}
-                      axisLine={false}
-                      tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
-                      tickFormatter={value => `${Math.round(value / 1000)}k`}
-                    />
-                    <Tooltip
-                      formatter={value => money(Number(value))}
-                      labelFormatter={label => `Fecha ${label}`}
-                      contentStyle={{
-                        borderRadius: 12,
-                        borderColor: 'var(--border)',
-                        background: 'var(--card)',
-                        color: 'var(--card-foreground)',
-                      }}
-                    />
-                    <Bar
-                      dataKey="revenue"
-                      name="Ingreso neto"
-                      fill="var(--chart-1)"
-                      radius={[8, 8, 0, 0]}
-                      maxBarSize={44}
-                      animationBegin={150}
-                      animationDuration={800}
-                      animationEasing="ease-out"
-                    >
-                      {chartData.map((entry, index) => (
-                        <Cell
-                          key={`${entry.label}-${index}`}
-                          fill={index % 2 === 0 ? 'var(--chart-2)' : 'var(--chart-1)'}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="flex h-64 flex-col items-center justify-center text-center">
-                <CalendarDays className="mb-2 h-9 w-9 text-muted-foreground/50" />
-                <p className="font-medium">Sin ventas en este período</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Cuando registres ventas aparecerán en este gráfico.
-                </p>
-              </div>
-            )}
+            {chartBody}
           </Card>
           <Card className="rounded-2xl border-border/70 p-5 shadow-sm">
             <div className="mb-4">
               <h2 className="font-semibold">Mejores productos</h2>
               <p className="mt-1 text-sm text-muted-foreground">Por unidades conservadas por el cliente</p>
             </div>
-            {(() => {
-              const products = new Map<string, { name: string; units: number; revenue: number }>();
-              validSales.forEach(sale =>
-                sale.items.forEach(item => {
-                  const row = products.get(item.productId) || { name: item.productName, units: 0, revenue: 0 };
-                  const units = Math.max(0, item.quantity - returnedUnits(sale, item));
-                  row.units += units;
-                  row.revenue += item.quantity > 0 ? (item.subtotal * units) / item.quantity : 0;
-                  products.set(item.productId, row);
-                }),
-              );
-              const best = [...products.values()]
-                .filter(p => p.units > 0)
-                .sort((a, b) => b.units - a.units)
-                .slice(0, 6);
-              return best.length ? (
-                <div className="space-y-4">
-                  {best.map((product, index) => (
-                    <div key={product.name} className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-sm font-bold text-orange-700 dark:bg-orange-950/40 dark:text-orange-300">
-                        {index + 1}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex justify-between gap-3">
-                          <p className="truncate text-sm font-medium">{product.name}</p>
-                          <span className="shrink-0 text-sm font-semibold">{product.units} un.</span>
-                        </div>
-                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-                          <div
-                            className="bar-fill h-full rounded-full bg-orange-500"
-                            style={{ width: `${Math.max(4, (product.units / best[0].units) * 100)}%` }}
-                          />
-                        </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {money(product.revenue)} antes de descuento general e impuestos
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-                  Aún no hay productos vendidos.
-                </div>
-              );
-            })()}
+            {bestList}
           </Card>
         </div>
         <Card className="overflow-hidden rounded-2xl border-border/70 shadow-sm">

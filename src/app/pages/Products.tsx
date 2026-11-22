@@ -16,11 +16,14 @@ import { useAuth } from '../context/AuthContext';
 import { canAccessPath } from '../security/permissions';
 import type { Product } from '../utils/types';
 import { formatMoney as money } from '../utils/restaurantFormat';
+import { useDesignMode } from '../context/DesignModeContext';
+import { EditorialHeader, EditorialHero } from '../components/editorial/EditorialBlocks';
 
 export function Products() {
   const navigate = useNavigate();
   const { isFoodBusiness, config } = useBusiness();
   const { user } = useAuth();
+  const { isEditorial } = useDesignMode();
   const isCustomRole = Boolean(user?.customRoleId);
   const canViewInventory = canAccessPath(
     '/warehouse/movements',
@@ -100,61 +103,111 @@ export function Products() {
 
   return (
     <Layout>
-      <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[.16em] text-orange-600">Catálogo e inventario</p>
-            <h1 className="mt-1 text-3xl font-bold tracking-tight text-foreground">Productos</h1>
-            <p className="mt-1 text-muted-foreground">
-              Controla tus productos, existencias y precios desde un solo lugar.
-            </p>
-          </div>
-          {canCreateProduct && (
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={() => setImportOpen(true)} className="h-11">
-                <FileSpreadsheet className="mr-2 h-4 w-4" />
-                Importar desde Excel
-              </Button>
-              <Button
-                onClick={() => navigate('/products/new')}
-                className="h-11 bg-orange-600 text-white shadow-sm hover:bg-orange-700"
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Nuevo producto
-              </Button>
+      <div className={`${isEditorial ? 'editorial-page ' : ''}mx-auto max-w-7xl space-y-6`}>
+        {isEditorial ? (
+          <>
+            <EditorialHeader
+              eyebrow="Catálogo e inventario"
+              title="Productos"
+              subtitle="Controla tus productos, existencias y precios desde un solo lugar."
+              actions={
+                canCreateProduct && (
+                  <>
+                    <Button variant="outline" size="sm" className="dash-action" onClick={() => setImportOpen(true)}>
+                      <FileSpreadsheet className="mr-2 h-3.5 w-3.5" />
+                      Importar desde Excel
+                    </Button>
+                    <Button size="sm" className="dash-action" onClick={() => navigate('/products/new')}>
+                      <Plus className="mr-2 h-3.5 w-3.5" />
+                      Nuevo producto
+                    </Button>
+                  </>
+                )
+              }
+            />
+            <EditorialHero
+              kicker="Inventario"
+              aside="COP · Colombia"
+              label="Valor de venta del stock"
+              value={loading ? '—' : money(inventoryValue)}
+              note="Estimado según el precio de venta de cada producto."
+              metrics={[
+                {
+                  label: 'Productos activos',
+                  value: loading ? '—' : products.length,
+                  note: 'Referencias en el catálogo',
+                },
+                {
+                  label: 'Bajo mínimo',
+                  value: loading ? '—' : lowStock,
+                  note: lowStock ? 'Requieren reposición' : 'Todo en orden',
+                },
+                { label: 'Categorías', value: loading ? '—' : categories.length - 1, note: 'En uso por tus productos' },
+              ]}
+            />
+          </>
+        ) : (
+          <>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[.16em] text-orange-600">
+                  Catálogo e inventario
+                </p>
+                <h1 className="mt-1 text-3xl font-bold tracking-tight text-foreground">Productos</h1>
+                <p className="mt-1 text-muted-foreground">
+                  Controla tus productos, existencias y precios desde un solo lugar.
+                </p>
+              </div>
+              {canCreateProduct && (
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" onClick={() => setImportOpen(true)} className="h-11">
+                    <FileSpreadsheet className="mr-2 h-4 w-4" />
+                    Importar desde Excel
+                  </Button>
+                  <Button
+                    onClick={() => navigate('/products/new')}
+                    className="h-11 bg-orange-600 text-white shadow-sm hover:bg-orange-700"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Nuevo producto
+                  </Button>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
+              <Card className="min-w-0 rounded-2xl border-border/70 p-5 shadow-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm text-muted-foreground">Productos activos</span>
+                  <Package className="h-5 w-5 shrink-0 text-orange-600" />
+                </div>
+                <p className="mt-3 text-3xl font-bold">{products.length}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Referencias en el catálogo</p>
+              </Card>
+              <Card className="min-w-0 rounded-2xl border-border/70 p-5 shadow-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm text-muted-foreground">Inventario por debajo del mínimo</span>
+                  <AlertTriangle className={`h-5 w-5 shrink-0 ${lowStock ? 'text-rose-500' : 'text-emerald-600'}`} />
+                </div>
+                <p className={`mt-3 text-3xl font-bold ${lowStock ? 'text-rose-600' : 'text-emerald-600'}`}>
+                  {lowStock}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">Requieren revisión o reposición</p>
+              </Card>
+              <Card className="col-span-2 min-w-0 rounded-2xl border-border/70 p-5 shadow-sm sm:col-span-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm text-muted-foreground">Valor de venta del stock</span>
+                  <Boxes className="h-5 w-5 shrink-0 text-orange-600" />
+                </div>
+                <p className="mt-3 text-2xl font-bold">{money(inventoryValue)}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Estimado según precio de venta</p>
+              </Card>
+            </div>
+          </>
+        )}
         {canCreateProduct && (
           <ImportProductsDialog open={importOpen} onOpenChange={setImportOpen} onImported={() => void load()} />
         )}
-
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
-          <Card className="min-w-0 rounded-2xl border-border/70 p-5 shadow-sm">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm text-muted-foreground">Productos activos</span>
-              <Package className="h-5 w-5 shrink-0 text-orange-600" />
-            </div>
-            <p className="mt-3 text-3xl font-bold">{products.length}</p>
-            <p className="mt-1 text-xs text-muted-foreground">Referencias en el catálogo</p>
-          </Card>
-          <Card className="min-w-0 rounded-2xl border-border/70 p-5 shadow-sm">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm text-muted-foreground">Inventario por debajo del mínimo</span>
-              <AlertTriangle className={`h-5 w-5 shrink-0 ${lowStock ? 'text-rose-500' : 'text-emerald-600'}`} />
-            </div>
-            <p className={`mt-3 text-3xl font-bold ${lowStock ? 'text-rose-600' : 'text-emerald-600'}`}>{lowStock}</p>
-            <p className="mt-1 text-xs text-muted-foreground">Requieren revisión o reposición</p>
-          </Card>
-          <Card className="col-span-2 min-w-0 rounded-2xl border-border/70 p-5 shadow-sm sm:col-span-1">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm text-muted-foreground">Valor de venta del stock</span>
-              <Boxes className="h-5 w-5 shrink-0 text-orange-600" />
-            </div>
-            <p className="mt-3 text-2xl font-bold">{money(inventoryValue)}</p>
-            <p className="mt-1 text-xs text-muted-foreground">Estimado según precio de venta</p>
-          </Card>
-        </div>
 
         <Card className="rounded-2xl border-border/70 p-4 shadow-sm">
           <div className="flex flex-col gap-3 lg:flex-row">

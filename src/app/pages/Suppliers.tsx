@@ -11,9 +11,12 @@ import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
 import { dataService } from '../services/dataService';
 import type { Supplier } from '../utils/types';
+import { useDesignMode } from '../context/DesignModeContext';
+import { EditorialHeader, EditorialHero } from '../components/editorial/EditorialBlocks';
 
 export function Suppliers() {
   const navigate = useNavigate();
+  const { isEditorial } = useDesignMode();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -51,41 +54,77 @@ export function Suppliers() {
   };
   return (
     <Layout>
-      <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[.16em] text-orange-600">Abastecimiento</p>
-            <h1 className="mt-1 text-3xl font-bold tracking-tight">Proveedores</h1>
-            <p className="mt-1 text-muted-foreground">
-              Centraliza contactos, datos de entrega y productos suministrados.
-            </p>
-          </div>
-          <Button
-            onClick={() => navigate('/suppliers/new')}
-            className="h-11 rounded-xl bg-orange-600 text-white hover:bg-orange-700"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Nuevo proveedor
-          </Button>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Card className="rounded-2xl border-border/70 p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Proveedores activos</span>
-              <Building2 className="h-5 w-5 text-orange-600" />
+      <div className={`${isEditorial ? 'editorial-page ' : ''}mx-auto max-w-7xl space-y-6`}>
+        {isEditorial ? (
+          <>
+            <EditorialHeader
+              eyebrow="Abastecimiento"
+              title="Proveedores"
+              subtitle="Centraliza contactos, datos de entrega y productos suministrados."
+              actions={
+                <Button size="sm" className="dash-action" onClick={() => navigate('/suppliers/new')}>
+                  <Plus className="mr-2 h-3.5 w-3.5" />
+                  Nuevo proveedor
+                </Button>
+              }
+            />
+            <EditorialHero
+              kicker="Abastecimiento"
+              label="Proveedores activos"
+              value={loading ? '—' : suppliers.length}
+              note="Contactos registrados para abastecer tu negocio."
+              metrics={[
+                {
+                  label: 'Con productos',
+                  value: loading ? '—' : suppliers.filter(s => s.products.length).length,
+                  note: 'Relacionados con el catálogo',
+                },
+                {
+                  label: 'Sin productos',
+                  value: loading ? '—' : suppliers.filter(s => !s.products.length).length,
+                  note: 'Por asociar al catálogo',
+                },
+              ]}
+            />
+          </>
+        ) : (
+          <>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[.16em] text-orange-600">Abastecimiento</p>
+                <h1 className="mt-1 text-3xl font-bold tracking-tight">Proveedores</h1>
+                <p className="mt-1 text-muted-foreground">
+                  Centraliza contactos, datos de entrega y productos suministrados.
+                </p>
+              </div>
+              <Button
+                onClick={() => navigate('/suppliers/new')}
+                className="h-11 rounded-xl bg-orange-600 text-white hover:bg-orange-700"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Nuevo proveedor
+              </Button>
             </div>
-            <p className="mt-3 text-3xl font-bold">{suppliers.length}</p>
-            <p className="mt-1 text-xs text-muted-foreground">Contactos registrados para abastecimiento</p>
-          </Card>
-          <Card className="rounded-2xl border-border/70 p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Con productos asociados</span>
-              <Truck className="h-5 w-5 text-emerald-600" />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Card className="rounded-2xl border-border/70 p-5 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Proveedores activos</span>
+                  <Building2 className="h-5 w-5 text-orange-600" />
+                </div>
+                <p className="mt-3 text-3xl font-bold">{suppliers.length}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Contactos registrados para abastecimiento</p>
+              </Card>
+              <Card className="rounded-2xl border-border/70 p-5 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Con productos asociados</span>
+                  <Truck className="h-5 w-5 text-emerald-600" />
+                </div>
+                <p className="mt-3 text-3xl font-bold">{suppliers.filter(s => s.products.length).length}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Proveedores relacionados con el catálogo</p>
+              </Card>
             </div>
-            <p className="mt-3 text-3xl font-bold">{suppliers.filter(s => s.products.length).length}</p>
-            <p className="mt-1 text-xs text-muted-foreground">Proveedores relacionados con el catálogo</p>
-          </Card>
-        </div>
+          </>
+        )}
         <Card className="rounded-2xl border-border/70 p-4 shadow-sm">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

@@ -18,7 +18,7 @@ import {
 import { toast } from 'sonner';
 import { Layout } from '../components/Layout';
 import { Button } from '../components/ui/button';
-import './design-preview.css';
+import './editorial-page.css';
 import { formatMoney as money } from '../utils/restaurantFormat';
 
 const compactMoney = (value: number) => {
@@ -118,7 +118,7 @@ export function DesignPreview() {
 
   return (
     <Layout>
-      <div className="design-preview mx-auto max-w-7xl space-y-6">
+      <div className="editorial-page mx-auto max-w-7xl space-y-6">
         <header className="dash-header">
           <div>
             <p className="dash-eyebrow">Módulo de ventas</p>

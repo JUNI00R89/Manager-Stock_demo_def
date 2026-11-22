@@ -14,6 +14,8 @@ import {
 } from '../../services/dataService';
 import type { Product, Supplier } from '../../utils/types';
 import { useAuth } from '../../context/AuthContext';
+import { useDesignMode } from '../../context/DesignModeContext';
+import { EditorialHeader, EditorialStat } from '../../components/editorial/EditorialBlocks';
 
 export { formatMoney as money } from '../../utils/restaurantFormat';
 export const fmtQty = (value: number) =>
@@ -106,6 +108,8 @@ export function StatCard({
     violet: 'bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300',
     amber: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
   };
+  const { isEditorial } = useDesignMode();
+  if (isEditorial) return <EditorialStat label={label} value={value} hint={hint} icon={Icon} />;
   return (
     <Card className="rounded-2xl border-border/70 p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -133,6 +137,8 @@ export function PageTitle({
   description: string;
   action?: React.ReactNode;
 }) {
+  const { isEditorial } = useDesignMode();
+  if (isEditorial) return <EditorialHeader eyebrow={eyebrow} title={title} subtitle={description} actions={action} />;
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
