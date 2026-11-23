@@ -81,7 +81,28 @@ def prepare_database() -> None:
     from backend.migrations import migrate
     with connection() as conn:
         migrate(conn)
+    ensure_env_superadmin()
     run_maintenance()
+
+
+def ensure_env_superadmin() -> None:
+    """En la nube no hay terminal para scripts/create_superadmin.py: si existen
+    MANAGER_STOCK_SUPERADMIN_EMAIL y _PASSWORD, crea esa cuenta al arrancar.
+    Nunca la duplica ni cambia la contraseña de una cuenta que ya existe."""
+    import os
+    import secrets
+    email = os.getenv("MANAGER_STOCK_SUPERADMIN_EMAIL", "").strip().lower()
+    password = os.getenv("MANAGER_STOCK_SUPERADMIN_PASSWORD", "")
+    if not email or not password:
+        return
+    with connection() as conn:
+        if conn.execute("SELECT 1 FROM auth_users WHERE email=?", (email,)).fetchone():
+            return
+        conn.execute(
+            "INSERT INTO auth_users (id,business_id,full_name,email,password_hash,role,active) VALUES (?,NULL,?,?,?,'superadmin',1)",
+            ("SA-" + secrets.token_hex(8).upper(), os.getenv("MANAGER_STOCK_SUPERADMIN_NAME", "").strip() or "Plataforma", email, hash_password(password)),
+        )
+    logger.info("SUPERADMIN creado desde variables de entorno: %s", email)
 
 
 async def maintenance_worker() -> None:

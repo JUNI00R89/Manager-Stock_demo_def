@@ -17,6 +17,7 @@
     "desktop": "npm run build && electron .",
     "desktop:dev": "electron .",
     "desktop:build": "npm run build && electron-builder --win nsis",
+    "desktop:build:nube": "vite build --mode nube && electron-builder --win nsis -c.win.artifactName=Manager-Stock-Nube-Setup-${version}.${ext}",
     "firebase:emulators": "firebase emulators:start --project demo-manager-stock",
     "firebase:seed": "node scripts/seed_firebase_emulator.mjs",
     "firebase:test-rules": "firebase emulators:exec --project demo-manager-stock --only firestore \"node scripts/test_firestore_rules.mjs\"",
