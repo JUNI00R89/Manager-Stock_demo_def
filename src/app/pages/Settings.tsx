@@ -388,7 +388,7 @@ export function Settings() {
             className="mt-5 rounded-2xl border border-border p-4"
             style={{
               backgroundColor: previewColors.background,
-              color: themeDraft.mode === 'dark' ? '#F4F7F8' : '#26312B',
+              color: themeDraft.mode === 'dark' ? '#F4F7F8' : '#1A1D1B',
             }}
           >
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -409,7 +409,7 @@ export function Settings() {
                 className="rounded-lg p-3 text-xs font-medium"
                 style={{
                   backgroundColor: previewColors.surface,
-                  color: themeDraft.mode === 'dark' ? '#F4F7F8' : '#26312B',
+                  color: themeDraft.mode === 'dark' ? '#F4F7F8' : '#1A1D1B',
                 }}
               >
                 Panel principal
@@ -422,7 +422,7 @@ export function Settings() {
               </div>
               <div
                 className="rounded-lg p-3 text-xs font-medium"
-                style={{ backgroundColor: themeDraft.accent, color: '#26312B' }}
+                style={{ backgroundColor: themeDraft.accent, color: '#1A1D1B' }}
               >
                 Acento
               </div>

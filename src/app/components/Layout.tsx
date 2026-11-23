@@ -1,8 +1,19 @@
-import { ReactNode, createContext, useContext, useState, useEffect, useLayoutEffect, useRef } from 'react';
+import {
+  ReactNode,
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  type Context,
+} from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../context/AuthContext';
 import { useBusiness, DEFAULT_BUSINESS_THEMES, applyTheme } from '../context/BusinessContext';
 import { useTheme } from '../context/ThemeContext';
+import { flushSync } from 'react-dom';
+import { switchThemeWithWave } from '../utils/themeWave';
 import {
   LayoutDashboard,
   Package,
@@ -67,7 +78,11 @@ let lastBottomIndicatorIndex: number | null = null;
 // Las páginas montan su propio <Layout>; dentro del shell este contexto hace que
 // ese Layout sea transparente (solo devuelve el contenido), así la sidebar y el
 // header se montan una única vez en toda la sesión.
-const ChromeContext = createContext(false);
+// Kept on globalThis so it stays one object if this module is loaded twice (Vite can serve the same
+// file under two URLs on Windows) or re-run by hot reload; two copies made pages draw the frame again
+// inside the frame.
+const chromeContextStore = globalThis as typeof globalThis & { __managerStockChromeContext?: Context<boolean> };
+const ChromeContext = (chromeContextStore.__managerStockChromeContext ??= createContext(false));
 
 interface LayoutProps {
   children: ReactNode;
@@ -220,10 +235,17 @@ function LayoutShell({ children }: LayoutProps) {
    * pesados y poco legibles; ahora el cambio es uniforme en toda la interfaz.
    * El guardado en el servidor va por detrás para no bloquear el cambio visual.
    */
-  const handleThemeToggle = () => {
+  const handleThemeToggle = (event?: React.MouseEvent<HTMLElement>) => {
     const nextMode: 'light' | 'dark' = isDark ? 'light' : 'dark';
-    applyTheme(themeFor(nextMode));
-    setTheme(nextMode);
+    const rect = event?.currentTarget.getBoundingClientRect();
+    // The new theme spreads like a wave from the button that was pressed.
+    switchThemeWithWave(rect ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : null, () =>
+      // Synchronous so the browser snapshots the new theme already painted.
+      flushSync(() => {
+        applyTheme(themeFor(nextMode));
+        setTheme(nextMode, false);
+      }),
+    );
     void persistTheme(nextMode);
   };
 
