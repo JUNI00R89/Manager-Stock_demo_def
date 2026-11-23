@@ -142,8 +142,8 @@ export const DEFAULT_CONFIGS: Record<BusinessType, Omit<BusinessConfig, 'name'>>
 
 /**
  * Paleta por defecto de la aplicación (sistema visual de referencia):
- * acento naranja #FF6B00 sobre superficies neutras. En modo claro la paleta se
- * mezcla con salvia para bajar el brillo (fondo #DEE4DA / tarjetas #EEF2EC);
+ * acento naranja #FF6B00 sobre superficies neutras. En modo claro el fondo se
+ * mezcla con un gris cálido casi blanco (≈ #F6F6F3) y las tarjetas quedan blancas;
  * en oscuro se mantiene el lienzo #080B10 y las tarjetas #11161E.
  *
  * Cada empresa puede seguir personalizando sus colores en Configuración: cuando lo
@@ -171,14 +171,14 @@ export const DEFAULT_BUSINESS_THEMES: Record<BusinessType, BusinessTheme> = {
 };
 
 /**
- * El modo claro de la app descansa sobre un verde salvia muy suave. En lugar de
- * mostrar el blanco puro configurado por el negocio, mezclamos su paleta con ese
- * tono: conserva la identidad de marca y baja el brillo de fondo y tarjetas.
+ * El modo claro descansa sobre un gris cálido casi blanco: el fondo de cada paleta
+ * se mezcla con ese tono para que las tarjetas blancas resalten sin sombras, y las
+ * superficies conservan el color configurado por el negocio (blanco por defecto).
  */
-const LIGHT_CANVAS_TINT: [number, number, number] = [198, 210, 198];
-const LIGHT_SURFACE_TINT: [number, number, number] = [225, 232, 222];
+const LIGHT_CANVAS_TINT: [number, number, number] = [246, 246, 243];
+const LIGHT_SURFACE_TINT: [number, number, number] = [255, 255, 255];
 const LIGHT_CANVAS_WEIGHT = 0.55;
-const LIGHT_SURFACE_WEIGHT = 0.6;
+const LIGHT_SURFACE_WEIGHT = 0;
 
 function parseHexColor(value: string): [number, number, number] | null {
   const hex = value.trim().replace(/^#/, '');

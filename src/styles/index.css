@@ -145,11 +145,10 @@
 
 /* ── Marco de la aplicación ─────────────────────────────────────────────────
    El lienzo, la barra lateral y el header comparten el mismo lenguaje en ambos
-   modos: salvia cálida en claro, vidrio oscuro en oscuro. */
+   modos: gris cálido casi blanco en claro, vidrio oscuro en oscuro. */
 .app-shell {
   background:
-    radial-gradient(ellipse 58% 48% at 8% 0%, color-mix(in srgb, var(--brand-primary) 7%, transparent), transparent 64%),
-    radial-gradient(ellipse 52% 46% at 100% 100%, rgba(111, 143, 120, 0.16), transparent 70%),
+    radial-gradient(ellipse 58% 48% at 8% 0%, color-mix(in srgb, var(--brand-primary) 5%, transparent), transparent 64%),
     var(--brand-background);
 }
 
@@ -255,8 +254,8 @@
   --brand-primary: #F26A1B;
   --brand-secondary: #FF8A4C;
   --brand-accent: #FFC09B;
-  --brand-background: #DEE4DA;
-  --brand-surface: #EEF2EC;
+  --brand-background: #F6F6F3;
+  --brand-surface: #FFFFFF;
   --brand-soft: #F26A1B14;
 }
 .bg-orange-600, .bg-orange-500 { background-color: var(--brand-primary) !important; }
@@ -265,6 +264,8 @@
 .bg-orange-50 { background-color: var(--brand-soft) !important; }
 .hover\\:bg-orange-700:hover, .hover\\:bg-orange-600:hover { background-color: color-mix(in srgb, var(--brand-primary) 86%, black) !important; }
 .bg-background { background-color: var(--brand-background) !important; }
+/* Many selects use bg-background (the page canvas); in light mode they match the white text fields instead. */
+html:not(.dark) :is(select, textarea, input).bg-background { background-color: var(--input-background) !important; }
 .bg-card { background-color: var(--brand-surface) !important; }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline-color: var(--brand-primary); }
 ::selection { background: color-mix(in srgb, var(--brand-primary) 20%, transparent); }
@@ -381,3 +382,13 @@ html.theme-transitioning * {
     --width: min(92vw, 380px);
   }
 }
+
+/* Theme wave (utils/themeWave.ts): no default cross-fade; the new snapshot sits on top and is revealed
+   by an animated clip-path, so the old one stays still underneath. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-old(root) { z-index: 1; }
+::view-transition-new(root) { z-index: 2; }

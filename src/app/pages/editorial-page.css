@@ -5,10 +5,16 @@
   --dash-line: color-mix(in srgb, var(--foreground) 13%, transparent);
   --dash-line-strong: color-mix(in srgb, var(--foreground) 20%, transparent);
   --dash-muted: var(--muted-foreground);
-  --dash-hero-bg: #1c2520;
-  --dash-hero-fg: #f7f3ea;
-  --dash-hero-muted: rgba(247, 243, 234, 0.64);
-  --dash-hero-line: rgba(247, 243, 234, 0.14);
+  /* Light mode: a soft tint of the business color with deep text; it follows custom palettes. */
+  --dash-hero-bg: color-mix(in srgb, var(--brand-primary) 7%, #ffffff);
+  --dash-hero-fg: #1a1d1b;
+  --dash-hero-muted: color-mix(in srgb, var(--brand-primary) 30%, #2b1d14);
+  --dash-hero-line: color-mix(in srgb, var(--brand-primary) 22%, transparent);
+  --dash-hero-border: color-mix(in srgb, var(--brand-primary) 24%, #ffffff);
+  --dash-hero-accent: color-mix(in srgb, var(--brand-primary) 72%, #000000);
+  --dash-hero-stripe: transparent;
+  --dash-hero-up: #15803d;
+  --dash-hero-down: #b91c1c;
   --dash-radius: 10px;
   --dash-radius-sm: 6px;
 }
@@ -18,6 +24,11 @@
   --dash-hero-fg: #f7f3ea;
   --dash-hero-muted: rgba(247, 243, 234, 0.6);
   --dash-hero-line: rgba(247, 243, 234, 0.12);
+  --dash-hero-border: transparent;
+  --dash-hero-accent: var(--dash-hero-fg);
+  --dash-hero-stripe: var(--primary);
+  --dash-hero-up: #8ee0a5;
+  --dash-hero-down: #ff9b9b;
 }
 
 .editorial-page .dash-header {
@@ -75,6 +86,7 @@
   border-radius: var(--dash-radius);
   background: var(--dash-hero-bg);
   color: var(--dash-hero-fg);
+  border: 1px solid var(--dash-hero-border);
   padding: 22px 24px;
 }
 
@@ -83,7 +95,7 @@
   position: absolute;
   inset: 0 auto 0 0;
   width: 3px;
-  background: var(--primary);
+  background: var(--dash-hero-stripe);
   pointer-events: none;
 }
 
@@ -101,7 +113,7 @@
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--dash-hero-muted);
+  color: var(--dash-hero-accent);
 }
 
 .editorial-page .dash-hero-date {
@@ -135,6 +147,7 @@
   font-weight: 600;
   letter-spacing: -0.045em;
   font-variant-numeric: tabular-nums;
+  color: var(--dash-hero-accent);
 }
 
 .editorial-page .dash-hero-note {
@@ -160,8 +173,8 @@
   font-weight: 600;
 }
 
-.editorial-page .dash-hero-up { color: #8ee0a5; }
-.editorial-page .dash-hero-down { color: #ff9b9b; }
+.editorial-page .dash-hero-up { color: var(--dash-hero-up); }
+.editorial-page .dash-hero-down { color: var(--dash-hero-down); }
 
 .editorial-page .dash-hero-metrics {
   display: grid;

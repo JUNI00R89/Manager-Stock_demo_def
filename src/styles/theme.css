@@ -9,27 +9,28 @@
    */
 /* ── Modo claro ───────────────────────────────────────────────────────────────*/
 :root {
-  --background: #DEE4DA;
-  --foreground: #26312B;
-  --card: #EEF2EC;
-  --card-foreground: #26312B;
-  --popover: #F4F7F1;
-  --popover-foreground: #26312B;
+  --background: #F6F6F3;
+  --foreground: #1A1D1B;
+  --card: #FFFFFF;
+  --card-foreground: #1A1D1B;
+  --popover: #FFFFFF;
+  --popover-foreground: #1A1D1B;
   --primary: #F26A1B;
   --primary-foreground: #FFFFFF;
   --primary-hover: #D95A12;
-  --secondary: #D8E0D5;
-  --secondary-foreground: #26312B;
-  --muted: #D9E1D6;
-  --muted-foreground: rgba(38, 49, 43, 0.66);
+  --secondary: #F1F1EE;
+  --secondary-foreground: #1A1D1B;
+  --muted: #F1F1EE;
+  /* Solid gray (not transparent): about 5.9:1 on white, readable in bright shops. */
+  --muted-foreground: #5F6560;
   --accent: color-mix(in srgb, var(--brand-primary) 10%, transparent);
   --accent-foreground: #7C3A12;
   --destructive: #DC2626;
   --destructive-foreground: #FFFFFF;
-  --border: rgba(38, 55, 44, 0.16);
-  --input: rgba(38, 55, 44, 0.2);
-  --input-background: #F6F8F3;
-  --switch-background: #C9D3C7;
+  --border: #E4E4DF;
+  --input: #D6D6D0;
+  --input-background: #FFFFFF;
+  --switch-background: #D6D6D0;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
   --ring: color-mix(in srgb, var(--brand-primary) 42%, transparent);
@@ -39,21 +40,21 @@
   --chart-4: #B45309;
   --chart-5: #0E7490;
   --radius: 1.25rem;
-  --sidebar: rgba(237, 241, 235, 0.9);
-  --sidebar-foreground: #2B352F;
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #1A1D1B;
   --sidebar-primary: var(--brand-primary);
   --sidebar-primary-foreground: #FFFFFF;
   --sidebar-accent: color-mix(in srgb, var(--brand-primary) 10%, transparent);
   --sidebar-accent-foreground: color-mix(in srgb, var(--brand-primary) 68%, #1F2B24);
-  --sidebar-border: rgba(38, 55, 44, 0.12);
+  --sidebar-border: #E4E4DF;
   --sidebar-ring: color-mix(in srgb, var(--brand-primary) 42%, transparent);
   --positive: #15803D;
   --negative: #B91C1C;
   --accent-from: var(--brand-primary);
   --accent-to: var(--brand-secondary);
-  --app-shadow-card: 0 18px 40px -30px rgba(38, 55, 44, 0.38), 0 2px 6px rgba(38, 55, 44, 0.06);
-  --app-shadow-chrome: 0 18px 40px -32px rgba(38, 55, 44, 0.3), 0 2px 10px rgba(38, 55, 44, 0.06);
-  --app-header-bg: rgba(241, 244, 238, 0.9);
+  --app-shadow-card: 0 1px 2px rgba(26, 29, 27, 0.04), 0 8px 24px -20px rgba(26, 29, 27, 0.18);
+  --app-shadow-chrome: 0 1px 2px rgba(26, 29, 27, 0.04), 0 8px 24px -22px rgba(26, 29, 27, 0.16);
+  --app-header-bg: rgba(255, 255, 255, 0.92);
   /* Sin destello al pasar el cursor: la tarjeta conserva siempre su sombra base. */
   --app-shadow-card-hover: var(--app-shadow-card);
   --nav-active-bg: color-mix(in srgb, var(--brand-primary) 13%, transparent);

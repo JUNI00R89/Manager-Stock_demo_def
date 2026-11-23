@@ -4,7 +4,8 @@ type Theme = 'light' | 'dark';
 
 interface ThemeContextType {
   theme: Theme;
-  setTheme: (theme: Theme) => void;
+  /** animate=false skips the color fade (the wave transition animates the switch itself). */
+  setTheme: (theme: Theme, animate?: boolean) => void;
   toggleTheme: () => void;
   isDark: boolean;
 }
@@ -47,10 +48,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setTheme = useCallback(
-    (next: Theme) => {
+    (next: Theme, animate = true) => {
       if (themeRef.current === next) return;
       themeRef.current = next;
-      applyThemeMode(next, true);
+      applyThemeMode(next, animate);
       setThemeState(next);
     },
     [applyThemeMode],
