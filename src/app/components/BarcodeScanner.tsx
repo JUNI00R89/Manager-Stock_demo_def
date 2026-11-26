@@ -368,14 +368,11 @@ export function BarcodeScanner({
         setDetectedProduct(product);
         setScannerState('detected');
 
+        // En caja se agrega al carrito de una vez. La tarjeta se queda en pantalla (la cámara se pausa)
+        // hasta tocar «Escanear otro», así no desaparece cuando la cámara deja de ver el código.
         if (mode === 'continuous' && context === 'pos') {
           onSell?.(product);
           toast.success(`${product.name} añadido`, { description: money(product.price), duration: 1500 });
-          setTimeout(() => {
-            setScannerState('scanning');
-            setDetectedProduct(null);
-            setScannedCode('');
-          }, 1200);
         }
       } else {
         setDetectedProduct(null);
@@ -607,7 +604,7 @@ export function BarcodeScanner({
     const keepFocus = (e: MouseEvent) => {
       const t = e.target as HTMLElement | null;
       if (
-        scannerState === 'scanning' &&
+        (scannerState === 'scanning' || scannerState === 'detected') &&
         hiddenInputRef.current &&
         t !== hiddenInputRef.current &&
         t !== typingInputRef.current &&
@@ -621,7 +618,7 @@ export function BarcodeScanner({
   }, [scannerState]);
 
   useEffect(() => {
-    if (scannerState === 'scanning') hiddenInputRef.current?.focus();
+    if (scannerState === 'scanning' || scannerState === 'detected') hiddenInputRef.current?.focus();
     if (scannerState === 'typing') typingInputRef.current?.focus();
   }, [scannerState]);
 
@@ -666,6 +663,9 @@ export function BarcodeScanner({
     setTypingCode('');
     lastCamCodeRef.current = { code: '', t: Date.now() };
   };
+
+  // En caja (modo continuo) el producto detectado ya se agregó al carrito al escanearlo.
+  const autoAdded = mode === 'continuous' && context === 'pos';
 
   const stockColor = (product: Product) => {
     if (product.stock === 0) return 'text-red-500';
@@ -917,7 +917,9 @@ export function BarcodeScanner({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <CheckCircle2 className="text-green-400 flex-shrink-0" size={16} />
-                    <span className="text-green-400 text-xs font-semibold">Producto encontrado</span>
+                    <span className="text-green-400 text-xs font-semibold">
+                      {autoAdded ? 'Añadido al carrito' : 'Producto encontrado'}
+                    </span>
                   </div>
                   <h3 className="text-white font-bold text-base leading-tight">{detectedProduct.name}</h3>
                   <p className="text-gray-400 text-sm">SKU: {detectedProduct.sku}</p>
@@ -943,7 +945,9 @@ export function BarcodeScanner({
                   <Button
                     onClick={() => {
                       onSell?.(detectedProduct);
-                      if (mode === 'single') {
+                      if (autoAdded) {
+                        toast.success(`Otra unidad de ${detectedProduct.name}`, { duration: 1500 });
+                      } else if (mode === 'single') {
                         onClose();
                       } else {
                         handleReset();
@@ -952,7 +956,7 @@ export function BarcodeScanner({
                     className="bg-green-600 hover:bg-green-700 text-white flex flex-col h-16 gap-1"
                   >
                     <ShoppingCart size={18} />
-                    <span className="text-xs">Vender</span>
+                    <span className="text-xs">{autoAdded ? 'Agregar otra' : 'Vender'}</span>
                   </Button>
                 )}
                 {(context === 'receive' || context === 'pos') && (
