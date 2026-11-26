@@ -12,6 +12,7 @@ backups/
 .env.*
 !.env.example
 !.env.nube
+!.env.android
 .DS_Store
 Thumbs.db
 

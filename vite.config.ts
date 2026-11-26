@@ -18,10 +18,10 @@ function figmaAssetResolver() {
 
 // La app de escritorio "nube" sin dirección real abriría una app que no conecta a nada: mejor fallar al compilar.
 function assertCloudApiUrl(mode: string) {
-  if (mode !== 'nube') return
+  if (mode !== 'nube' && mode !== 'android') return
   const url = loadEnv(mode, __dirname, 'VITE_').VITE_API_URL || ''
   if (!/^https:\/\/[^/]+\/api$/.test(url) || url.includes('TU-SERVICIO'))
-    throw new Error(`Pon en .env.nube la dirección real del servidor, por ejemplo https://manager-stock.onrender.com/api (ahora: "${url}").`)
+    throw new Error(`Pon en .env.${mode} la dirección real del servidor, por ejemplo https://manager-stock.onrender.com/api (ahora: "${url}").`)
 }
 
 export default defineConfig(({ mode }) => (assertCloudApiUrl(mode), {
