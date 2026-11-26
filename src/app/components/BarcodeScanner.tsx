@@ -24,6 +24,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import type { Product } from '../utils/types';
 import { toast } from 'sonner';
 import { formatMoney as money } from '../utils/restaurantFormat';
+import { QuickProductForm } from './QuickProductForm';
 
 type ScannerState = 'scanning' | 'detected' | 'not_found' | 'typing';
 type ScannerContext = 'pos' | 'receive' | 'count' | 'products';
@@ -49,6 +50,8 @@ interface BarcodeScannerProps {
   onSell?: (product: Product) => void;
   onReceive?: (product: Product) => void;
   onCount?: (product: Product) => void;
+  /** Si se pasa, un código que no existe se puede crear ahí mismo con una ficha rápida. */
+  onProductCreated?: (product: Product) => void;
   mode?: 'single' | 'continuous';
   context?: ScannerContext;
   onClose: () => void;
@@ -309,6 +312,7 @@ export function BarcodeScanner({
   onSell,
   onReceive,
   onCount,
+  onProductCreated,
   mode = 'single',
   context = 'pos',
   onClose,
@@ -329,6 +333,7 @@ export function BarcodeScanner({
   const [detectedProduct, setDetectedProduct] = useState<Product | null>(null);
   const [scannedCode, setScannedCode] = useState('');
   const [typingCode, setTypingCode] = useState('');
+  const [creating, setCreating] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
@@ -661,11 +666,22 @@ export function BarcodeScanner({
     setDetectedProduct(null);
     setScannedCode('');
     setTypingCode('');
+    setCreating(false);
     lastCamCodeRef.current = { code: '', t: Date.now() };
   };
 
   // En caja (modo continuo) el producto detectado ya se agregó al carrito al escanearlo.
   const autoAdded = mode === 'continuous' && context === 'pos';
+
+  // Producto recién creado con la ficha rápida: se muestra como si se hubiera escaneado.
+  const handleQuickCreated = (product: Product) => {
+    setCreating(false);
+    onProductCreated?.(product);
+    setDetectedProduct(product);
+    setScannerState('detected');
+    if (autoAdded) onSell?.(product);
+    toast.success(`${product.name} creado`, { description: autoAdded ? 'Añadido al carrito' : undefined });
+  };
 
   const stockColor = (product: Product) => {
     if (product.stock === 0) return 'text-red-500';
@@ -875,27 +891,41 @@ export function BarcodeScanner({
                   <AlertTriangle className="text-red-400" size={28} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-white font-bold">Producto no encontrado</h3>
+                  <h3 className="text-white font-bold">{creating ? 'Crear producto' : 'Producto no encontrado'}</h3>
                   <p className="text-gray-400 text-sm mt-1 font-mono break-all">{scannedCode}</p>
-                  <div className="flex gap-2 mt-4">
-                    <Button
-                      onClick={handleReset}
-                      variant="outline"
-                      className="flex-1 border-gray-600 bg-transparent text-gray-300 hover:bg-gray-800 hover:text-white"
-                    >
-                      Escanear otro
-                    </Button>
-                    <Button
-                      className="flex-1 bg-orange-500 hover:bg-orange-600 text-white"
-                      onClick={() => {
-                        onClose();
-                        toast.info(`Crea el producto con código: ${scannedCode}`);
-                      }}
-                    >
-                      <Package size={14} className="mr-1" />
-                      Crear producto
-                    </Button>
-                  </div>
+                  {creating ? (
+                    <div className="mt-4">
+                      <QuickProductForm
+                        barcode={scannedCode}
+                        onCreated={handleQuickCreated}
+                        onCancel={() => setCreating(false)}
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex gap-2 mt-4">
+                      <Button
+                        onClick={handleReset}
+                        variant="outline"
+                        className="flex-1 border-gray-600 bg-transparent text-gray-300 hover:bg-gray-800 hover:text-white"
+                      >
+                        Escanear otro
+                      </Button>
+                      <Button
+                        className="flex-1 bg-orange-500 hover:bg-orange-600 text-white"
+                        onClick={() => {
+                          if (onProductCreated) {
+                            setCreating(true);
+                            return;
+                          }
+                          onClose();
+                          toast.info(`Crea el producto con código: ${scannedCode}`);
+                        }}
+                      >
+                        <Package size={14} className="mr-1" />
+                        Crear producto
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
             </motion.div>
