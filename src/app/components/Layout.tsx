@@ -20,6 +20,7 @@ import {
   ShoppingCart,
   LogOut,
   Bell,
+  UserRound,
   Database,
   Barcode,
   Truck,
@@ -817,6 +818,15 @@ function LayoutShell({ children }: LayoutProps) {
               )}
             </button>
           )}
+
+          <button
+            onClick={() => navigate('/account')}
+            className="p-2 rounded-full hover:bg-accent text-muted-foreground transition-colors"
+            title="Mi cuenta"
+            aria-label="Mi cuenta"
+          >
+            <UserRound size={18} />
+          </button>
         </header>
 
         {/* Content: cada pantalla se monta al navegar y sus tarjetas/bloques entran animados */}

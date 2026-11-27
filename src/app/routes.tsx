@@ -4,6 +4,7 @@ const CountReviews = lazy(() =>
 );
 const HotelToday = lazy(() => import('./pages/hotel/Today').then(module => ({ default: module.HotelToday })));
 const Customers = lazy(() => import('./pages/Customers').then(module => ({ default: module.Customers })));
+const Account = lazy(() => import('./pages/Account').then(module => ({ default: module.Account })));
 const Billing = lazy(() => import('./pages/Billing').then(module => ({ default: module.Billing })));
 import { createBrowserRouter, Navigate, useLocation, useNavigate, useRouteError } from 'react-router';
 import { useAuth } from './context/AuthContext';
@@ -313,6 +314,7 @@ export const router = createBrowserRouter([
       { path: 'users-roles', element: <UsersRoles /> },
       { path: 'subscription', element: <Subscription /> },
       { path: 'settings', element: <Settings /> },
+      { path: 'account', element: <Account /> },
     ].map(route => ({ ...route, element: <Suspense fallback={loadingPage}>{route.element}</Suspense> })),
   },
   appRoute('*', <NotFound />),
