@@ -154,6 +154,21 @@ export function isDesktopMode(): boolean {
   return typeof window !== 'undefined';
 }
 
+/**
+ * True inside an installed app (Electron, local or cloud-connected, and the Android app), where the public
+ * landing page makes no sense: the app opens on the login. Unlike isDesktopMode, it ignores where data lives.
+ */
+export function isInstalledApp(): boolean {
+  if (typeof window === 'undefined') return false;
+  const win = window as unknown as {
+    managerStockDesktop?: { isDesktop?: boolean };
+    Capacitor?: { isNativePlatform?: () => boolean };
+  };
+  return Boolean(
+    import.meta.env.VITE_DESKTOP || win.managerStockDesktop?.isDesktop || win.Capacitor?.isNativePlatform?.(),
+  );
+}
+
 export async function loadDesktopSeed(): Promise<DesktopSeed> {
   if (seedCache) return seedCache;
   if (!seedRequest) {
