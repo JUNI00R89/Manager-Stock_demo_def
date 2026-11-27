@@ -459,30 +459,6 @@ export interface ReceivePurchaseOrderInput {
   }>;
 }
 
-export interface PhysicalCountRecord {
-  id: string;
-  status: 'open' | 'closed' | 'cancelled';
-  notes: string;
-  createdBy: string | null;
-  createdByName: string;
-  createdAt: string;
-  closedAt: string | null;
-  items: Array<{
-    id: number;
-    productId: string;
-    productName: string;
-    sku: string;
-    productUnit: string;
-    systemQuantity: number;
-    countedQuantity: number;
-    difference: number;
-    adjustmentMovementId: number | null;
-  }>;
-  differenceCount: number;
-  totalDifference: number;
-  operationId?: string;
-}
-
 export interface TransferRecord {
   id: string;
   status: 'draft' | 'pending' | 'in_transit' | 'received' | 'cancelled';
@@ -3298,20 +3274,6 @@ export const dataService = {
   },
   async cancelPurchaseOrder(id: string): Promise<PurchaseOrderRecord> {
     return api<PurchaseOrderRecord>(`/inventory/purchase-orders/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
-  },
-  async getPhysicalCounts(limit = 50): Promise<PhysicalCountRecord[]> {
-    try {
-      return await api<PhysicalCountRecord[]>(`/inventory/counts?limit=${limit}`);
-    } catch (error) {
-      if (!canFallbackToLocal(error)) throw error;
-      return [];
-    }
-  },
-  async createPhysicalCount(input: {
-    notes?: string;
-    items: Array<{ productId: string; countedQuantity: number }>;
-  }): Promise<PhysicalCountRecord> {
-    return api<PhysicalCountRecord>('/inventory/counts', { method: 'POST', body: JSON.stringify(input) });
   },
   async getTransfers(status?: string): Promise<TransferRecord[]> {
     const params = status ? `?status=${encodeURIComponent(status)}` : '';

@@ -1,6 +1,5 @@
 """Blind entry, manager approval and movement-version checks for physical counts."""
 import hashlib
-import json
 import uuid
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field

@@ -17,7 +17,7 @@ from backend.core.db import audit, connection, timestamp_iso
 from backend.schemas import ProductCategoryPayload, ProductImagePayload, ProductImportPayload, ProductPayload
 from backend.services.catalog import ensure_product_category, insert_product, next_sku, normalize_category_name, product_category_options, product_out
 from backend.services.product_import import ImportFileError, build_template, decode_data_url, read_rows, row_to_payload
-from backend.services.inventory import add_product_stock, allows_negative_stock, consume_product_stock, get_or_create_lot, insert_movement
+from backend.services.inventory import add_product_stock, allows_negative_stock, consume_product_stock
 from backend.services.subscriptions import subscription_for_business
 
 
@@ -82,7 +82,6 @@ def list_products(search: str = Query(default="", max_length=120), active: bool 
 def create_product(payload: ProductPayload):
     product_id = f"PRD-{uuid.uuid4().hex[:10].upper()}"
     with connection() as conn:
-        business = conn.execute("SELECT business_type FROM businesses WHERE id=?", (current_business_id(),)).fetchone()
         ensure_product_category(conn, current_business_id(), payload.category)
         subscription = subscription_for_business(conn, current_business_id())
         product_count = conn.execute("SELECT count(*) FROM products WHERE business_id=? AND active=1", (current_business_id(),)).fetchone()[0]
@@ -218,7 +217,6 @@ def import_products(payload: ProductImportPayload):
 @router.put("/api/products/{product_id}")
 def update_product(product_id: str, payload: ProductPayload):
     with connection() as conn:
-        business = conn.execute("SELECT business_type FROM businesses WHERE id=?", (current_business_id(),)).fetchone()
         if payload.supplierId:
             supplier = conn.execute("SELECT id FROM suppliers WHERE id=? AND business_id=? AND active=1", (payload.supplierId, current_business_id())).fetchone()
             if not supplier:

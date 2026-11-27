@@ -15,7 +15,6 @@ import argparse
 import html
 import math
 import sqlite3
-import statistics
 import sys
 from collections import Counter
 from datetime import datetime, timedelta, timezone

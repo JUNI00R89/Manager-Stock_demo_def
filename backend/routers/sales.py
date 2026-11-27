@@ -5,7 +5,7 @@ import json
 
 import sqlite3
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query
 
