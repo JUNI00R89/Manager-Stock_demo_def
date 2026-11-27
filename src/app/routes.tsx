@@ -10,6 +10,7 @@ import { createBrowserRouter, Navigate, useLocation, useNavigate, useRouteError 
 import { useAuth } from './context/AuthContext';
 import { useBusiness } from './context/BusinessContext';
 import { canAccessPath } from './security/permissions';
+import { isInstalledApp } from './services/desktop';
 const Login = lazy(() => import('./pages/Login').then(module => ({ default: module.Login })));
 const Register = lazy(() => import('./pages/Register').then(module => ({ default: module.Register })));
 const BusinessSetup = lazy(() => import('./pages/BusinessSetup').then(module => ({ default: module.BusinessSetup })));
@@ -234,9 +235,8 @@ const appRoute = (path: string, element: React.ReactNode) => ({
 export const router = createBrowserRouter([
   appRoute(
     '/',
-    <PublicRoute>
-      <LandingPage />
-    </PublicRoute>,
+    // The sales landing page is for the website; an installed app (desktop or Android) opens on the login.
+    <PublicRoute>{isInstalledApp() ? <Navigate to="/login" replace /> : <LandingPage />}</PublicRoute>,
   ),
   appRoute('/descargas', <Downloads />),
   appRoute(
