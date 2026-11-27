@@ -1,18 +1,6 @@
 import { canPerformAction } from '../../security/permissions';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Bell,
-  BellOff,
-  CheckCircle2,
-  ChefHat,
-  Clock3,
-  Flame,
-  MapPin,
-  Play,
-  Timer,
-  UtensilsCrossed,
-  Users,
-} from 'lucide-react';
+import { Bell, BellOff, CheckCircle2, ChefHat, Clock3, Flame, MapPin, Play, Timer, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { toastError } from '../../utils/notifications';
 import { Layout } from '../../components/Layout';

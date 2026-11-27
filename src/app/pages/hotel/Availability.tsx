@@ -1,4 +1,4 @@
-import { ReservationCalendar, calendarDate, shiftDate } from './ReservationCalendar';
+import { ReservationCalendar, shiftDate } from './ReservationCalendar';
 import { ConfirmActionDialog } from '../../components/ConfirmActionDialog';
 import { HotelAccountDialog } from './HotelAccountDialog';
 import { useAuth } from '../../context/AuthContext';
@@ -8,18 +8,7 @@ import { Layout } from '../../components/Layout';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
-import {
-  ChevronLeft,
-  ChevronRight,
-  Plus,
-  Calendar,
-  Bed,
-  Users,
-  DollarSign,
-  CheckCircle2,
-  X,
-  Clock,
-} from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Calendar, Bed, Users, CheckCircle2, X, Clock } from 'lucide-react';
 import type { Habitacion, ReservaHotel } from '../../utils/types';
 import {
   moveHotelReservation,
@@ -57,14 +46,6 @@ function getDaysInView(startDate: Date, numDays: number): Date[] {
     days.push(d);
   }
   return days;
-}
-
-function formatDate(d: Date) {
-  return d.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric' });
-}
-
-function isoDate(d: Date) {
-  return calendarDate(d);
 }
 
 export function Availability() {

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { CalendarDays, CircleDollarSign, Download, Eye, Plus, Search, ShoppingBag } from 'lucide-react';
-import { toast } from 'sonner';
 import { toastError } from '../utils/notifications';
 import { Layout } from '../components/Layout';
 import { Card } from '../components/ui/card';

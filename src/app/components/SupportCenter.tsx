@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Check, Clock3, MessageCircle, RefreshCw, Send, ShieldCheck } from 'lucide-react';
+import { Clock3, MessageCircle, RefreshCw, Send, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { toastError } from '../utils/notifications';
 import { Button } from './ui/button';

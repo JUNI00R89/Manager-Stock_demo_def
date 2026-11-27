@@ -85,7 +85,7 @@ def set_credit_limit(customer_id: str, payload: CreditLimitPayload):
         conn.execute("UPDATE customers SET credit_limit=?, revision=revision+1, updated_at=CURRENT_TIMESTAMP WHERE id=?", (round(payload.creditLimit, 2), customer_id))
         audit(conn, "credit_limit", "customer", customer_id, {"creditLimit": payload.creditLimit})
         conn.commit()
-        from backend.commerce import resolve_customer
+        from backend.routers.commerce import resolve_customer
         return resolve_customer(conn, customer_id, active=False)
 
 

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowRight,
   CalendarClock,
-  CheckCircle2,
   KeyRound,
   Pencil,
   Plus,

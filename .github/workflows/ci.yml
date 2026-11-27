@@ -18,9 +18,12 @@ jobs:
           cache: npm
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.13'
       - run: npm ci
-      - run: pip install -r backend/requirements.txt
+      - run: pip install -r backend/requirements.txt 'pyflakes>=4,<5'
+      - name: Python unused imports and names
+        run: python -m pyflakes backend scripts
+      - run: npm run format:check
       - run: npm test
       - run: npx tsc --noEmit
       - run: npm run build

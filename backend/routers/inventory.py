@@ -113,6 +113,10 @@ def update_inventory_settings(payload: InventorySettingsPayload):
             settings = {}
         if not isinstance(settings, dict):
             settings = {}
+        current_negative = bool((settings.get("inventoryConfig") or {}).get("allowNegativeStock", False))
+        if payload.allowNegativeStock != current_negative and not has_permission("inventory.negative"):
+            conn.rollback()
+            raise HTTPException(403, "Cambiar la política de stock negativo requiere el permiso de inventario negativo.")
         settings["inventoryConfig"] = {
             "allowNegativeStock": payload.allowNegativeStock,
             "expiryAlertDays": payload.expiryAlertDays,
@@ -137,6 +141,24 @@ def list_inventory_locations(includeInactive: bool = False):
             query += " AND active=1"
         rows = conn.execute(query + " ORDER BY zone, aisle, rack, level, code", params).fetchall()
         return [inventory_location_out(conn, row) for row in rows]
+
+
+def ensure_location_can_deactivate(conn: sqlite3.Connection, location_id: str) -> None:
+    """A location in use would leave stock, the warehouse default or product defaults pointing at a hidden place."""
+    stocked = conn.execute(
+        "SELECT COUNT(*) FROM product_lots WHERE business_id=? AND location_id=? AND quantity>0",
+        (current_business_id(), location_id),
+    ).fetchone()[0]
+    if stocked:
+        raise HTTPException(409, "No puedes desactivar una ubicación con existencias. Transfiere o ajusta primero.")
+    if inventory_settings(conn).get("defaultLocationId") == location_id:
+        raise HTTPException(409, "Es la ubicación por defecto de la bodega. Elige otra en Configuración de bodega primero.")
+    products = conn.execute(
+        "SELECT COUNT(*) FROM products WHERE business_id=? AND default_location_id=? AND active=1",
+        (current_business_id(), location_id),
+    ).fetchone()[0]
+    if products:
+        raise HTTPException(409, f"{products} producto(s) la usan como ubicación por defecto. Cámbiala en esos productos primero.")
 
 
 @router.post("/api/inventory/locations", status_code=201)
@@ -171,6 +193,12 @@ def update_inventory_location(location_id: str, payload: InventoryLocationPayloa
         if not row:
             conn.rollback()
             raise HTTPException(404, "Ubicación no encontrada.")
+        if row["active"] and not payload.active:
+            try:
+                ensure_location_can_deactivate(conn, location_id)
+            except HTTPException:
+                conn.rollback()
+                raise
         try:
             conn.execute(
                 """UPDATE warehouse_locations SET code=?,name=?,zone=?,aisle=?,rack=?,level=?,capacity=?,active=?,updated_at=CURRENT_TIMESTAMP
@@ -196,12 +224,7 @@ def delete_inventory_location(location_id: str):
         ).fetchone()
         if not row:
             raise HTTPException(404, "Ubicación no encontrada.")
-        stocked = conn.execute(
-            "SELECT COUNT(*) FROM product_lots WHERE business_id=? AND location_id=? AND quantity>0",
-            (current_business_id(), location_id),
-        ).fetchone()[0]
-        if stocked:
-            raise HTTPException(409, "No puedes desactivar una ubicación con existencias. Transfiere o ajusta primero.")
+        ensure_location_can_deactivate(conn, location_id)
         conn.execute("UPDATE warehouse_locations SET active=0, updated_at=CURRENT_TIMESTAMP WHERE id=?", (location_id,))
         audit(conn, "archive", "warehouse_location", location_id)
         return {"ok": True, "id": location_id}

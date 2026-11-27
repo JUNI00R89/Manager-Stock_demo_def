@@ -19,7 +19,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.core.config import CORS_EXTRA_ORIGINS, CORS_ORIGIN_REGEX, SCHEMA_PATH
+from backend.core.config import CORS_EXTRA_ORIGINS, CORS_ORIGIN_REGEX, DB_PATH, SCHEMA_PATH
 from backend.core.db import connection, timestamp_iso
 from backend.core.middleware import authenticate_and_authorize
 from backend.core.schema import init_database
@@ -29,6 +29,9 @@ from backend.routers import (
     business,
     cash,
     catalog,
+    commerce,
+    count_reviews,
+    customer_credit,
     hotel,
     inventory,
     inventory_counts,
@@ -39,7 +42,10 @@ from backend.routers import (
     product_options,
     purchase_orders,
     recipes,
+    returns,
     sales,
+    scheduling,
+    service_checkout,
     services,
     subscriptions,
     suppliers,
@@ -69,7 +75,6 @@ def prepare_database() -> None:
     """Crea/migra el esquema y ejecuta una limpieza inicial. Síncrono: lo usan también los scripts."""
     from pathlib import Path
     import os
-    from backend.core.config import DB_PATH
     from backend.backups import create_backup
     from backend.core.db import table_exists
     with connection() as conn:
@@ -129,28 +134,12 @@ app.add_middleware(
     expose_headers=["Retry-After"],
 )
 
-# El orden de registro se conserva respecto al main.py original.
+# The registration order matters when two paths overlap: keep it as it has always been.
 for module in (
     auth, business, subscriptions, platform, support, system, catalog, sales, suppliers,
     inventory, purchase_orders, inventory_counts, inventory_transfers, inventory_reports,
     cash, hotel, services, orders, tables, recipes, product_options,
+    commerce, customer_credit, returns, scheduling, service_checkout, count_reviews,
 ):
     app.include_router(module.router)
-
-from backend.core.config import DB_PATH
-from backend.core.context import current_business_id, current_identity
-from backend.core.db import audit
-from backend.services.inventory import current_operator
-from backend.core.security import has_permission
-from backend.schemas import SalePayload, SaleItemPayload, PaymentPartPayload
-from backend.services.inventory import add_product_stock, consume_product_stock, fetch_inventory_product, new_inventory_operation, validate_product_quantity
-from backend.services.sales import get_sale
-from backend.services.cash import cash_session_out
-from backend.services.business_types import delete_business_type_data
-from backend.routers.sales import create_sale
-from backend.routers.services import appointment_out, professional_out
-from backend.routers.inventory_counts import physical_count_out
-from backend import commerce, customer_credit, returns, scheduling, service_checkout, count_reviews
-for domain in (commerce, customer_credit, returns, scheduling, service_checkout, count_reviews):
-    app.include_router(domain.router)
 app.include_router(scheduling.appointment_router)

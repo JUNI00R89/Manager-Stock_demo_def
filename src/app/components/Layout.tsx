@@ -18,7 +18,6 @@ import {
   LayoutDashboard,
   Package,
   ShoppingCart,
-  CreditCard,
   LogOut,
   Bell,
   Database,
@@ -41,7 +40,6 @@ import {
   Building2,
   MoreHorizontal,
   Warehouse,
-  Building,
   TrendingUp,
   FileBarChart,
   Scissors,
@@ -57,14 +55,11 @@ import {
   SlidersHorizontal,
 } from 'lucide-react';
 import { NavCustomizeDialog, ALWAYS_VISIBLE_NAV } from './NavCustomizeDialog';
-import { Button } from './ui/button';
-import { Badge } from './ui/badge';
 
 import { dataService } from '../services/dataService';
 import { isDesktopMode } from '../services/desktop';
 import { motion, AnimatePresence } from 'motion/react';
-import { canAccessPath, roleLabel } from '../security/permissions';
-import { toast } from 'sonner';
+import { canAccessPath } from '../security/permissions';
 import { toastError } from '../utils/notifications';
 
 // Continuidad visual entre navegaciones: en el shell persistente (AppShell) la

@@ -13,7 +13,6 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from backend import backups  # noqa: E402
 from backend.backups import create_backup, prune_automatic_backups  # noqa: E402
 
 
