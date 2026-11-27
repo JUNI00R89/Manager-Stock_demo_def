@@ -23,6 +23,8 @@ import {
 import { toast } from 'sonner';
 import { toastError } from '../utils/notifications';
 import { ConfirmActionDialog } from '../components/ConfirmActionDialog';
+import { ResetPasswordDialog } from '../components/ResetPasswordDialog';
+import { isDesktopMode } from '../services/desktop';
 import { useAuth } from '../context/AuthContext';
 import {
   createBusinessUser,
@@ -30,6 +32,7 @@ import {
   deleteCustomRole,
   getBusinessUsers,
   getCustomRoles,
+  resetBusinessUserPassword,
   updateBusinessUser,
   updateCustomRole,
   type BusinessUserRecord,
@@ -108,6 +111,7 @@ export function UsersRoles() {
   const [savingRole, setSavingRole] = useState(false);
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
   const [statusTarget, setStatusTarget] = useState<BusinessUserRecord | null>(null);
+  const [passwordTarget, setPasswordTarget] = useState<BusinessUserRecord | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -225,6 +229,22 @@ export function UsersRoles() {
       await refresh();
     } catch (error) {
       toastError(error, 'No se pudo actualizar el usuario.');
+      throw error;
+    }
+  };
+
+  // An admin may only manage cashiers; resetting needs the server (not in the desktop demo).
+  const canResetPassword = (target: BusinessUserRecord) =>
+    !isDesktopMode() && (user?.role === 'owner' || target.role === 'cashier');
+  const resetPassword = async (newPassword: string) => {
+    if (!passwordTarget) return;
+    try {
+      await resetBusinessUserPassword(passwordTarget.id, newPassword);
+      toast.success(`Contraseña de ${passwordTarget.name} restablecida.`, {
+        description: 'Entrégasela en persona; sus sesiones abiertas se cerraron.',
+      });
+    } catch (error) {
+      toastError(error, 'No se pudo restablecer la contraseña.');
       throw error;
     }
   };
@@ -766,24 +786,38 @@ export function UsersRoles() {
                       </td>
                       <td className="px-5 py-4 text-right">
                         {target.role !== 'owner' && target.id !== user?.id ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => void changeStatus(target)}
-                            className="rounded-lg"
-                          >
-                            {target.active ? (
-                              <>
-                                <CircleX className="mr-2 h-4 w-4" />
-                                Suspender
-                              </>
-                            ) : (
-                              <>
-                                <CircleCheck className="mr-2 h-4 w-4" />
-                                Reactivar
-                              </>
+                          <div className="flex justify-end gap-2">
+                            {canResetPassword(target) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setPasswordTarget(target)}
+                                className="rounded-lg"
+                                title={`Restablecer la contraseña de ${target.name}`}
+                              >
+                                <KeyRound className="mr-2 h-4 w-4" />
+                                Clave
+                              </Button>
                             )}
-                          </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void changeStatus(target)}
+                              className="rounded-lg"
+                            >
+                              {target.active ? (
+                                <>
+                                  <CircleX className="mr-2 h-4 w-4" />
+                                  Suspender
+                                </>
+                              ) : (
+                                <>
+                                  <CircleCheck className="mr-2 h-4 w-4" />
+                                  Reactivar
+                                </>
+                              )}
+                            </Button>
+                          </div>
                         ) : (
                           <span className="text-xs text-muted-foreground">Cuenta protegida</span>
                         )}
@@ -810,6 +844,14 @@ export function UsersRoles() {
             cambiar la configuración crítica ni elevar sus propios privilegios.
           </p>
         </div>
+        <ResetPasswordDialog
+          open={Boolean(passwordTarget)}
+          userName={passwordTarget?.name ?? ''}
+          onOpenChange={open => {
+            if (!open) setPasswordTarget(null);
+          }}
+          onSubmit={resetPassword}
+        />
         <ConfirmActionDialog
           open={Boolean(statusTarget)}
           onOpenChange={open => {

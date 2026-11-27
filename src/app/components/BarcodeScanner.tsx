@@ -930,14 +930,6 @@ export function BarcodeScanner({
                 </div>
               </div>
 
-              <div className="bg-gray-800/60 rounded-lg p-3 mb-4 text-xs text-gray-300">
-                <p className="font-semibold text-gray-200 mb-1">Stock por sucursal:</p>
-                <div className="grid grid-cols-2 gap-1">
-                  <span>Sucursal Principal: {Math.round(detectedProduct.stock * 0.6)}</span>
-                  <span>Sucursal Norte: {Math.round(detectedProduct.stock * 0.4)}</span>
-                </div>
-              </div>
-
               <div className="grid grid-cols-3 gap-2">
                 {(context === 'pos' || !context) && (
                   <Button

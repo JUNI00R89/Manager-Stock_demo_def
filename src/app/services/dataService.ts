@@ -846,6 +846,16 @@ export const authService = {
     if (isDesktopMode()) return desktop.auth.logout();
     return api<{ ok: boolean }>('/auth/logout', { method: 'POST' });
   },
+  /** Server only: the desktop demo hides this. Keeps this device signed in and closes the others. */
+  changePassword(currentPassword: string, newPassword: string) {
+    return api<{ ok: boolean; closedSessions: number }>('/auth/me/password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+  },
+  logoutAll() {
+    return api<{ ok: boolean; closedSessions: number }>('/auth/logout-all', { method: 'POST' });
+  },
 };
 
 export async function getBusinessConfig<T>(): Promise<T | null> {
@@ -1860,6 +1870,14 @@ export async function updateBusinessUser(
 ) {
   if (isDesktopMode()) return desktop.users.update(id, patch);
   return api<BusinessUserRecord>(`/users/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
+}
+
+/** The owner (or an admin, for cashiers) sets a new password for an employee; their sessions close. */
+export async function resetBusinessUserPassword(id: string, newPassword: string) {
+  return api<{ ok: boolean }>(`/users/${encodeURIComponent(id)}/password`, {
+    method: 'POST',
+    body: JSON.stringify({ newPassword }),
+  });
 }
 
 export interface SupportMessageRecord {

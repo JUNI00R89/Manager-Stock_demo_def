@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, StringConstraints
 
 from backend.core.config import DEFAULT_TAX_RATE
 from backend.core.context import current_identity
-from backend.core.db import connection
+from backend.core.db import audit, connection
 from backend.core.rate_limit import (
     client_ip,
     failed_logins_by_email,
@@ -112,6 +112,47 @@ def save_nav_preferences(payload: NavPreferencesPayload):
         conn.execute("UPDATE auth_users SET hidden_nav=? WHERE id=?", (json.dumps(hidden), identity["id"]))
         conn.commit()
         return public_user(conn.execute("SELECT * FROM auth_users WHERE id=?", (identity["id"],)).fetchone(), conn)
+
+
+class ChangePasswordPayload(BaseModel):
+    currentPassword: str = Field(min_length=1, max_length=128)
+    newPassword: str = Field(min_length=8, max_length=128)
+
+
+@router.post("/api/auth/me/password")
+def change_own_password(payload: ChangePasswordPayload):
+    """Needs the current password; keeps this device signed in and closes every other session."""
+    identity = current_identity()
+    with connection() as conn:
+        row = conn.execute("SELECT email,password_hash FROM auth_users WHERE id=?", (identity["id"],)).fetchone()
+        wait = failed_logins_by_email.acquire(row["email"])
+        if wait:
+            raise too_many_attempts(wait, "Demasiados intentos con una contraseña incorrecta.")
+        if not verify_password(payload.currentPassword, row["password_hash"]):
+            raise HTTPException(400, "La contraseña actual no es correcta.")
+        failed_logins_by_email.reset(row["email"])
+        if payload.newPassword == payload.currentPassword:
+            raise HTTPException(422, "La nueva contraseña debe ser distinta de la actual.")
+        try:
+            password_hash = hash_password(payload.newPassword)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        conn.execute("UPDATE auth_users SET password_hash=? WHERE id=?", (password_hash, identity["id"]))
+        closed = conn.execute("DELETE FROM auth_sessions WHERE user_id=? AND token_hash<>?", (identity["id"], identity["token_hash"])).rowcount
+        if identity.get("business_id"):  # the platform SUPERADMIN has no business audit log
+            audit(conn, "password_change", "user", identity["id"], {"closedSessions": closed})
+    return {"ok": True, "closedSessions": closed}
+
+
+@router.post("/api/auth/logout-all")
+def auth_logout_everywhere():
+    """Signs out every other device (stolen phone, shared computer); this one stays signed in."""
+    identity = current_identity()
+    with connection() as conn:
+        closed = conn.execute("DELETE FROM auth_sessions WHERE user_id=? AND token_hash<>?", (identity["id"], identity["token_hash"])).rowcount
+        if identity.get("business_id"):
+            audit(conn, "logout_all", "user", identity["id"], {"closedSessions": closed})
+    return {"ok": True, "closedSessions": closed}
 
 
 @router.post("/api/auth/logout")
