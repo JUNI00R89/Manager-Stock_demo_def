@@ -357,7 +357,7 @@ function setLocalBusinessActive(businessId: string, active: boolean) {
 }
 
 function desktopBusinessName(businessId: string, fallback = 'Mi negocio') {
-  const config = readJson<{ name?: string }>(configKey(businessId), null);
+  const config = readJson<{ name?: string } | null>(configKey(businessId), null);
   return config?.name || seedCache?.businesses?.[businessId]?.name || fallback;
 }
 
@@ -646,7 +646,7 @@ export const desktop = {
       const cleanEmail = normalizedEmail(email);
       if (!cleanEmail.includes('@')) throw new Error('Ingresa un correo electrónico válido.');
       if (password.length < 6) throw new Error('La contraseña debe tener al menos 6 caracteres.');
-      const seed = await ensureSeedLoaded();
+      await ensureSeedLoaded();
       if (allUsersWithSeed().some(user => normalizedEmail(user.email) === cleanEmail)) {
         throw new Error('Ya existe una cuenta con ese correo electrónico.');
       }
@@ -979,9 +979,9 @@ export const desktop = {
   },
 
   services: {
-    async data() {
+    async data(): Promise<DesktopBusinessSeed['services']> {
       const businessId = requireBusinessId();
-      const saved = readJson<any | null>(servicesKey(businessId), null);
+      const saved = readJson<DesktopBusinessSeed['services'] | null>(servicesKey(businessId), null);
       if (saved) return saved;
       const seed = await ensureSeedLoaded();
       const seeded = seed?.businesses?.[businessId]?.services ?? { catalog: [], professionals: [], appointments: [] };

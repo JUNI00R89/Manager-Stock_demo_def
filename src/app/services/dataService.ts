@@ -2770,7 +2770,7 @@ export const dataService = {
         productId: product.id,
         productName: product.name,
         yieldQuantity: input.yieldQuantity,
-        instructions: input.instructions,
+        instructions: input.instructions ?? '',
         ingredients,
       };
       db.recipes = [...db.recipes.filter(r => r.productId !== input.productId), record];

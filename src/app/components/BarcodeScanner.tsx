@@ -382,7 +382,7 @@ export function BarcodeScanner({
         setScannerState('not_found');
       }
 
-      onScan?.(trimmed, product);
+      onScan?.(trimmed, product ?? null);
     },
     [mode, context, onScan, onSell, products],
   );

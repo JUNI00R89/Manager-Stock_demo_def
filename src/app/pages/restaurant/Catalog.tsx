@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { BookOpen, CheckCircle2, ChefHat, Info, Package, Search, UtensilsCrossed } from 'lucide-react';
+import { BookOpen, ChefHat, Info, Package, Search, UtensilsCrossed } from 'lucide-react';
 import { Link } from 'react-router';
 import { Layout } from '../../components/Layout';
 import { StaffSwitcher } from '../../components/restaurant/StaffSwitcher';

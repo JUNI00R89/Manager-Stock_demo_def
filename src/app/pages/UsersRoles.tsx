@@ -17,10 +17,8 @@ import {
   CircleCheck,
   CircleX,
   LoaderCircle,
-  Plus,
   Shield,
   Save,
-  Camera,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { toastError } from '../utils/notifications';
