@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { ArrowLeft, Boxes, Camera, Check, Crop, PackageCheck, Plus, Save, X } from 'lucide-react';
+import { ArrowLeft, Boxes, Camera, Check, Crop, PackageCheck, Save, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { toastError } from '../utils/notifications';
 import { Layout } from '../components/Layout';
@@ -18,7 +18,7 @@ import {
   type ProductCategoryRecord,
   type InventoryLocationRecord,
 } from '../services/dataService';
-import type { Product, Supplier } from '../utils/types';
+import type { Supplier } from '../utils/types';
 import { useBusiness, type BusinessType } from '../context/BusinessContext';
 import { productImageUrl, resizeImage } from '../utils/productImage';
 import { formatMoney as money } from '../utils/restaurantFormat';
@@ -170,8 +170,10 @@ export function NewProduct() {
     let active = true;
     const loadReferences = async () => {
       try {
-        setSuppliers(await dataService.getSuppliers());
-        setLocations(await dataService.getInventoryLocations());
+        const suppliers = await dataService.getSuppliers();
+        if (active) setSuppliers(suppliers);
+        const locations = await dataService.getInventoryLocations();
+        if (active) setLocations(locations);
       } catch {
         /* el catálogo no debe bloquear el alta del producto */
       }

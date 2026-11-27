@@ -8,7 +8,8 @@ TEMP = tempfile.TemporaryDirectory(prefix='operations-')
 os.environ['MANAGER_STOCK_DB'] = str(Path(TEMP.name) / 'test.db')
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from fastapi.testclient import TestClient
-from backend.main import app, connection, delete_business_type_data
+from backend.main import app, connection
+from backend.services.business_types import delete_business_type_data
 from backend.backups import create_backup, restore_backup, verify, backup_if_due
 
 

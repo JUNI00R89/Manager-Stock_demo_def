@@ -9,7 +9,6 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleDollarSign,
-  Clock3,
   CreditCard,
   Download,
   History,

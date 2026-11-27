@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 
 from backend.core.config import DEFAULT_TAX_RATE
 from backend.core.context import current_business_id, current_identity
@@ -284,6 +285,33 @@ def create_business_user(payload: CreateStaffPayload):
         row = conn.execute("""SELECT u.id,u.business_id,u.full_name,u.email,u.role,u.custom_role_id,u.active,u.created_at,cr.name custom_role_name
             FROM auth_users u LEFT JOIN custom_roles cr ON cr.id=u.custom_role_id WHERE u.id=?""", (user_id,)).fetchone()
         return {"id": row["id"], "businessId": row["business_id"], "name": row["full_name"], "email": row["email"], "role": row["role"], "customRoleId": row["custom_role_id"], "customRoleName": row["custom_role_name"], "active": bool(row["active"]), "createdAt": row["created_at"]}
+
+
+class ResetStaffPasswordPayload(BaseModel):
+    newPassword: str = Field(min_length=8, max_length=128)
+
+
+@router.post("/api/users/{user_id}/password")
+def reset_staff_password(user_id: str, payload: ResetStaffPasswordPayload):
+    """Without e-mail, an employee who forgets the password gets a new one from the owner; their sessions close."""
+    identity = current_identity()
+    business_id = current_business_id()
+    with connection() as conn:
+        target = conn.execute("SELECT * FROM auth_users WHERE id=? AND business_id=?", (user_id, business_id)).fetchone()
+        if not target:
+            raise HTTPException(404, "Usuario no encontrado en este negocio.")
+        if target["role"] == "owner":
+            raise HTTPException(403, "La contraseña del propietario solo la cambia el propietario desde Mi cuenta.")
+        if identity["role"] == "business_admin" and target["role"] != "cashier":
+            raise HTTPException(403, "No puedes administrar usuarios con permisos superiores.")
+        try:
+            password_hash = hash_password(payload.newPassword)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        conn.execute("UPDATE auth_users SET password_hash=? WHERE id=?", (password_hash, user_id))
+        conn.execute("DELETE FROM auth_sessions WHERE user_id=?", (user_id,))
+        audit(conn, "password_reset", "user", user_id)
+    return {"ok": True}
 
 
 @router.patch("/api/users/{user_id}")

@@ -207,7 +207,6 @@ export function buildComboPlan(
     .map(candidate => {
       const together = stats.pairs.get(pairKey(anchor.id, candidate.id)) ?? 0;
       const partnerCount = stats.singles.get(candidate.id) ?? 0;
-      const support = stats.baskets ? together / stats.baskets : 0;
       const confidence = anchorCount ? together / anchorCount : 0;
       const lift = anchorCount && partnerCount ? (together * stats.baskets) / (anchorCount * partnerCount) : 0;
       const hasHistory = together >= 3;

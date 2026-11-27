@@ -5,7 +5,12 @@ import uuid
 from decimal import Decimal, ROUND_HALF_UP
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
-from . import main as core
+from backend.core.context import current_business_id, current_identity
+from backend.core.db import audit, connection, timestamp_iso
+from backend.core.security import has_permission
+from backend.schemas import PaymentPartPayload
+from backend.services.cash import cash_session_out
+from backend.services.inventory import add_product_stock, validate_product_quantity
 
 router = APIRouter(prefix='/api/sales')
 
@@ -29,7 +34,7 @@ class ReturnPayload(ReturnSelection):
     idempotencyKey: str = Field(min_length=8, max_length=100)
     cashSessionId: str = Field(min_length=1, max_length=100)
     reason: str = Field(min_length=3, max_length=500)
-    payments: list[core.PaymentPartPayload] = Field(default_factory=list, max_length=4)
+    payments: list[PaymentPartPayload] = Field(default_factory=list, max_length=4)
     expectedTotal: float = Field(ge=0, allow_inf_nan=False)
 
     @field_validator('reason', mode='before')
@@ -42,14 +47,14 @@ def return_out(conn, row):
     service = conn.execute('SELECT amount FROM service_return_amounts WHERE return_id=?', (row['id'],)).fetchone()
     return {'id': row['id'], 'saleId': row['sale_id'], 'total': row['total'], 'reason': row['reason'],
             'serviceAmount': service['amount'] if service else 0,
-            'cashSessionId': row['cash_session_id'], 'createdAt': core.timestamp_iso(row['created_at']),
+            'cashSessionId': row['cash_session_id'], 'createdAt': timestamp_iso(row['created_at']),
             'items': [{'itemId': r['sale_item_id'], 'quantity': r['quantity'], 'restock': bool(r['restock']), 'amount': r['amount']}
                       for r in conn.execute('SELECT * FROM sale_return_items WHERE return_id=? ORDER BY id', (row['id'],))],
             'payments': [dict(r) for r in conn.execute('SELECT method,amount FROM sale_return_payments WHERE return_id=? ORDER BY method', (row['id'],))]}
 
 
 def returns_for_sale(conn, sale_id):
-    return [return_out(conn, r) for r in conn.execute('SELECT * FROM sale_returns WHERE business_id=? AND sale_id=? ORDER BY created_at,id', (core.current_business_id(), sale_id))]
+    return [return_out(conn, r) for r in conn.execute('SELECT * FROM sale_returns WHERE business_id=? AND sale_id=? ORDER BY created_at,id', (current_business_id(), sale_id))]
 
 
 def allocation(conn, sale):
@@ -74,14 +79,14 @@ def service_balance(conn, sale):
 
 
 def return_product(conn, product_id):
-    product = conn.execute('SELECT * FROM products WHERE id=? AND business_id=?', (product_id, core.current_business_id())).fetchone()
+    product = conn.execute('SELECT * FROM products WHERE id=? AND business_id=?', (product_id, current_business_id())).fetchone()
     if not product:
         raise HTTPException(404, 'Producto original no encontrado.')
     return product
 
 
 def quote(conn, sale_id, selection):
-    sale = conn.execute('SELECT * FROM sales WHERE id=? AND business_id=?', (sale_id, core.current_business_id())).fetchone()
+    sale = conn.execute('SELECT * FROM sales WHERE id=? AND business_id=?', (sale_id, current_business_id())).fetchone()
     if not sale:
         raise HTTPException(404, 'Venta no encontrada.')
     if sale['status'] != 'completed':
@@ -108,8 +113,8 @@ def quote(conn, sale_id, selection):
         if cumulative > Decimal(str(row['quantity'])):
             raise HTTPException(409, 'La cantidad supera lo que queda por devolver. Actualiza la venta.')
         product = return_product(conn, row['product_id'])
-        core.validate_product_quantity(product, item.quantity)
-        recipe = conn.execute('SELECT id FROM recipes WHERE product_id=? AND business_id=?', (row['product_id'], core.current_business_id())).fetchone()
+        validate_product_quantity(product, item.quantity)
+        recipe = conn.execute('SELECT id FROM recipes WHERE product_id=? AND business_id=?', (row['product_id'], current_business_id())).fetchone()
         # Cooked/prepared products do not turn back into raw ingredients.
         physical = conn.execute("SELECT 1 FROM inventory_movements WHERE sale_id=? AND product_id=? AND movement_type='sale' LIMIT 1", (sale_id, row['product_id'])).fetchone()
         if item.restock and (recipe or not physical or product['track_lots']):
@@ -127,8 +132,8 @@ def quote(conn, sale_id, selection):
     if payments.get('credit', 0) > 0:
         # A fiado refund lowers the debt only up to what is still owed; anything the customer already paid back is returned in cash.
         link = conn.execute("SELECT customer_id FROM customer_operations WHERE business_id=? AND source_type='sale' AND source_id=?",
-                            (core.current_business_id(), sale_id)).fetchone()
-        from backend.customer_credit import credit_balance
+                            (current_business_id(), sale_id)).fetchone()
+        from backend.routers.customer_credit import credit_balance
         owed = max(credit_balance(conn, link['customer_id']), 0) if link else payments['credit']
         excess = round(payments['credit'] - min(payments['credit'], owed), 2)
         if excess > 0:
@@ -142,19 +147,19 @@ def quote(conn, sale_id, selection):
 
 @router.post('/{sale_id}/returns/quote')
 def quote_return(sale_id: str, payload: ReturnSelection):
-    with core.connection() as conn:
+    with connection() as conn:
         conn.execute('BEGIN')
         return quote(conn, sale_id, payload)
 
 
 @router.post('/{sale_id}/returns', status_code=201)
 def create_return(sale_id: str, payload: ReturnPayload):
-    if not core.has_permission('cash.manage'):
+    if not has_permission('cash.manage'):
         raise HTTPException(403, 'Necesitas permiso de caja para registrar la devolución.')
     fingerprint = hashlib.sha256(json.dumps({'saleId': sale_id, **payload.model_dump()}, sort_keys=True, allow_nan=False).encode()).hexdigest()
-    with core.connection() as conn:
+    with connection() as conn:
         conn.execute('BEGIN IMMEDIATE')
-        previous = conn.execute('SELECT * FROM sale_returns WHERE business_id=? AND idempotency_key=?', (core.current_business_id(), payload.idempotencyKey)).fetchone()
+        previous = conn.execute('SELECT * FROM sale_returns WHERE business_id=? AND idempotency_key=?', (current_business_id(), payload.idempotencyKey)).fetchone()
         if previous:
             if previous['request_hash'] != fingerprint:
                 raise HTTPException(409, 'La clave de operación ya fue utilizada con otros datos.')
@@ -171,24 +176,24 @@ def create_return(sale_id: str, payload: ReturnPayload):
                 raise HTTPException(422, 'La devolución supera lo cobrado por ese medio de pago.')
         if sum(amounts.values()) != cents(summary['total']):
             raise HTTPException(422, 'Los importes devueltos deben coincidir con el total.')
-        session = conn.execute("SELECT * FROM cash_sessions WHERE id=? AND business_id=? AND opened_by_user_id=? AND status='open'", (payload.cashSessionId, core.current_business_id(), core.current_identity()['id'])).fetchone()
+        session = conn.execute("SELECT * FROM cash_sessions WHERE id=? AND business_id=? AND opened_by_user_id=? AND status='open'", (payload.cashSessionId, current_business_id(), current_identity()['id'])).fetchone()
         if not session:
             raise HTTPException(409, 'Abre tu turno de caja antes de devolver dinero.')
-        if amounts.get('cash', 0) > cents(core.cash_session_out(conn, session)['expectedAmount']):
+        if amounts.get('cash', 0) > cents(cash_session_out(conn, session)['expectedAmount']):
             raise HTTPException(409, 'El efectivo disponible en este turno es insuficiente.')
         return_id = 'DEV-' + uuid.uuid4().hex[:16]
         conn.execute('''INSERT INTO sale_returns(id,business_id,sale_id,cash_session_id,reason,total,idempotency_key,request_hash,created_by)
-            VALUES (?,?,?,?,?,?,?,?,?)''', (return_id, core.current_business_id(), sale_id, session['id'], payload.reason, summary['total'], payload.idempotencyKey, fingerprint, core.current_identity()['id']))
+            VALUES (?,?,?,?,?,?,?,?,?)''', (return_id, current_business_id(), sale_id, session['id'], payload.reason, summary['total'], payload.idempotencyKey, fingerprint, current_identity()['id']))
         for item in summary['items']:
             conn.execute('INSERT INTO sale_return_items(return_id,sale_item_id,quantity,restock,amount) VALUES (?,?,?,?,?)', (return_id, item['itemId'], item['quantity'], item['restock'], item['amount']))
             if item['restock']:
                 product = return_product(conn, item['productId'])
-                core.add_product_stock(conn, product, item['quantity'], movement_type='customer_return', note=payload.reason,
+                add_product_stock(conn, product, item['quantity'], movement_type='customer_return', note=payload.reason,
                                        reference_type='sale_return', reference_id=return_id, unit_cost=item['unitCost'])
         for method, amount in amounts.items():
             conn.execute('INSERT INTO sale_return_payments VALUES (?,?,?)', (return_id, method, float(amount)))
         if payload.serviceAmount:
             conn.execute('INSERT INTO service_return_amounts VALUES (?,?)', (return_id, payload.serviceAmount))
-        core.audit(conn, 'return', 'sale', sale_id, {'returnId': return_id, 'total': summary['total']})
+        audit(conn, 'return', 'sale', sale_id, {'returnId': return_id, 'total': summary['total']})
         conn.commit()
         return return_out(conn, conn.execute('SELECT * FROM sale_returns WHERE id=?', (return_id,)).fetchone())

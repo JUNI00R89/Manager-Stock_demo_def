@@ -46,12 +46,11 @@ import {
   formatMoney,
   formatTime,
   getJornadaKey,
-  minutesSince,
   orderItemSummary,
   normalizeText,
 } from '../../utils/restaurantFormat';
 import { deliverRestaurantOrder } from '../../utils/restaurantOrdersService';
-import { PedidoConflictoError, type Pedido } from '../../utils/restaurantTypes';
+import { type Pedido } from '../../utils/restaurantTypes';
 
 type OrdersTab = 'activos' | 'entregados';
 
@@ -76,7 +75,7 @@ export function Orders() {
   const active = activeStaff('admin');
   const { orders, loading, error: ordersError, repository } = useRestaurantOrders(ordersScope);
   const { tables } = useRestaurantTables();
-  const { activeMenu, setActive, setDirectSale, loading: menuLoading } = useRestaurantCatalog(scope);
+  const { activeMenu, loading: menuLoading } = useRestaurantCatalog(scope);
   const now = useNow(30_000);
 
   const [tab, setTab] = useState<OrdersTab>('activos');

@@ -8,7 +8,7 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Switch } from '../../components/ui/switch';
-import { dataService, type InventorySettingsRecord } from '../../services/dataService';
+import { dataService } from '../../services/dataService';
 import { PageTitle, StatCard, useWarehousePermissions, useWarehouseRefs } from './shared';
 
 export function WarehouseSettings() {
@@ -35,19 +35,16 @@ export function WarehouseSettings() {
       toast.error('El umbral de alertas de vencimiento debe estar entre 0 y 3650 días.');
       return;
     }
-    if (permissions.canNegative && !allowNegativeStock) {
-      /* sin acción */
-    }
     setSaving(true);
     try {
-      const updated = await dataService.updateInventorySettings({
+      await dataService.updateInventorySettings({
         allowNegativeStock,
         expiryAlertDays,
         lowStockAlerts,
         defaultLocationId: defaultLocationId || null,
       });
       toast.success('Configuración de bodega guardada.');
-      await Promise.all([reload(), reload()]);
+      await reload();
     } catch (error) {
       toastError(error, 'No se pudo guardar la configuración.');
     } finally {
@@ -100,7 +97,7 @@ export function WarehouseSettings() {
               <Switch
                 checked={allowNegativeStock}
                 onCheckedChange={setAllowNegativeStock}
-                disabled={saving || (!permissions.canNegative && false)}
+                disabled={saving || !permissions.canNegative}
                 className="data-[state=checked]:bg-orange-600"
               />
             </div>

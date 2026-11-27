@@ -27,7 +27,6 @@ import {
   Banknote,
   Package,
   Smartphone,
-  Receipt,
   X,
   Check,
   Barcode,
@@ -50,7 +49,6 @@ import {
   DIGITAL_PROVIDERS,
   type DigitalProvider,
   type CashSessionRecord,
-  type PaymentPartRecord,
   type CreateSaleInput,
 } from '../services/dataService';
 import { isDesktopMode } from '../services/desktop';
@@ -89,7 +87,6 @@ interface SplitPayment {
 
 const providerLabel = (id?: string | null) => DIGITAL_PROVIDERS.find(p => p.id === id)?.label ?? '';
 
-type PosMode = 'open' | 'closed';
 interface PendingPayment {
   request: CreateSaleInput;
   received: number;
@@ -137,7 +134,6 @@ export function POS() {
   const [splitPayments, setSplitPayments] = useState<SplitPayment[]>([]);
   const [digitalProvider, setDigitalProvider] = useState<DigitalProvider | null>(null);
   const [digitalReference, setDigitalReference] = useState('');
-  const [posMode, setPosMode] = useState<PosMode>('open');
   const [openingAmount, setOpeningAmount] = useState('');
   const [showOpenTurn, setShowOpenTurn] = useState(true);
   const [showCloseTurn, setShowCloseTurn] = useState(false);
@@ -191,7 +187,6 @@ export function POS() {
       const session = await dataService.openCashSession(amount, user?.name || 'Usuario local');
       setCashSession(session);
       setShowOpenTurn(false);
-      setPosMode('open');
       toast.success('Turno de caja abierto.', { description: `Base inicial: ${money(amount)}` });
     } catch (error) {
       toastError(error, 'No se pudo abrir el turno.');
@@ -231,7 +226,6 @@ export function POS() {
       setShowOpenTurn(true);
       setOpeningAmount('');
       setClosingAmount('');
-      setPosMode('closed');
       clearCart();
     } catch (error) {
       toastError(error, 'No se pudo cerrar caja.');
