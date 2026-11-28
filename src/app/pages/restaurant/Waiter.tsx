@@ -56,6 +56,8 @@ import {
   normalizeText,
 } from '../../utils/restaurantFormat';
 import type { Pedido } from '../../utils/restaurantTypes';
+import type { PaymentPartRecord } from '../../services/dataService';
+import { DeliverPaymentDialog } from '../../components/restaurant/DeliverPaymentDialog';
 import { deliverRestaurantOrder } from '../../utils/restaurantOrdersService';
 import { primeRestaurantAudio, playReadyOrderChime, vibrateReadyOrder } from '../../utils/restaurantAudio';
 import type { Product } from '../../utils/types';
@@ -92,7 +94,7 @@ export function Waiter() {
   const businessId = useRestaurantBusinessId();
   const ordersScope = import.meta.env.VITE_RESTAURANT_BACKEND === 'firebase' ? businessId : scope;
   const { settings } = useRestaurantSettings(scope);
-  const { staff, activeStaff, toEmployee, setActive } = useRestaurantStaff(scope, user?.name || '');
+  const { activeStaff, toEmployee } = useRestaurantStaff(scope, user?.name || '');
   const active = activeStaff('mesero');
   const { orders, loading: ordersLoading, error: ordersError, repository } = useRestaurantOrders(ordersScope);
   const { tables, loading: tablesLoading } = useRestaurantTables();
@@ -121,6 +123,8 @@ export function Waiter() {
   const [filter, setFilter] = useState<OrderFilter>('todos');
   const [onlyMine, setOnlyMine] = useState(false);
   const [busyOrderId, setBusyOrderId] = useState<string | null>(null);
+  // Delivering charges the order: ask how the customer paid unless it was already charged at the table.
+  const [deliverTarget, setDeliverTarget] = useState<Pedido | null>(null);
   const alertKey = `manager_stock_restaurant_alerta_${scope}`;
   const [alertEnabled, setAlertEnabled] = useState(() => {
     try {
@@ -340,7 +344,12 @@ export function Waiter() {
     }
   };
 
-  const deliverOrder = async (order: Pedido) => {
+  const startDelivery = (order: Pedido) => {
+    if (order.ventaId) return void deliverOrder(order);
+    setDeliverTarget(order);
+  };
+
+  const deliverOrder = async (order: Pedido, payments?: PaymentPartRecord[]) => {
     if (!active) {
       toast.error('Selecciona el mesero activo antes de entregar el pedido.');
       return;
@@ -348,7 +357,8 @@ export function Waiter() {
     primeRestaurantAudio();
     setBusyOrderId(order.id);
     try {
-      await deliverRestaurantOrder(repository, order, toEmployee(active));
+      await deliverRestaurantOrder(repository, order, toEmployee(active), payments);
+      setDeliverTarget(null);
       toast.success(`Pedido #${order.numero} entregado. Venta registrada.`);
     } catch (reason) {
       toastError(reason, 'No se pudo entregar el pedido.');
@@ -658,7 +668,7 @@ export function Waiter() {
                         key={order.id}
                         order={order}
                         busy={busyOrderId === order.id}
-                        onDeliver={canCollect ? () => deliverOrder(order) : undefined}
+                        onDeliver={canCollect ? () => startDelivery(order) : undefined}
                         currency={config?.currency}
                         now={now}
                       />
@@ -718,7 +728,7 @@ export function Waiter() {
                         key={order.id}
                         order={order}
                         busy={busyOrderId === order.id}
-                        onDeliver={canCollect ? () => deliverOrder(order) : undefined}
+                        onDeliver={canCollect ? () => startDelivery(order) : undefined}
                         currency={config?.currency}
                         now={now}
                       />
@@ -882,6 +892,13 @@ export function Waiter() {
           </Button>
         </DialogContent>
       </Dialog>
+      <DeliverPaymentDialog
+        order={deliverTarget}
+        busy={!!busyOrderId}
+        currency={config?.currency}
+        onClose={() => setDeliverTarget(null)}
+        onConfirm={deliverOrder}
+      />
     </Layout>
   );
 }

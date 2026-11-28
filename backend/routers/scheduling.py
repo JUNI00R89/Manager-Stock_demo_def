@@ -2,7 +2,9 @@ import json
 from datetime import date, datetime, timedelta
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, model_validator
-from . import main as core
+from backend.core.context import current_business_id
+from backend.core.db import audit, connection
+from backend.routers.services import appointment_out, professional_out
 
 router = APIRouter(prefix='/api/services/professionals')
 
@@ -47,18 +49,18 @@ appointment_router = APIRouter(prefix='/api/services/appointments')
 
 @appointment_router.patch('/{appointment_id}/schedule')
 def move_appointment(appointment_id: str, payload: AppointmentMove):
-    with core.connection() as conn:
+    with connection() as conn:
         conn.execute('BEGIN IMMEDIATE')
-        old = conn.execute('SELECT * FROM service_appointments WHERE id=? AND business_id=?', (appointment_id, core.current_business_id())).fetchone()
+        old = conn.execute('SELECT * FROM service_appointments WHERE id=? AND business_id=?', (appointment_id, current_business_id())).fetchone()
         if not old:
             raise HTTPException(404, 'Cita no encontrada.')
         if old['sale_id'] or old['status'] not in {'reserved', 'confirmed'}:
             raise HTTPException(409, 'Solo puedes mover citas pendientes y sin cobrar.')
         if (old['professional_id'], old['appointment_date'], old['start_time']) == (payload.professionalId, str(payload.appointmentDate), payload.startTime):
-            return core.appointment_out(old)
+            return appointment_out(old)
         if (old['professional_id'], old['appointment_date'], old['start_time'], old['end_time']) != (payload.expectedProfessionalId, str(payload.expectedDate), payload.expectedStartTime, payload.expectedEndTime):
             raise HTTPException(409, 'Otra persona cambió la cita. Actualiza la agenda antes de moverla.')
-        professional = conn.execute('SELECT * FROM service_professionals WHERE id=? AND business_id=? AND active=1', (payload.professionalId, core.current_business_id())).fetchone()
+        professional = conn.execute('SELECT * FROM service_professionals WHERE id=? AND business_id=? AND active=1', (payload.professionalId, current_business_id())).fetchone()
         if not professional:
             raise HTTPException(404, 'Profesional no encontrado.')
         start = datetime.fromisoformat(str(payload.appointmentDate) + 'T' + payload.startTime)
@@ -66,9 +68,9 @@ def move_appointment(appointment_id: str, payload: AppointmentMove):
         check_slot(conn, professional, start, end, appointment_id)
         conn.execute('UPDATE service_appointments SET professional_id=?,professional_name_snapshot=?,appointment_date=?,start_time=?,end_time=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',
                      (professional['id'], professional['name'], str(payload.appointmentDate), payload.startTime, end.strftime('%H:%M'), appointment_id))
-        core.audit(conn, 'reschedule', 'service_appointment', appointment_id, {'date': str(payload.appointmentDate), 'startTime': payload.startTime, 'professionalId': professional['id']})
+        audit(conn, 'reschedule', 'service_appointment', appointment_id, {'date': str(payload.appointmentDate), 'startTime': payload.startTime, 'professionalId': professional['id']})
         conn.commit()
-        return core.appointment_out(conn.execute('SELECT * FROM service_appointments WHERE id=?', (appointment_id,)).fetchone())
+        return appointment_out(conn.execute('SELECT * FROM service_appointments WHERE id=?', (appointment_id,)).fetchone())
 
 
 def check_slot(conn, professional, start: datetime, end: datetime, exclude_id=''):
@@ -84,7 +86,7 @@ def check_slot(conn, professional, start: datetime, end: datetime, exclude_id=''
         weekday = (start.weekday() + 1) % 7  # Sunday=0, matching JS and existing stored schedules.
         if not any(p.get('dia') == weekday and p.get('inicio', '') <= start.strftime('%H:%M') and p.get('fin', '') >= occupied_end.strftime('%H:%M') for p in periods):
             raise HTTPException(422, 'La cita queda fuera de la jornada o invade un descanso del profesional.')
-    appointments = conn.execute("SELECT * FROM service_appointments WHERE professional_id=? AND business_id=? AND appointment_date=? AND status IN ('reserved','confirmed','attended') AND id<>?", (professional['id'], core.current_business_id(), day, exclude_id)).fetchall()
+    appointments = conn.execute("SELECT * FROM service_appointments WHERE professional_id=? AND business_id=? AND appointment_date=? AND status IN ('reserved','confirmed','attended') AND id<>?", (professional['id'], current_business_id(), day, exclude_id)).fetchall()
     for appointment in appointments:
         existing_start = datetime.fromisoformat(day + 'T' + appointment['start_time'])
         existing_end = datetime.fromisoformat(day + 'T' + appointment['end_time']) + buffer
@@ -94,15 +96,15 @@ def check_slot(conn, professional, start: datetime, end: datetime, exclude_id=''
 
 @router.put('/{professional_id}/schedule')
 def save_schedule(professional_id: str, payload: Schedule):
-    with core.connection() as conn:
+    with connection() as conn:
         conn.execute('BEGIN IMMEDIATE')
-        professional = conn.execute('SELECT * FROM service_professionals WHERE id=? AND business_id=? AND active=1', (professional_id, core.current_business_id())).fetchone()
+        professional = conn.execute('SELECT * FROM service_professionals WHERE id=? AND business_id=? AND active=1', (professional_id, current_business_id())).fetchone()
         if not professional:
             raise HTTPException(404, 'Profesional no encontrado.')
         if professional['schedule_revision'] != payload.revision:
             raise HTTPException(409, 'El horario cambió. Actualiza antes de guardarlo.')
         conn.execute('UPDATE service_professionals SET availability_json=?,days_off_json=?,buffer_minutes=?,schedule_revision=schedule_revision+1 WHERE id=?',
                      (json.dumps([p.model_dump() for p in payload.availability]), json.dumps(sorted({d.isoformat() for d in payload.daysOff})), payload.bufferMinutes, professional_id))
-        core.audit(conn, 'schedule', 'professional', professional_id, {'periods': len(payload.availability), 'bufferMinutes': payload.bufferMinutes})
+        audit(conn, 'schedule', 'professional', professional_id, {'periods': len(payload.availability), 'bufferMinutes': payload.bufferMinutes})
         conn.commit()
-        return core.professional_out(conn.execute('SELECT * FROM service_professionals WHERE id=?', (professional_id,)).fetchone())
+        return professional_out(conn.execute('SELECT * FROM service_professionals WHERE id=?', (professional_id,)).fetchone())

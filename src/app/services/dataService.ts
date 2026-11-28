@@ -459,30 +459,6 @@ export interface ReceivePurchaseOrderInput {
   }>;
 }
 
-export interface PhysicalCountRecord {
-  id: string;
-  status: 'open' | 'closed' | 'cancelled';
-  notes: string;
-  createdBy: string | null;
-  createdByName: string;
-  createdAt: string;
-  closedAt: string | null;
-  items: Array<{
-    id: number;
-    productId: string;
-    productName: string;
-    sku: string;
-    productUnit: string;
-    systemQuantity: number;
-    countedQuantity: number;
-    difference: number;
-    adjustmentMovementId: number | null;
-  }>;
-  differenceCount: number;
-  totalDifference: number;
-  operationId?: string;
-}
-
 export interface TransferRecord {
   id: string;
   status: 'draft' | 'pending' | 'in_transit' | 'received' | 'cancelled';
@@ -869,6 +845,16 @@ export const authService = {
   logout() {
     if (isDesktopMode()) return desktop.auth.logout();
     return api<{ ok: boolean }>('/auth/logout', { method: 'POST' });
+  },
+  /** Server only: the desktop demo hides this. Keeps this device signed in and closes the others. */
+  changePassword(currentPassword: string, newPassword: string) {
+    return api<{ ok: boolean; closedSessions: number }>('/auth/me/password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+  },
+  logoutAll() {
+    return api<{ ok: boolean; closedSessions: number }>('/auth/logout-all', { method: 'POST' });
   },
 };
 
@@ -1886,6 +1872,14 @@ export async function updateBusinessUser(
   return api<BusinessUserRecord>(`/users/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
 }
 
+/** The owner (or an admin, for cashiers) sets a new password for an employee; their sessions close. */
+export async function resetBusinessUserPassword(id: string, newPassword: string) {
+  return api<{ ok: boolean }>(`/users/${encodeURIComponent(id)}/password`, {
+    method: 'POST',
+    body: JSON.stringify({ newPassword }),
+  });
+}
+
 export interface SupportMessageRecord {
   id: number;
   senderId: string;
@@ -2794,7 +2788,7 @@ export const dataService = {
         productId: product.id,
         productName: product.name,
         yieldQuantity: input.yieldQuantity,
-        instructions: input.instructions,
+        instructions: input.instructions ?? '',
         ingredients,
       };
       db.recipes = [...db.recipes.filter(r => r.productId !== input.productId), record];
@@ -3298,20 +3292,6 @@ export const dataService = {
   },
   async cancelPurchaseOrder(id: string): Promise<PurchaseOrderRecord> {
     return api<PurchaseOrderRecord>(`/inventory/purchase-orders/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
-  },
-  async getPhysicalCounts(limit = 50): Promise<PhysicalCountRecord[]> {
-    try {
-      return await api<PhysicalCountRecord[]>(`/inventory/counts?limit=${limit}`);
-    } catch (error) {
-      if (!canFallbackToLocal(error)) throw error;
-      return [];
-    }
-  },
-  async createPhysicalCount(input: {
-    notes?: string;
-    items: Array<{ productId: string; countedQuantity: number }>;
-  }): Promise<PhysicalCountRecord> {
-    return api<PhysicalCountRecord>('/inventory/counts', { method: 'POST', body: JSON.stringify(input) });
   },
   async getTransfers(status?: string): Promise<TransferRecord[]> {
     const params = status ? `?status=${encodeURIComponent(status)}` : '';

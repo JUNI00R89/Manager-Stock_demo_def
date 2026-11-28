@@ -10,13 +10,12 @@ import {
   RefreshCw,
   Timer,
 } from 'lucide-react';
-import { toast } from 'sonner';
 import { toastError } from '../../utils/notifications';
 import { Layout } from '../../components/Layout';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { dataService, type InventoryLotRecord, type InventoryReportsRecord } from '../../services/dataService';
-import { dateOnly, dateTime, fmtQty, money, PageTitle, StatCard } from './shared';
+import { dataService, type InventoryReportsRecord } from '../../services/dataService';
+import { dateTime, fmtQty, money, PageTitle, StatCard } from './shared';
 import { Label } from '../../components/ui/label';
 import { downloadCsv } from '../../utils/csv';
 
@@ -39,8 +38,6 @@ export function WarehouseReports() {
   useEffect(() => {
     void load();
   }, []);
-
-  const expiring = (report?.expiringItems || []).filter((item): item is InventoryLotRecord => typeof item !== 'string');
 
   const exportCritical = () => {
     if (!report) return;

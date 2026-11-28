@@ -5,7 +5,7 @@ import json
 
 import sqlite3
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -129,7 +129,7 @@ def create_sale(payload: SalePayload):
             payload = payload.model_copy(update={"cashSessionId": own_session["id"]})
         customer = None
         if payload.customerId:
-            from backend.commerce import resolve_customer
+            from backend.routers.commerce import resolve_customer
             customer = resolve_customer(conn, payload.customerId)
             payload = payload.model_copy(update={"customer": customer["name"]})
         business_settings = conn.execute("SELECT currency,tax_rate FROM businesses WHERE id=?", (current_business_id(),)).fetchone()
@@ -259,7 +259,7 @@ def create_sale(payload: SalePayload):
         credit_amount = round(sum(part.amount for part in payment_parts if part.method == "credit"), 2)
         if credit_amount > 0 and payload.status != "completed":
             raise HTTPException(422, "Una venta fiada debe quedar completada.")
-        from backend.customer_credit import check_credit_sale
+        from backend.routers.customer_credit import check_credit_sale
         check_credit_sale(conn, customer, credit_amount)
         now = colombia_now_iso()
         sale_id = f"VTA-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
@@ -273,7 +273,7 @@ def create_sale(payload: SalePayload):
             conn.execute("INSERT INTO service_sale_lines VALUES (?,?,?,?,?,?)", (sale_id, appointment["id"], appointment["service_id"], appointment["service_name_snapshot"], appointment["price_snapshot"], appointment["price_snapshot"]))
             conn.execute("UPDATE service_appointments SET sale_id=?,status='attended',updated_at=CURRENT_TIMESTAMP WHERE id=?", (sale_id, appointment["id"]))
         if customer:
-            from backend.commerce import link_customer
+            from backend.routers.commerce import link_customer
             link_customer(conn, "sale", sale_id, customer["id"])
         for part in payment_parts:
             conn.execute("INSERT INTO sale_payments (sale_id,method,amount,provider,reference) VALUES (?,?,?,?,?)", (sale_id, part.method, part.amount, part.provider, part.reference))

@@ -79,18 +79,6 @@ CREATE TABLE IF NOT EXISTS platform_audit (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS users (
-  id TEXT PRIMARY KEY,
-  business_id TEXT NOT NULL REFERENCES businesses(id),
-  full_name TEXT NOT NULL,
-  email TEXT NOT NULL,
-  password_hash TEXT NOT NULL,
-  role TEXT NOT NULL CHECK(role IN ('admin','owner','cashier')),
-  active INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(business_id, email)
-);
-
 
 CREATE TABLE IF NOT EXISTS product_categories (
   id TEXT PRIMARY KEY,

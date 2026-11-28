@@ -156,6 +156,21 @@ export function isDesktopMode(): boolean {
   return typeof window !== 'undefined';
 }
 
+/**
+ * True inside an installed app (Electron, local or cloud-connected, and the Android app), where the public
+ * landing page makes no sense: the app opens on the login. Unlike isDesktopMode, it ignores where data lives.
+ */
+export function isInstalledApp(): boolean {
+  if (typeof window === 'undefined') return false;
+  const win = window as unknown as {
+    managerStockDesktop?: { isDesktop?: boolean };
+    Capacitor?: { isNativePlatform?: () => boolean };
+  };
+  return Boolean(
+    import.meta.env.VITE_DESKTOP || win.managerStockDesktop?.isDesktop || win.Capacitor?.isNativePlatform?.(),
+  );
+}
+
 export async function loadDesktopSeed(): Promise<DesktopSeed> {
   if (seedCache) return seedCache;
   if (!seedRequest) {
@@ -359,7 +374,7 @@ function setLocalBusinessActive(businessId: string, active: boolean) {
 }
 
 function desktopBusinessName(businessId: string, fallback = 'Mi negocio') {
-  const config = readJson<{ name?: string }>(configKey(businessId), null);
+  const config = readJson<{ name?: string } | null>(configKey(businessId), null);
   return config?.name || seedCache?.businesses?.[businessId]?.name || fallback;
 }
 
@@ -648,7 +663,7 @@ export const desktop = {
       const cleanEmail = normalizedEmail(email);
       if (!cleanEmail.includes('@')) throw new Error('Ingresa un correo electrónico válido.');
       if (password.length < 6) throw new Error('La contraseña debe tener al menos 6 caracteres.');
-      const seed = await ensureSeedLoaded();
+      await ensureSeedLoaded();
       if (allUsersWithSeed().some(user => normalizedEmail(user.email) === cleanEmail)) {
         throw new Error('Ya existe una cuenta con ese correo electrónico.');
       }
@@ -981,9 +996,9 @@ export const desktop = {
   },
 
   services: {
-    async data() {
+    async data(): Promise<DesktopBusinessSeed['services']> {
       const businessId = requireBusinessId();
-      const saved = readJson<any | null>(servicesKey(businessId), null);
+      const saved = readJson<DesktopBusinessSeed['services'] | null>(servicesKey(businessId), null);
       if (saved) return saved;
       const seed = await ensureSeedLoaded();
       const seeded = seed?.businesses?.[businessId]?.services ?? { catalog: [], professionals: [], appointments: [] };

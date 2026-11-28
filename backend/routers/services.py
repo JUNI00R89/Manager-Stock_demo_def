@@ -186,7 +186,7 @@ def create_service_appointment(payload: AppointmentPayload):
         if end_dt.date().isoformat() != payload.appointmentDate:
             conn.rollback()
             raise HTTPException(422, "La cita no puede terminar después de la medianoche.")
-        from backend.scheduling import check_slot
+        from backend.routers.scheduling import check_slot
         check_slot(conn, professional, start_dt, end_dt, "")
         conflict = conn.execute("SELECT id FROM service_appointments WHERE business_id=? AND professional_id=? AND appointment_date=? AND status IN ('reserved','confirmed') AND start_time<? AND end_time>? LIMIT 1", (business_id,payload.professionalId,payload.appointmentDate,end_time,payload.startTime)).fetchone()
         if conflict:
@@ -221,7 +221,7 @@ def update_service_appointment_status(appointment_id: str, payload: AppointmentS
         # fail because the break or the schedule changed after it was booked.
         if current and payload.status in {'reserved', 'confirmed'} and current['status'] in {'cancelled', 'no_show'}:
             professional = conn.execute("SELECT * FROM service_professionals WHERE id=? AND business_id=?", (current['professional_id'], business_id)).fetchone()
-            from backend.scheduling import check_slot
+            from backend.routers.scheduling import check_slot
             check_slot(conn, professional, datetime.fromisoformat(current['appointment_date'] + 'T' + current['start_time']), datetime.fromisoformat(current['appointment_date'] + 'T' + current['end_time']), appointment_id)
         cursor = conn.execute("UPDATE service_appointments SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND business_id=?", (payload.status,appointment_id,business_id))
         if cursor.rowcount == 0:
@@ -264,7 +264,7 @@ def edit_service_appointment(appointment_id: str, payload: AppointmentPayload):
         end_time = end_dt.strftime("%H:%M")
         if end_dt.date().isoformat() != payload.appointmentDate:
             conn.rollback(); raise HTTPException(422, "La cita no puede terminar después de la medianoche.")
-        from backend.scheduling import check_slot
+        from backend.routers.scheduling import check_slot
         check_slot(conn, professional, start_dt, end_dt, appointment_id)
         conflict = conn.execute("SELECT id FROM service_appointments WHERE business_id=? AND professional_id=? AND appointment_date=? AND status IN ('reserved','confirmed') AND id<>? AND start_time<? AND end_time>? LIMIT 1", (business_id, payload.professionalId, payload.appointmentDate, appointment_id, end_time, payload.startTime)).fetchone()
         if conflict:

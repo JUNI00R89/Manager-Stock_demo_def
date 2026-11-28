@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { AlertTriangle, Building2, CalendarClock, LogOut, RefreshCw, ShieldCheck } from 'lucide-react';
-import { toast } from 'sonner';
 import { toastError } from '../utils/notifications';
 import { useAuth } from '../context/AuthContext';
 import { getSuspensionStatus, type SuspensionStatusRecord } from '../services/dataService';

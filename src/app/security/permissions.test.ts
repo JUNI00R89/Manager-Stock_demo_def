@@ -207,3 +207,13 @@ describe('canPerformAction', () => {
     expect(canPerformAction(cashier, 'inventory.entry')).toBe(false);
   });
 });
+
+describe('Mi cuenta', () => {
+  it('la puede abrir cualquier rol del negocio, también cajeros y roles personalizados', () => {
+    expect(canAccessPath('/account', 'owner', config())).toBe(true);
+    expect(canAccessPath('/account', 'business_admin', config())).toBe(true);
+    expect(canAccessPath('/account', 'cashier', config())).toBe(true);
+    expect(canAccessPath('/account', 'cashier', config(), ['sales.view'])).toBe(true);
+    expect(canAccessPath('/account', 'superadmin', config())).toBe(false);
+  });
+});

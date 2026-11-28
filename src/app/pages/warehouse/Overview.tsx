@@ -15,7 +15,6 @@ import {
   ShoppingCart,
   Warehouse,
 } from 'lucide-react';
-import { toast } from 'sonner';
 import { toastError } from '../../utils/notifications';
 import { Layout } from '../../components/Layout';
 import { Card } from '../../components/ui/card';
