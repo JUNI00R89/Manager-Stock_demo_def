@@ -53,6 +53,7 @@ import {
 } from '../services/dataService';
 import { isDesktopMode } from '../services/desktop';
 import { useAuth } from '../context/AuthContext';
+import { canPerformAction } from '../security/permissions';
 import { useBusiness } from '../context/BusinessContext';
 import { toast } from 'sonner';
 import { imagesEnabled, productImageUrl } from '../utils/productImage';
@@ -628,6 +629,11 @@ export function POS() {
           onSell={p => {
             addToCart(p);
           }}
+          onProductCreated={
+            canPerformAction(user, 'catalog.create')
+              ? p => setProducts(prev => [...prev.filter(x => x.id !== p.id), p])
+              : undefined
+          }
           mode="continuous"
           context="pos"
           onClose={() => setShowScanner(false)}

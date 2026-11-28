@@ -1,0 +1,7 @@
+# Solo el backend y el esquema entran en la imagen; nunca datos ni copias locales.
+*
+!backend/
+!database/
+backend/data/
+backend/tests/
+**/__pycache__/

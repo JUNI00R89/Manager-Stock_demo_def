@@ -1,0 +1,17 @@
+# Blueprint de Render: crea el servidor de Manager Stock en el plan gratis.
+# Plan gratis = sin disco persistente: la base se borra cuando el servicio se reinicia o se duerme.
+services:
+  - type: web
+    name: manager-stock-api
+    runtime: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: MANAGER_STOCK_SUPERADMIN_EMAIL
+        sync: false
+      - key: MANAGER_STOCK_SUPERADMIN_PASSWORD
+        sync: false
+      - key: MANAGER_STOCK_SUPERADMIN_NAME
+        value: Plataforma Manager Stock

@@ -147,6 +147,8 @@ let seedCache: DesktopSeed | null = null;
 let seedRequest: Promise<DesktopSeed> | null = null;
 
 export function isDesktopMode(): boolean {
+  // Compilación "nube" (npm run desktop:build:nube): la app de escritorio trabaja contra el servidor.
+  if (import.meta.env.VITE_DESKTOP_CONNECTED === '1') return false;
   if (!import.meta.env.VITE_DESKTOP) {
     const bridge = (window as unknown as { managerStockDesktop?: { isDesktop?: boolean } }).managerStockDesktop;
     if (!bridge?.isDesktop) return false;

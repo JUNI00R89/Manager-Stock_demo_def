@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Manager Stock</string>
+    <string name="title_activity_main">Manager Stock</string>
+    <string name="package_name">com.managerstock.app</string>
+    <string name="custom_url_scheme">com.managerstock.app</string>
+</resources>
