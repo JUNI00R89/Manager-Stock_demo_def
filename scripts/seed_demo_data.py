@@ -232,12 +232,9 @@ def main() -> int:
         os.environ["MANAGER_STOCK_DB"] = str(db_path)
 
     sys.path.insert(0, str(ROOT))
-    from backend.main import connection, hash_password, timestamp_iso  # noqa: PLC0415
+    from backend.main import connection, hash_password  # noqa: PLC0415
 
     schema = (ROOT / "database" / "schema.sql").read_text(encoding="utf-8")
-    # Import's DB_PATH is already set after processing --db above.
-    from backend.main import SCHEMA_PATH  # noqa: PLC0415
-
     businesses = [
         {
             "slug": "retail", "id": "DEMO-RETAIL-001", "name": "Tienda Aurora (Demo)", "db_type": "retail", "type": "retail",

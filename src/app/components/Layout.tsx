@@ -18,9 +18,9 @@ import {
   LayoutDashboard,
   Package,
   ShoppingCart,
-  CreditCard,
   LogOut,
   Bell,
+  UserRound,
   Database,
   Barcode,
   Truck,
@@ -41,7 +41,6 @@ import {
   Building2,
   MoreHorizontal,
   Warehouse,
-  Building,
   TrendingUp,
   FileBarChart,
   Scissors,
@@ -57,14 +56,11 @@ import {
   SlidersHorizontal,
 } from 'lucide-react';
 import { NavCustomizeDialog, ALWAYS_VISIBLE_NAV } from './NavCustomizeDialog';
-import { Button } from './ui/button';
-import { Badge } from './ui/badge';
 
 import { dataService } from '../services/dataService';
 import { isDesktopMode } from '../services/desktop';
 import { motion, AnimatePresence } from 'motion/react';
-import { canAccessPath, roleLabel } from '../security/permissions';
-import { toast } from 'sonner';
+import { canAccessPath } from '../security/permissions';
 import { toastError } from '../utils/notifications';
 
 // Continuidad visual entre navegaciones: en el shell persistente (AppShell) la
@@ -822,6 +818,15 @@ function LayoutShell({ children }: LayoutProps) {
               )}
             </button>
           )}
+
+          <button
+            onClick={() => navigate('/account')}
+            className="p-2 rounded-full hover:bg-accent text-muted-foreground transition-colors"
+            title="Mi cuenta"
+            aria-label="Mi cuenta"
+          >
+            <UserRound size={18} />
+          </button>
         </header>
 
         {/* Content: cada pantalla se monta al navegar y sus tarjetas/bloques entran animados */}

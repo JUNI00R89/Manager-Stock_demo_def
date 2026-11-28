@@ -46,12 +46,13 @@ import {
   formatMoney,
   formatTime,
   getJornadaKey,
-  minutesSince,
   orderItemSummary,
   normalizeText,
 } from '../../utils/restaurantFormat';
 import { deliverRestaurantOrder } from '../../utils/restaurantOrdersService';
-import { PedidoConflictoError, type Pedido } from '../../utils/restaurantTypes';
+import { DeliverPaymentDialog } from '../../components/restaurant/DeliverPaymentDialog';
+import type { PaymentPartRecord } from '../../services/dataService';
+import { type Pedido } from '../../utils/restaurantTypes';
 
 type OrdersTab = 'activos' | 'entregados';
 
@@ -76,13 +77,15 @@ export function Orders() {
   const active = activeStaff('admin');
   const { orders, loading, error: ordersError, repository } = useRestaurantOrders(ordersScope);
   const { tables } = useRestaurantTables();
-  const { activeMenu, setActive, setDirectSale, loading: menuLoading } = useRestaurantCatalog(scope);
+  const { activeMenu, loading: menuLoading } = useRestaurantCatalog(scope);
   const now = useNow(30_000);
 
   const [tab, setTab] = useState<OrdersTab>('activos');
   const [search, setSearch] = useState('');
   const [busyOrderId, setBusyOrderId] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<Pedido | null>(null);
+  // Order being charged on delivery, and how the customer pays it (cash by default).
+  const [deliverTarget, setDeliverTarget] = useState<Pedido | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [newOrderOpen, setNewOrderOpen] = useState(false);
   const [newTableId, setNewTableId] = useState('');
@@ -262,11 +265,18 @@ export function Orders() {
     }
   };
 
-  const deliverOrder = async (order: Pedido) => {
+  // Already charged (e.g. at the table): deliver straight away. Otherwise ask how the customer pays.
+  const startDelivery = (order: Pedido) => {
+    if (order.ventaId) return void deliverOrder(order);
+    setDeliverTarget(order);
+  };
+
+  const deliverOrder = async (order: Pedido, payments?: PaymentPartRecord[]) => {
     if (!active) return toast.error('Selecciona un usuario administrador.');
     setBusyOrderId(order.id);
     try {
-      const result = await deliverRestaurantOrder(repository, order, toEmployee(active));
+      const result = await deliverRestaurantOrder(repository, order, toEmployee(active), payments);
+      setDeliverTarget(null);
       toast.success(
         `Pedido #${order.numero} entregado. Venta ${result.sale?.id ? result.sale.id : 'registrada'} y stock actualizado.`,
       );
@@ -426,7 +436,7 @@ export function Orders() {
                   now={now}
                   busy={busyOrderId === order.id}
                   primaryLabel="Entregar"
-                  onPrimary={canCollect ? () => deliverOrder(order) : undefined}
+                  onPrimary={canCollect ? () => startDelivery(order) : undefined}
                   onCancel={() => {
                     setCancelTarget(order);
                     setCancelReason('');
@@ -455,6 +465,14 @@ export function Orders() {
           )}
         </div>
       )}
+
+      <DeliverPaymentDialog
+        order={deliverTarget}
+        busy={!!busyOrderId}
+        currency={config?.currency}
+        onClose={() => setDeliverTarget(null)}
+        onConfirm={deliverOrder}
+      />
 
       <Dialog
         open={!!cancelTarget}

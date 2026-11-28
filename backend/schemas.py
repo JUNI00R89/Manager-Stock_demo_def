@@ -155,7 +155,7 @@ class ProfessionalPayload(BaseModel):
     @field_validator("availability")
     @classmethod
     def valid_availability(cls, value):
-        from backend.scheduling import Schedule
+        from backend.routers.scheduling import Schedule
         return [p.model_dump() for p in Schedule(availability=value).availability]
 
 

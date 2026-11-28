@@ -12,7 +12,10 @@ import uuid
 from typing import Literal
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator, model_validator
-from . import main as core
+from backend.core.context import current_business_id, current_identity
+from backend.core.db import audit, connection, timestamp_iso
+from backend.core.security import has_permission
+from backend.services.sales import get_sale
 from backend.services.sales import get_sales
 
 router = APIRouter(prefix="/api")
@@ -67,7 +70,7 @@ def customer_out(row):
 
 
 def resolve_customer(conn, customer_id, *, active=True):
-    row = conn.execute('SELECT * FROM customers WHERE id=? AND business_id=?', (customer_id, core.current_business_id())).fetchone()
+    row = conn.execute('SELECT * FROM customers WHERE id=? AND business_id=?', (customer_id, current_business_id())).fetchone()
     if not row or (active and not row['active']):
         raise HTTPException(404, 'Cliente no encontrado o inactivo.')
     return customer_out(row)
@@ -76,19 +79,19 @@ def resolve_customer(conn, customer_id, *, active=True):
 def link_customer(conn, source_type, source_id, customer_id):
     customer = resolve_customer(conn, customer_id)
     conn.execute('INSERT INTO customer_operations VALUES (?,?,?,?,?)',
-                 (core.current_business_id(), source_type, source_id, customer_id, json.dumps(customer, ensure_ascii=False)))
+                 (current_business_id(), source_type, source_id, customer_id, json.dumps(customer, ensure_ascii=False)))
     return customer
 
 
 @router.get('/customers')
 def customers(search: str = Query(default='', max_length=160), include_inactive: bool = False,
               limit: int = Query(default=100, ge=1, le=200), offset: int = Query(default=0, ge=0)):
-    with core.connection() as conn:
+    with connection() as conn:
         term = '%' + search.strip().replace('!', '!!').replace('%', '!%').replace('_', '!_') + '%'
         rows = conn.execute("""SELECT * FROM customers WHERE business_id=? AND (active=1 OR ?)
           AND (name LIKE ? ESCAPE '!' OR document_number LIKE ? ESCAPE '!' OR phone LIKE ? ESCAPE '!' OR email LIKE ? ESCAPE '!')
-          ORDER BY name COLLATE NOCASE,id LIMIT ? OFFSET ?""", (core.current_business_id(), include_inactive, term, term, term, term, limit, offset)).fetchall()
-        from backend.customer_credit import credit_balance
+          ORDER BY name COLLATE NOCASE,id LIMIT ? OFFSET ?""", (current_business_id(), include_inactive, term, term, term, term, limit, offset)).fetchall()
+        from backend.routers.customer_credit import credit_balance
         return [{**customer_out(r), 'creditBalance': credit_balance(conn, r['id'])} for r in rows]
 
 
@@ -103,25 +106,25 @@ def update_customer(customer_id: str, payload: CustomerPayload):
 
 
 def save_customer(payload, customer_id=None):
-    with core.connection() as conn:
+    with connection() as conn:
         conn.execute('BEGIN IMMEDIATE')
         try:
             if customer_id:
                 old = resolve_customer(conn, customer_id, active=False)
                 if old['revision'] != payload.revision:
                     raise HTTPException(409, 'El cliente cambió en otra pantalla. Actualiza antes de guardar.')
-                identity = core.current_identity()
+                identity = current_identity()
                 if identity['role'] == 'cashier' and not identity.get('custom_role_id'):
                     # A base cashier fixes contact data only; the tax document and the active flag feed billing.
                     payload = payload.model_copy(update={'documentType': old['documentType'], 'documentNumber': old['documentNumber'], 'active': old['active']})
             else:
                 customer_id = 'CLI-' + uuid.uuid4().hex[:16]
-                conn.execute('INSERT INTO customers (id,business_id,name) VALUES (?,?,?)', (customer_id, core.current_business_id(), payload.name))
+                conn.execute('INSERT INTO customers (id,business_id,name) VALUES (?,?,?)', (customer_id, current_business_id(), payload.name))
             conn.execute('''UPDATE customers SET name=?,document_type=?,document_number=?,email=?,phone=?,address=?,
                 municipality_code=?,person_type=?,tax_responsibilities=?,active=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?''',
                 (payload.name, payload.documentType, payload.documentNumber, payload.email, payload.phone, payload.address,
                  payload.municipalityCode, payload.personType, payload.taxResponsibilities, payload.active, customer_id))
-            core.audit(conn, 'save', 'customer', customer_id)  # Do not copy personal data to the audit log.
+            audit(conn, 'save', 'customer', customer_id)  # Do not copy personal data to the audit log.
             conn.commit()
         except sqlite3.IntegrityError as exc:
             raise HTTPException(409, 'Ya existe un cliente con ese tipo y número de documento.') from exc
@@ -130,17 +133,17 @@ def save_customer(payload, customer_id=None):
 
 @router.get('/customers/{customer_id}/history')
 def customer_history(customer_id: str):
-    with core.connection() as conn:
+    with connection() as conn:
         customer = resolve_customer(conn, customer_id, active=False)
         # Each domain's own read permission remains necessary.
         sales = []
-        if core.has_permission('sales.view') or (core.current_identity()['role'] == 'cashier' and not core.current_identity().get('custom_role_id')):
+        if has_permission('sales.view') or (current_identity()['role'] == 'cashier' and not current_identity().get('custom_role_id')):
             rows = conn.execute('''SELECT s.* FROM sales s JOIN customer_operations c ON c.source_id=s.id AND c.source_type='sale'
                 AND c.business_id=s.business_id WHERE c.customer_id=? AND s.business_id=? ORDER BY s.created_at DESC LIMIT 100''',
-                (customer_id, core.current_business_id())).fetchall()
+                (customer_id, current_business_id())).fetchall()
             sales = get_sales(conn, rows)  # one batch instead of ~7 queries per sale
-            if core.current_identity()['role'] == 'cashier':
-                sales = [s for s in sales if s['createdBy'] == core.current_identity()['id']]
+            if current_identity()['role'] == 'cashier':
+                sales = [s for s in sales if s['createdBy'] == current_identity()['id']]
         return {'customer': customer, 'sales': sales, 'limit': 100}
 
 
@@ -156,23 +159,23 @@ class BillingProfile(BaseModel):
 
 @router.get('/billing/profile')
 def billing_profile():
-    with core.connection() as conn:
-        row = conn.execute('SELECT * FROM billing_profiles WHERE business_id=?', (core.current_business_id(),)).fetchone()
+    with connection() as conn:
+        row = conn.execute('SELECT * FROM billing_profiles WHERE business_id=?', (current_business_id(),)).fetchone()
         return {**(json.loads(row['profile_json']) if row else BillingProfile().model_dump()), 'revision': row['revision'] if row else 0,
                 'environment': 'preparation', 'emissionEnabled': False}
 
 
 @router.put('/billing/profile')
 def save_billing_profile(payload: BillingProfile):
-    with core.connection() as conn:
+    with connection() as conn:
         conn.execute('BEGIN IMMEDIATE')
-        row = conn.execute('SELECT revision FROM billing_profiles WHERE business_id=?', (core.current_business_id(),)).fetchone()
+        row = conn.execute('SELECT revision FROM billing_profiles WHERE business_id=?', (current_business_id(),)).fetchone()
         if payload.revision != (row['revision'] if row else 0):
             raise HTTPException(409, 'La configuración cambió. Actualiza antes de guardar.')
         conn.execute('''INSERT INTO billing_profiles(business_id,profile_json) VALUES (?,?)
             ON CONFLICT(business_id) DO UPDATE SET profile_json=excluded.profile_json,revision=revision+1,updated_at=CURRENT_TIMESTAMP''',
-            (core.current_business_id(), payload.model_dump_json(exclude={'revision'})))
-        core.audit(conn, 'configure', 'billing_profile', core.current_business_id(), {'provider': payload.provider})
+            (current_business_id(), payload.model_dump_json(exclude={'revision'})))
+        audit(conn, 'configure', 'billing_profile', current_business_id(), {'provider': payload.provider})
         conn.commit()
     return billing_profile()
 
@@ -185,21 +188,21 @@ class DraftPayload(BaseModel):
 
 def draft_out(row):
     return {'id': row['id'], 'sourceType': row['source_type'], 'sourceId': row['source_id'],
-            'status': 'draft', 'createdAt': core.timestamp_iso(row['created_at']),
+            'status': 'draft', 'createdAt': timestamp_iso(row['created_at']),
             'snapshotHash': row['snapshot_hash'], 'snapshot': json.loads(row['snapshot_json']), 'emissionEnabled': False}
 
 
 @router.get('/billing/drafts')
 def billing_drafts(limit: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0)):
-    with core.connection() as conn:
-        sources, params = [], [core.current_business_id()]
-        if core.has_permission('sales.view'):
+    with connection() as conn:
+        sources, params = [], [current_business_id()]
+        if has_permission('sales.view'):
             sales_scope = "source_type='sale'"
-            if core.current_identity()['role'] == 'cashier':
+            if current_identity()['role'] == 'cashier':
                 sales_scope += ' AND EXISTS (SELECT 1 FROM sales s WHERE s.id=source_id AND s.created_by=?)'
-                params.append(core.current_identity()['id'])
+                params.append(current_identity()['id'])
             sources.append('(' + sales_scope + ')')
-        if core.has_permission('hotel.view'):
+        if has_permission('hotel.view'):
             sources.append("source_type='hotel'")
         if not sources:
             return []
@@ -210,35 +213,35 @@ def billing_drafts(limit: int = Query(default=50, ge=1, le=100), offset: int = Q
 @router.post('/billing/drafts', status_code=201)
 def prepare_draft(payload: DraftPayload):
     required = 'sales.view' if payload.sourceType == 'sale' else 'hotel.view'
-    if not core.has_permission(required):
+    if not has_permission(required):
         raise HTTPException(403, 'Necesitas permiso para consultar la operación de origen.')
-    with core.connection() as conn:
+    with connection() as conn:
         conn.execute('BEGIN IMMEDIATE')
-        if payload.sourceType == 'sale' and core.current_identity()['role'] == 'cashier':
-            if not conn.execute('SELECT 1 FROM sales WHERE business_id=? AND id=? AND created_by=?', (core.current_business_id(), payload.sourceId, core.current_identity()['id'])).fetchone():
+        if payload.sourceType == 'sale' and current_identity()['role'] == 'cashier':
+            if not conn.execute('SELECT 1 FROM sales WHERE business_id=? AND id=? AND created_by=?', (current_business_id(), payload.sourceId, current_identity()['id'])).fetchone():
                 raise HTTPException(404, 'Venta no encontrada.')
         previous = conn.execute('SELECT * FROM billing_drafts WHERE business_id=? AND source_type=? AND source_id=?',
-                                (core.current_business_id(), payload.sourceType, payload.sourceId)).fetchone()
+                                (current_business_id(), payload.sourceType, payload.sourceId)).fetchone()
         if previous:
             if previous['customer_id'] != payload.customerId:
                 raise HTTPException(409, 'Esta operación ya tiene un borrador con otro cliente.')
             return draft_out(previous)
         customer = resolve_customer(conn, payload.customerId)
         if payload.sourceType == 'sale':
-            operation = core.get_sale(conn, payload.sourceId)
+            operation = get_sale(conn, payload.sourceId)
             if not operation:
                 raise HTTPException(404, 'Venta no encontrada.')
             if operation['status'] != 'completed':
                 raise HTTPException(409, 'Solo se preparan ventas completadas.')
-            linked = conn.execute("SELECT customer_id FROM customer_operations WHERE business_id=? AND source_type='sale' AND source_id=?", (core.current_business_id(), payload.sourceId)).fetchone()
+            linked = conn.execute("SELECT customer_id FROM customer_operations WHERE business_id=? AND source_type='sale' AND source_id=?", (current_business_id(), payload.sourceId)).fetchone()
             if linked and linked['customer_id'] != payload.customerId:
                 raise HTTPException(409, 'El cliente debe coincidir con el registrado en la venta.')
         else:
-            closure = conn.execute('SELECT receipt_json FROM hotel_account_closures WHERE reservation_id=? AND business_id=?', (payload.sourceId, core.current_business_id())).fetchone()
+            closure = conn.execute('SELECT receipt_json FROM hotel_account_closures WHERE reservation_id=? AND business_id=?', (payload.sourceId, current_business_id())).fetchone()
             if not closure:
                 raise HTTPException(409, 'Cierra la cuenta del hotel antes de preparar el documento.')
             operation = json.loads(closure['receipt_json'])
-        profile = conn.execute('SELECT profile_json FROM billing_profiles WHERE business_id=?', (core.current_business_id(),)).fetchone()
+        profile = conn.execute('SELECT profile_json FROM billing_profiles WHERE business_id=?', (current_business_id(),)).fetchone()
         issuer = json.loads(profile['profile_json']) if profile else {}
         checks = ['Configurar proveedor, habilitación DIAN y resolución de numeración vigente.',
                   'Clasificar impuestos por artículo o servicio; el impuesto general histórico no basta.',
@@ -257,8 +260,8 @@ def prepare_draft(payload: DraftPayload):
         serialized = json.dumps(snapshot, ensure_ascii=False, sort_keys=True, separators=(',', ':'), allow_nan=False)
         draft_id = 'BOR-' + uuid.uuid4().hex[:16]
         conn.execute('''INSERT INTO billing_drafts(id,business_id,source_type,source_id,customer_id,snapshot_json,snapshot_hash,created_by)
-                        VALUES (?,?,?,?,?,?,?,?)''', (draft_id, core.current_business_id(), payload.sourceType, payload.sourceId,
-                        payload.customerId, serialized, hashlib.sha256(serialized.encode()).hexdigest(), core.current_identity()['id']))
-        core.audit(conn, 'prepare', 'billing_draft', draft_id, {'sourceType': payload.sourceType, 'sourceId': payload.sourceId})
+                        VALUES (?,?,?,?,?,?,?,?)''', (draft_id, current_business_id(), payload.sourceType, payload.sourceId,
+                        payload.customerId, serialized, hashlib.sha256(serialized.encode()).hexdigest(), current_identity()['id']))
+        audit(conn, 'prepare', 'billing_draft', draft_id, {'sourceType': payload.sourceType, 'sourceId': payload.sourceId})
         conn.commit()
         return draft_out(conn.execute('SELECT * FROM billing_drafts WHERE id=?', (draft_id,)).fetchone())

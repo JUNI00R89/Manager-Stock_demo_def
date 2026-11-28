@@ -10,7 +10,6 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { toast } from 'sonner';
 import { toastError } from '../utils/notifications';
 import { Layout } from '../components/Layout';
 import { Card } from '../components/ui/card';

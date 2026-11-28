@@ -351,7 +351,8 @@ export function Appointments() {
         {/* Weekly grid */}
         <Card className="border border-border overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse" style={{ minWidth: 600 }}>
+            {/* Fixed layout: every day keeps the same width whether or not it has appointments. */}
+            <table className="w-full table-fixed border-collapse" style={{ minWidth: 600 }}>
               <thead>
                 <tr className="border-b border-border bg-accent/30">
                   <th className="w-16 text-left px-3 py-3 text-xs font-semibold text-muted-foreground">Hora</th>

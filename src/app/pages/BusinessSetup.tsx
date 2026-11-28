@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Store,
-  UtensilsCrossed,
   Hotel,
   Warehouse,
   Scissors,

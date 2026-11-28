@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeftRight, CirclePlus, PackageCheck, RefreshCw, Send, Trash2 } from 'lucide-react';
+import { CirclePlus, PackageCheck, RefreshCw, Send, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { toastError } from '../../utils/notifications';
 import { Layout } from '../../components/Layout';
@@ -43,7 +43,6 @@ export function WarehouseTransfers() {
   const permissions = useWarehousePermissions();
   const [transfers, setTransfers] = useState<TransferRecord[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState('all');
   const [originId, setOriginId] = useState('');
   const [destinationId, setDestinationId] = useState('');
   const [notes, setNotes] = useState('');
@@ -56,8 +55,6 @@ export function WarehouseTransfers() {
       setTransfers(await dataService.getTransfers(status));
     } catch (error) {
       toastError(error, 'No se pudieron cargar las transferencias.');
-    } finally {
-      if (status) setStatusFilter(status);
     }
   };
   const loadLots = async () => {
@@ -78,11 +75,6 @@ export function WarehouseTransfers() {
     () => new Map<string, Product>(products.map(product => [product.id, product])),
     [products],
   );
-  const productLots = useMemo(() => {
-    const ids = new Set(lines.map(line => line.productId).filter(Boolean));
-    if (!ids.size) return lots;
-    return lots.filter(lot => lot.productId && ids.has(lot.productId));
-  }, [lots, lines]);
 
   const updateLine = (key: string, patch: Partial<TransferLine>) =>
     setLines(current => current.map(line => (line.key === key ? { ...line, ...patch } : line)));

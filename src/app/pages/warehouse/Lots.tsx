@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Boxes, CalendarClock, Download, PackageMinus, RefreshCw, Search } from 'lucide-react';
-import { toast } from 'sonner';
 import { toastError } from '../../utils/notifications';
 import { Layout } from '../../components/Layout';
 import { Card } from '../../components/ui/card';

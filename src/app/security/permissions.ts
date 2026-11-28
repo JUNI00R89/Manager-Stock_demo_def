@@ -72,6 +72,8 @@ export function canAccessPath(
   if (role === 'superadmin') return path === '/platform' || path.startsWith('/platform/');
   if (path === '/platform' || path.startsWith('/platform/')) return false;
   if (path === '/business-setup') return role === 'owner';
+  // Own account (password, sessions): every business role, whatever its permissions.
+  if (path === '/account') return true;
 
   if (customPermissions?.includes('inventory.adjust')) customPermissions = [...customPermissions, 'inventory.count'];
   if (customPermissions !== undefined) {

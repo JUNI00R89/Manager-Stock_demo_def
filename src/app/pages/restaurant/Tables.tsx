@@ -45,7 +45,6 @@ import { useBusiness } from '../../context/BusinessContext';
 import { formatMoney as money } from '../../utils/restaurantFormat';
 
 // Mismos métodos que acepta el backend; solo el efectivo suma al cuadre de caja.
-const PAYMENT_LABELS = { cash: 'Efectivo', card: 'Tarjeta', digital: 'Digital' } as const;
 
 const NON_KITCHEN_CATEGORIES = [
   'bebidas',

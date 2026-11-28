@@ -1,16 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { MapPin, Package, Pencil, Plus, RefreshCw, Save, Trash2, Warehouse } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { MapPin, Package, Pencil, RefreshCw, RotateCcw, Save, Trash2, Warehouse } from 'lucide-react';
 import { toast } from 'sonner';
 import { toastError } from '../../utils/notifications';
 import { Layout } from '../../components/Layout';
+import { ConfirmActionDialog } from '../../components/ConfirmActionDialog';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
-import { Textarea } from '../../components/ui/textarea';
 import { Badge } from '../../components/ui/badge';
 import { dataService, type InventoryLocationRecord } from '../../services/dataService';
-import { fmtQty, money, PageTitle, StatCard, useWarehousePermissions, useWarehouseRefs } from './shared';
+import { isDesktopMode } from '../../services/desktop';
+import { fmtQty, PageTitle, StatCard, useWarehousePermissions, useWarehouseRefs } from './shared';
 
 type LocationDraft = {
   code: string;
@@ -38,29 +39,22 @@ export function Locations() {
   const { locations, loading, reload } = useWarehouseRefs();
   const permissions = useWarehousePermissions();
   const canEdit = permissions.canEdit;
-  const [search, setSearch] = useState('');
   const [draft, setDraft] = useState<LocationDraft>(emptyDraft());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [locationToDelete, setLocationToDelete] = useState<InventoryLocationRecord | null>(null);
+  // Includes inactive locations so they can be reactivated; the shared refs (and the stats) keep only active ones.
+  const [allLocations, setAllLocations] = useState<InventoryLocationRecord[]>([]);
+  // Deactivating needs the server: the desktop demo keeps locations read-only.
+  const canToggle = canEdit && !isDesktopMode();
 
   const load = useCallback(async () => {
-    await reload();
+    const [, all] = await Promise.all([reload(), dataService.getInventoryLocations(true)]);
+    setAllLocations([...all].sort((a, b) => Number(b.active) - Number(a.active)));
   }, [reload]);
   useEffect(() => {
     void load();
   }, [load]);
-
-  const filtered = useMemo(
-    () =>
-      locations.filter(location => {
-        const term = search.trim().toLowerCase();
-        return (
-          !term || `${location.code} ${location.name} ${location.label} ${location.zone}`.toLowerCase().includes(term)
-        );
-      }),
-    [locations, search],
-  );
 
   const totalCapacity = locations.reduce((sum, location) => sum + (Number(location.capacity) || 0), 0);
   const totalStock = locations.reduce((sum, location) => sum + (Number(location.lotUnits) || 0), 0);
@@ -122,16 +116,35 @@ export function Locations() {
     }
   };
 
-  const confirmDelete = async (location: InventoryLocationRecord) => {
-    setDeletingId(location.id);
+  const confirmDelete = async () => {
+    if (!locationToDelete) return;
     try {
-      const result = await dataService.deleteInventoryLocation(location.id);
-      toast.success(result?.ok === false ? 'Ubicación desactivada.' : 'Ubicación eliminada.');
+      await dataService.deleteInventoryLocation(locationToDelete.id);
+      toast.success('Ubicación desactivada.');
       await load();
     } catch (error) {
-      toastError(error, 'No se pudo eliminar la ubicación.');
-    } finally {
-      setDeletingId(null);
+      toastError(error, 'No se pudo desactivar la ubicación.');
+      throw error; // keeps the confirmation open
+    }
+  };
+
+  const reactivate = async (location: InventoryLocationRecord) => {
+    try {
+      const { code, name, zone, aisle, rack, level, capacity } = location;
+      await dataService.updateInventoryLocation(location.id, {
+        code,
+        name,
+        zone,
+        aisle,
+        rack,
+        level,
+        capacity,
+        active: true,
+      });
+      toast.success('Ubicación reactivada.');
+      await load();
+    } catch (error) {
+      toastError(error, 'No se pudo reactivar la ubicación.');
     }
   };
 
@@ -268,7 +281,7 @@ export function Locations() {
         )}
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {filtered.map(location => {
+          {allLocations.map(location => {
             const occupancy = Math.round(
               ((Number(location.lotUnits) || 0) / Math.max(1, Number(location.capacity) || 1)) * 100,
             );
@@ -323,23 +336,35 @@ export function Locations() {
                       <Pencil className="mr-2 h-4 w-4" />
                       Editar
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setDeletingId(location.id)}
-                      disabled={deletingId === location.id}
-                      className="rounded-lg border-rose-200 text-rose-700 hover:bg-rose-50 dark:border-rose-900 dark:text-rose-300 dark:hover:bg-rose-950/30"
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Eliminar
-                    </Button>
+                    {canToggle && location.active && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setLocationToDelete(location)}
+                        className="rounded-lg border-rose-200 text-rose-700 hover:bg-rose-50 dark:border-rose-900 dark:text-rose-300 dark:hover:bg-rose-950/30"
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Desactivar
+                      </Button>
+                    )}
+                    {canToggle && !location.active && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void reactivate(location)}
+                        className="rounded-lg"
+                      >
+                        <RotateCcw className="mr-2 h-4 w-4" />
+                        Reactivar
+                      </Button>
+                    )}
                   </div>
                 )}
               </Card>
             );
           })}
         </div>
-        {filtered.length === 0 && (
+        {allLocations.length === 0 && (
           <Card className="rounded-2xl border-dashed p-10 text-center">
             <Warehouse className="mx-auto mb-3 h-10 w-10 text-muted-foreground/50" />
             <h2 className="font-semibold">Sin ubicaciones</h2>
@@ -347,6 +372,21 @@ export function Locations() {
           </Card>
         )}
       </div>
+      <ConfirmActionDialog
+        open={Boolean(locationToDelete)}
+        onOpenChange={open => {
+          if (!open) setLocationToDelete(null);
+        }}
+        title="Desactivar ubicación"
+        description={
+          locationToDelete
+            ? `¿Desactivar la ubicación ${locationToDelete.code}? Deja de aparecer para nuevos movimientos y su historial se conserva. Si todavía tiene existencias, primero transfiérelas o ajústalas.`
+            : ''
+        }
+        confirmLabel="Desactivar ubicación"
+        destructive
+        onConfirm={confirmDelete}
+      />
     </Layout>
   );
 }

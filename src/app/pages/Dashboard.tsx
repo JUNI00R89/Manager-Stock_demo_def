@@ -12,9 +12,7 @@ import {
   Plus,
   ShoppingCart,
   Truck,
-  Utensils,
   Wallet,
-  AlertTriangle,
   Clock3,
   RotateCcw,
 } from 'lucide-react';
@@ -773,13 +771,5 @@ export function Dashboard() {
         {user?.role === 'owner' && <SupportCenter mode="owner" />}
       </div>
     </Layout>
-  );
-}
-
-function ZapIcon() {
-  return (
-    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-      <Wallet className="h-4 w-4" />
-    </div>
   );
 }

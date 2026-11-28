@@ -4,11 +4,13 @@ const CountReviews = lazy(() =>
 );
 const HotelToday = lazy(() => import('./pages/hotel/Today').then(module => ({ default: module.HotelToday })));
 const Customers = lazy(() => import('./pages/Customers').then(module => ({ default: module.Customers })));
+const Account = lazy(() => import('./pages/Account').then(module => ({ default: module.Account })));
 const Billing = lazy(() => import('./pages/Billing').then(module => ({ default: module.Billing })));
 import { createBrowserRouter, Navigate, useLocation, useNavigate, useRouteError } from 'react-router';
 import { useAuth } from './context/AuthContext';
 import { useBusiness } from './context/BusinessContext';
 import { canAccessPath } from './security/permissions';
+import { isInstalledApp } from './services/desktop';
 const Login = lazy(() => import('./pages/Login').then(module => ({ default: module.Login })));
 const Register = lazy(() => import('./pages/Register').then(module => ({ default: module.Register })));
 const BusinessSetup = lazy(() => import('./pages/BusinessSetup').then(module => ({ default: module.BusinessSetup })));
@@ -233,9 +235,8 @@ const appRoute = (path: string, element: React.ReactNode) => ({
 export const router = createBrowserRouter([
   appRoute(
     '/',
-    <PublicRoute>
-      <LandingPage />
-    </PublicRoute>,
+    // The sales landing page is for the website; an installed app (desktop or Android) opens on the login.
+    <PublicRoute>{isInstalledApp() ? <Navigate to="/login" replace /> : <LandingPage />}</PublicRoute>,
   ),
   appRoute('/descargas', <Downloads />),
   appRoute(
@@ -313,6 +314,7 @@ export const router = createBrowserRouter([
       { path: 'users-roles', element: <UsersRoles /> },
       { path: 'subscription', element: <Subscription /> },
       { path: 'settings', element: <Settings /> },
+      { path: 'account', element: <Account /> },
     ].map(route => ({ ...route, element: <Suspense fallback={loadingPage}>{route.element}</Suspense> })),
   },
   appRoute('*', <NotFound />),
