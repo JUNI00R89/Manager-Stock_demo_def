@@ -1,4 +1,4 @@
-import { dataService, type SaleRecord } from '../services/dataService';
+import { dataService, type PaymentPartRecord, type SaleRecord } from '../services/dataService';
 import type { EmpleadoRef, Pedido, PedidosRepository } from './restaurantTypes';
 
 /**
@@ -12,6 +12,8 @@ export async function deliverRestaurantOrder(
   repository: PedidosRepository,
   order: Pedido,
   employee: EmpleadoRef,
+  /** How the customer paid; the screen asks for it. Without it (old callers) the sale is cash. */
+  payments?: PaymentPartRecord[],
 ): Promise<{ order: Pedido; sale: SaleRecord | null }> {
   if (order.estado === 'entregado') return { order, sale: null };
   if (order.estado !== 'finalizado') {
@@ -39,7 +41,8 @@ export async function deliverRestaurantOrder(
               quantity: item.cantidad,
             })),
       customer: `${order.mesaNombre} · Pedido #${order.numero}`,
-      paymentMethod: 'cash',
+      paymentMethod: !payments?.length ? 'cash' : payments.length > 1 ? 'split' : payments[0].method,
+      payments: payments?.length ? payments : undefined,
       taxRate: order.taxRate,
       status: 'completed',
       idempotencyKey: `restaurant-order-${order.id}`,
